@@ -6,9 +6,15 @@
 
 Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings surprises). OutlierQ monitors news and social media in real time, detects statistical outliers, classifies event types, and generates actionable options signals before the market fully prices in the move.
 
-## Architecture
+## How It Works
 
-OutlierQ is built in 5 phases:
+1. **Ingest** — Pulls news articles from Finnhub and market data from yfinance on a schedule
+2. **Detect** — Scores articles with VADER sentiment, computes z-scores for volume spikes, and flags statistical outliers
+3. **Classify** — Categorizes outlier events (scandal, FDA approval, earnings beat/miss, etc.) and infers bullish/bearish direction
+4. **Signal** — Maps each classified event to a call or put recommendation with suggested strike price and expiration
+5. **Track** — Evaluates past signals against actual price movement to measure accuracy and improve over time
+
+## Architecture
 
 | Phase | Module | Description |
 |-------|--------|-------------|
@@ -16,7 +22,7 @@ OutlierQ is built in 5 phases:
 | 2 | **Detection** | Z-score spike detection, sentiment scoring, cross-source confirmation |
 | 3 | **Classification** | Categorize events (scandal, FDA, earnings, etc.) and assign direction |
 | 4 | **Signals** | Generate call/put recommendations with strike & expiry suggestions |
-| 5 | **Dashboard** | React frontend for monitoring signals and performance |
+| 5 | **Dashboard** | React frontend + feedback tracking for monitoring signals and accuracy |
 
 ## Quick Start
 
@@ -36,15 +42,40 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your Finnhub API key (free at finnhub.io)
 
-# Run a one-time ingestion
-python scripts/run_ingestion.py --once --tickers AAPL,TSLA
+# Run a one-time scan with signal generation
+python scripts/run_ingestion.py --once --signals --tickers AAPL,TSLA
+
+# Evaluate past signal accuracy
+python scripts/run_ingestion.py --evaluate
 
 # Run with the scheduler (market hours only)
-python scripts/run_ingestion.py
+python scripts/run_ingestion.py --signals
 
 # Run tests
 pytest tests/
 ```
+
+## Running the Dashboard
+
+The dashboard has two parts: a FastAPI backend and a React frontend.
+
+**Start the API server:**
+
+```bash
+python scripts/run_ingestion.py --api
+# API at http://localhost:8000 — docs at http://localhost:8000/docs
+```
+
+**Start the React dashboard (in a separate terminal):**
+
+```bash
+cd dashboard
+npm install
+npm run dev
+# Dashboard at http://localhost:5173
+```
+
+The React dev server proxies `/api` requests to the FastAPI backend automatically.
 
 ## Tech Stack
 
@@ -55,16 +86,18 @@ pytest tests/
 - **SQLAlchemy** — ORM and database management
 - **Pydantic** — data validation and serialization
 - **APScheduler** — job scheduling during market hours
-- **VADER** — sentiment analysis (Phase 2)
-- **React** — dashboard frontend (Phase 5)
+- **VADER** — sentiment analysis
+- **FastAPI** — REST API backend
+- **React + TypeScript** — dashboard frontend
+- **Tailwind CSS** — dashboard styling
 
 ## Project Status
 
 - [x] Phase 1: Data Ingestion (Finnhub news, yfinance market data, scheduler)
-- [ ] Phase 2: Outlier Detection (Z-score spikes, sentiment filtering, cross-source)
-- [ ] Phase 3: Event Classification (type categorization, direction inference)
-- [ ] Phase 4: Signal Generation (call/put recommendations, strike/expiry)
-- [ ] Phase 5: Dashboard (React frontend, performance tracking)
+- [x] Phase 2: Outlier Detection (Z-score spikes, sentiment filtering, cross-source)
+- [x] Phase 3: Event Classification (type categorization, direction inference)
+- [x] Phase 4: Signal Generation (call/put recommendations, strike/expiry)
+- [x] Phase 5: Dashboard & Feedback (React frontend, accuracy tracking)
 
 ## License
 
