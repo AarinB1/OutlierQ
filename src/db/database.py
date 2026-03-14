@@ -44,6 +44,7 @@ def get_session() -> Generator[Session, None, None]:
 def init_db() -> None:
     """Create all tables. Safe to call multiple times — existing tables are skipped."""
     from src.db.tables import Article, Event, Signal  # noqa: F401
+    from src.discovery.discovery_db import DiscoveredTicker  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables initialized.")

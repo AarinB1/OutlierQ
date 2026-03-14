@@ -7,6 +7,9 @@ import type {
   HealthStatus,
   ScanResult,
   EvaluateResult,
+  DiscoveryRecord,
+  DiscoveryStats,
+  DiscoverTriggerResult,
 } from './types';
 
 const BASE_URL = '/api';
@@ -81,4 +84,25 @@ export async function triggerScan(tickers: string[]): Promise<ScanResult> {
     method: 'POST',
     body: JSON.stringify({ tickers }),
   });
+}
+
+export async function fetchDiscoveries(params?: {
+  method?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<DiscoveryRecord[]> {
+  const sp = new URLSearchParams();
+  if (params?.method) sp.set('method', params.method);
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  if (params?.offset != null) sp.set('offset', String(params.offset));
+  const qs = sp.toString();
+  return fetchJSON(`/discoveries${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchDiscoveryStats(): Promise<DiscoveryStats> {
+  return fetchJSON('/discoveries/stats');
+}
+
+export async function triggerDiscover(): Promise<DiscoverTriggerResult> {
+  return fetchJSON('/discover', { method: 'POST' });
 }

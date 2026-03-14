@@ -100,3 +100,36 @@ export interface EvaluateResult {
     estimated_pnl: number;
   }[];
 }
+
+export interface DiscoveryRecord {
+  id: string;
+  ticker: string;
+  discovery_method: string;
+  discovery_confidence: number;
+  mention_count: number | null;
+  volume_ratio: number | null;
+  sample_headlines: string[];
+  discovered_at: string | null;
+  scanned: boolean;
+  signal_generated: boolean;
+}
+
+export interface DiscoveryStats {
+  total_discovered: number;
+  total_led_to_signals: number;
+  discovered_today: number;
+  led_to_signals_today: number;
+  by_method: Record<string, number>;
+}
+
+export interface DiscoverTriggerResult {
+  discovered: number;
+  tickers: {
+    ticker: string;
+    discovery_methods: string[];
+    discovery_confidence: number;
+    mention_count: number | null;
+    volume_ratio: number | null;
+    sample_headlines: string[];
+  }[];
+}

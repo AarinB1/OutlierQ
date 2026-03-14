@@ -16,6 +16,7 @@ const NAV: { key: Page; icon: string; label: string }[] = [
   { key: 'events', icon: '\u25C9', label: 'Events' },
   { key: 'accuracy', icon: '\u25CE', label: 'Accuracy' },
   { key: 'tickers', icon: '\u2B21', label: 'Tickers' },
+  { key: 'discovery', icon: '\u25C8', label: 'Discovery' },
 ]
 
 export default function Layout({ page, setPage, connected, health, children }: Props) {

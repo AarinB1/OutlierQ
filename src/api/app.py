@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from config.settings import LOG_FORMAT
 from src.db.database import SessionLocal, init_db
 from src.db.tables import Article, Event, Signal
+from src.discovery.discovery_db import DiscoveredTicker
 from src.ingestion.market_fetcher import MarketFetcher
 from src.signals.feedback_tracker import FeedbackTracker
 
@@ -185,6 +186,121 @@ def evaluate(db: Session = Depends(get_db)) -> dict:
     results = tracker.evaluate_all_pending(session=db)
     db.commit()
     return {"evaluated": len(results), "results": results}
+
+
+# ── Discoveries ───────────────────────────────────────────────────────
+
+
+@app.get("/api/discoveries")
+def list_discoveries(
+    method: Optional[str] = Query(None, description="Filter: news, volume, both"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Return recent discovered tickers, newest first."""
+    query = db.query(DiscoveredTicker).order_by(DiscoveredTicker.discovered_at.desc())
+    if method:
+        query = query.filter(DiscoveredTicker.discovery_method == method)
+    rows = query.offset(offset).limit(limit).all()
+    return [
+        {
+            "id": r.id,
+            "ticker": r.ticker,
+            "discovery_method": r.discovery_method,
+            "discovery_confidence": r.discovery_confidence,
+            "mention_count": r.mention_count,
+            "volume_ratio": r.volume_ratio,
+            "sample_headlines": r.sample_headlines or [],
+            "discovered_at": r.discovered_at.isoformat() if r.discovered_at else None,
+            "scanned": r.scanned,
+            "signal_generated": r.signal_generated,
+        }
+        for r in rows
+    ]
+
+
+@app.get("/api/discoveries/stats")
+def discovery_stats(db: Session = Depends(get_db)) -> dict:
+    """Return discovery stats: total discovered, how many led to signals, top sources."""
+    from datetime import timedelta
+    from sqlalchemy import func
+
+    total = db.query(DiscoveredTicker).count()
+    with_signals = db.query(DiscoveredTicker).filter(DiscoveredTicker.signal_generated == True).count()
+    today_start = datetime.now(timezone.utc) - timedelta(days=1)
+    today_count = db.query(DiscoveredTicker).filter(DiscoveredTicker.discovered_at >= today_start).count()
+    today_signals = (
+        db.query(DiscoveredTicker)
+        .filter(DiscoveredTicker.discovered_at >= today_start, DiscoveredTicker.signal_generated == True)
+        .count()
+    )
+    by_method = (
+        db.query(DiscoveredTicker.discovery_method, func.count(DiscoveredTicker.id))
+        .group_by(DiscoveredTicker.discovery_method)
+        .all()
+    )
+    return {
+        "total_discovered": total,
+        "total_led_to_signals": with_signals,
+        "discovered_today": today_count,
+        "led_to_signals_today": today_signals,
+        "by_method": {m: c for m, c in by_method},
+    }
+
+
+@app.post("/api/discover")
+def trigger_discover(db: Session = Depends(get_db)) -> dict:
+    """Trigger a discovery scan on-demand. Returns discovered tickers."""
+    import finnhub
+    from config.settings import FINNHUB_API_KEY
+    from src.detection import AnomalyPipeline
+    from src.discovery.orchestrator import DiscoveryOrchestrator
+    from src.ingestion.market_fetcher import MarketFetcher
+    from src.signals.signal_engine import SignalEngine
+
+    if not FINNHUB_API_KEY:
+        raise HTTPException(status_code=503, detail="FINNHUB_API_KEY not set")
+    client = finnhub.Client(api_key=FINNHUB_API_KEY)
+    market = MarketFetcher()
+    pipeline = AnomalyPipeline()
+    engine = SignalEngine(market_fetcher=market)
+    orch = DiscoveryOrchestrator(
+        db_session=db,
+        finnhub_client=client,
+        market_fetcher=market,
+        pipeline=pipeline,
+        signal_engine=engine,
+    )
+    discoveries = orch.discover(session=db)
+    from src.discovery.discovery_db import store_discovery
+    for d in discoveries:
+        method = "both" if len(d.get("discovery_methods", [])) >= 2 else (d.get("discovery_methods") or ["unknown"])[0]
+        store_discovery(db, {
+            "ticker": d["ticker"],
+            "discovery_method": method,
+            "discovery_confidence": d.get("discovery_confidence", 0.5),
+            "mention_count": d.get("mention_count"),
+            "volume_ratio": d.get("volume_ratio"),
+            "sample_headlines": d.get("sample_headlines"),
+            "scanned": False,
+            "signal_generated": False,
+        })
+    db.commit()
+    return {
+        "discovered": len(discoveries),
+        "tickers": [
+            {
+                "ticker": d["ticker"],
+                "discovery_methods": d.get("discovery_methods", []),
+                "discovery_confidence": d.get("discovery_confidence"),
+                "mention_count": d.get("mention_count"),
+                "volume_ratio": d.get("volume_ratio"),
+                "sample_headlines": d.get("sample_headlines", [])[:3],
+            }
+            for d in discoveries
+        ],
+    }
 
 
 @app.post("/api/scan")

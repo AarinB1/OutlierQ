@@ -6,8 +6,9 @@ import SignalList from './components/SignalList'
 import EventTimeline from './components/EventTimeline'
 import AccuracyPanel from './components/AccuracyPanel'
 import TickerView from './components/TickerView'
+import DiscoveryPanel from './components/DiscoveryPanel'
 
-export type Page = 'signals' | 'events' | 'accuracy' | 'tickers'
+export type Page = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery'
 
 export default function App() {
   const [page, setPage] = useState<Page>('signals')
@@ -32,6 +33,7 @@ export default function App() {
         {page === 'events' && <EventTimeline />}
         {page === 'accuracy' && <AccuracyPanel />}
         {page === 'tickers' && <TickerView />}
+        {page === 'discovery' && <DiscoveryPanel />}
       </div>
     </Layout>
   )

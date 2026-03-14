@@ -9,6 +9,8 @@ Usage:
     python scripts/run_ingestion.py --evaluate
     python scripts/run_ingestion.py --reclassify --verbose
     python scripts/run_ingestion.py --api
+    python scripts/run_ingestion.py --once --discover
+    python scripts/run_ingestion.py --discover-only
 """
 
 import argparse
@@ -80,6 +82,16 @@ def parse_args() -> argparse.Namespace:
         "--verbose",
         action="store_true",
         help="Enable debug-level logging",
+    )
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Run discovery system once and feed results into pipeline (implies --signals and --detect)",
+    )
+    parser.add_argument(
+        "--discover-only",
+        action="store_true",
+        help="Run discovery and print discovered tickers only (no pipeline scan)",
     )
     return parser.parse_args()
 
@@ -210,6 +222,85 @@ def run_api() -> None:
     uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)
 
 
+def _discovery_orchestrator(demo: bool = False):
+    """Build DiscoveryOrchestrator with real dependencies."""
+    import finnhub
+    from config.settings import FINNHUB_API_KEY
+    from src.detection import AnomalyPipeline
+    from src.discovery.orchestrator import DiscoveryOrchestrator
+    from src.ingestion.market_fetcher import MarketFetcher
+    from src.signals.signal_engine import SignalEngine
+
+    client = finnhub.Client(api_key=FINNHUB_API_KEY) if FINNHUB_API_KEY else None
+    if not client:
+        raise ValueError("FINNHUB_API_KEY required for discovery. Set it in .env")
+    market = MarketFetcher()
+    pipeline = AnomalyPipeline(demo=demo)
+    engine = SignalEngine(market_fetcher=market)
+    return DiscoveryOrchestrator(
+        db_session=None,
+        finnhub_client=client,
+        market_fetcher=market,
+        pipeline=pipeline,
+        signal_engine=engine,
+    )
+
+
+def _print_discoveries(discoveries: list[dict]) -> None:
+    """Print discovered tickers in the requested format."""
+    print("\n" + "=" * 40)
+    print("DISCOVERED TICKERS")
+    print("=" * 40)
+    if not discoveries:
+        print("No tickers discovered.")
+        return
+    for d in discoveries:
+        methods = d.get("discovery_methods") or []
+        if len(methods) >= 2:
+            badge = "news + volume"
+        elif methods == ["news_scanner"]:
+            badge = "news only"
+        else:
+            badge = "volume only"
+        print(f"\n\u26a1 {d['ticker']} ({badge})")
+        if d.get("mention_count") is not None:
+            print(f"   Mentions: {d['mention_count']} | ", end="")
+        if d.get("volume_ratio") is not None:
+            print(f"Volume: {d['volume_ratio']}x avg | ", end="")
+        print(f"Confidence: {d.get('discovery_confidence', 0):.2f}")
+        headlines = d.get("sample_headlines") or []
+        if headlines:
+            print("   Headlines:")
+            for h in headlines[:3]:
+                print(f"   - \"{h[:80]}{'...' if len(h) > 80 else ''}\"")
+        if d.get("price_change_pct") is not None and not headlines:
+            print(f"   Price: {d['price_change_pct']:+.1f}%")
+    print("\n" + "=" * 40)
+
+
+def run_discover_only() -> None:
+    """Run discovery and print results; do not run pipeline."""
+    orch = _discovery_orchestrator()
+    discoveries = orch.discover()
+    _print_discoveries(discoveries)
+    print("Exiting (--discover-only). Use --discover to also run the pipeline.\n")
+
+
+def run_discover_and_scan(demo: bool = False) -> None:
+    """Run discovery, print discovered tickers, then feed into pipeline."""
+    orch = _discovery_orchestrator(demo=demo)
+    discoveries = orch.discover()
+    _print_discoveries(discoveries)
+    if not discoveries:
+        print("No tickers to scan.\n")
+        return
+    print(f"Feeding {len(discoveries)} discovered tickers into pipeline...")
+    signals = orch.feed_discoveries(discoveries)
+    if signals:
+        print(f"\nGenerated {len(signals)} signal(s).")
+    print()
+
+
 def run_once(
     tickers: list[str],
     detect: bool = False,
@@ -243,6 +334,7 @@ def run_scheduled(
     signals: bool = False,
     demo: bool = False,
     anytime: bool = False,
+    discover: bool = False,
 ) -> None:
     """Start the APScheduler-based ingestion loop."""
     from src.ingestion.scheduler import IngestionScheduler
@@ -273,18 +365,64 @@ def run_scheduled(
         else:
             from apscheduler.triggers.cron import CronTrigger
 
+            if discover:
+                scheduler.scheduler.add_job(
+                    _job,
+                    trigger=CronTrigger(
+                        day_of_week="mon-fri",
+                        hour="9-15",
+                        minute="0,30",
+                        timezone="US/Eastern",
+                    ),
+                    id="pipeline_job",
+                    name=job_name,
+                )
+                logger.info("%s job added (at :00 and :30 during market hours, staggered with discovery)", job_name)
+            else:
+                scheduler.scheduler.add_job(
+                    _job,
+                    trigger=CronTrigger(
+                        day_of_week="mon-fri",
+                        hour="9-15",
+                        minute="*/15",
+                        timezone="US/Eastern",
+                    ),
+                    id="pipeline_job",
+                    name=job_name,
+                )
+                logger.info("%s job added (every 15 min during market hours)", job_name)
+
+    if discover:
+        def _discover_job() -> None:
+            logger.info("Running scheduled discovery")
+            try:
+                run_discover_and_scan(demo=demo)
+            except Exception:
+                logger.exception("Discovery job failed")
+
+        if anytime:
+            from apscheduler.triggers.interval import IntervalTrigger
             scheduler.scheduler.add_job(
-                _job,
+                _discover_job,
+                trigger=IntervalTrigger(minutes=30),
+                id="discovery_job",
+                name="Discovery (anytime)",
+            )
+            logger.info("Discovery job added (every 30 min, anytime mode)")
+        else:
+            from apscheduler.triggers.cron import CronTrigger
+            scheduler.scheduler.add_job(
+                _discover_job,
                 trigger=CronTrigger(
                     day_of_week="mon-fri",
                     hour="9-15",
-                    minute="*/15",
+                    minute="15,45",  # :15 and :45 — stagger with ingestion :00, pipeline :30
                     timezone="US/Eastern",
                 ),
-                id="pipeline_job",
-                name=job_name,
+                id="discovery_job",
+                name="Discovery",
             )
-            logger.info("%s job added (every 15 min during market hours)", job_name)
+            logger.info("Discovery job added (at :15 and :45 during market hours)")
 
     try:
         scheduler.start()
@@ -314,6 +452,10 @@ def main() -> None:
         run_reclassify()
         return
 
+    if args.discover_only:
+        run_discover_only()
+        return
+
     tickers = [t.strip().upper() for t in args.tickers.split(",")]
     logger.info("OutlierQ ingestion — tickers: %s", tickers)
 
@@ -323,17 +465,22 @@ def main() -> None:
     if args.anytime:
         print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
 
-    detect = args.detect or args.signals
+    detect = args.detect or args.signals or args.discover
+    signals = args.signals or args.discover
 
     if args.once:
-        run_once(tickers, detect=detect, signals=args.signals, demo=args.demo)
+        if args.discover:
+            run_discover_and_scan(demo=args.demo)
+        else:
+            run_once(tickers, detect=detect, signals=signals, demo=args.demo)
     else:
         run_scheduled(
             tickers,
             detect=detect,
-            signals=args.signals,
+            signals=signals,
             demo=args.demo,
             anytime=args.anytime,
+            discover=args.discover,
         )
 
 
