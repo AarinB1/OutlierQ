@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""CLI entry point to run the OutlierQ ingestion pipeline.
+"""CLI entry point to run the OutlierQ ingestion and detection pipeline.
 
 Usage:
     python scripts/run_ingestion.py --once --tickers AAPL,TSLA
-    python scripts/run_ingestion.py --verbose
+    python scripts/run_ingestion.py --once --detect --tickers AAPL,TSLA
+    python scripts/run_ingestion.py --detect --verbose
 """
 
 import argparse
@@ -36,6 +37,11 @@ def parse_args() -> argparse.Namespace:
         help="Run a single ingestion pass and exit (no scheduler)",
     )
     parser.add_argument(
+        "--detect",
+        action="store_true",
+        help="Run anomaly detection after ingestion",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug-level logging",
@@ -43,7 +49,37 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_once(tickers: list[str]) -> None:
+def run_detection(tickers: list[str]) -> None:
+    """Run the anomaly detection pipeline and print results."""
+    from src.detection import AnomalyPipeline
+
+    pipeline = AnomalyPipeline()
+    events = pipeline.scan_and_store(tickers)
+
+    if not events:
+        logger.info("No outlier events detected.")
+        print("\nNo outlier events detected.")
+        return
+
+    print(f"\n{'='*60}")
+    print(f"  OUTLIER EVENTS DETECTED: {len(events)}")
+    print(f"{'='*60}")
+
+    for event in events:
+        meta = event.metadata_json or {}
+        print(f"\n  Ticker:     {event.ticker}")
+        print(f"  Direction:  {event.direction}")
+        print(f"  Confidence: {event.confidence:.3f}")
+        print(f"  Z-Score:    {meta.get('z_score', 'N/A')}")
+        print(f"  Sentiment:  {meta.get('mean_sentiment', 'N/A')}")
+        print(f"  Sources:    {', '.join(meta.get('sources', []))}")
+        print(f"  Themes:     {', '.join(meta.get('common_themes', []))}")
+        print(f"  {'─'*56}")
+
+    print()
+
+
+def run_once(tickers: list[str], detect: bool = False) -> None:
     """Fetch news + market data for all tickers once, then exit."""
     news = NewsFetcher()
     market = MarketFetcher()
@@ -61,12 +97,40 @@ def run_once(tickers: list[str]) -> None:
         except Exception:
             logger.exception("Failed to fetch market data for %s", ticker)
 
+    # Detection
+    if detect:
+        run_detection(tickers)
 
-def run_scheduled(tickers: list[str]) -> None:
+
+def run_scheduled(tickers: list[str], detect: bool = False) -> None:
     """Start the APScheduler-based ingestion loop."""
     from src.ingestion.scheduler import IngestionScheduler
 
     scheduler = IngestionScheduler(tickers=tickers)
+
+    if detect:
+        from apscheduler.triggers.cron import CronTrigger
+
+        def _detection_job() -> None:
+            logger.info("Running scheduled anomaly detection for %s", tickers)
+            try:
+                run_detection(tickers)
+            except Exception:
+                logger.exception("Detection job failed")
+
+        scheduler.scheduler.add_job(
+            _detection_job,
+            trigger=CronTrigger(
+                day_of_week="mon-fri",
+                hour="9-15",
+                minute="*/15",
+                timezone="US/Eastern",
+            ),
+            id="anomaly_detection",
+            name="Anomaly Detection",
+        )
+        logger.info("Anomaly detection job added (every 15 min during market hours)")
+
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
@@ -87,9 +151,9 @@ def main() -> None:
     init_db()
 
     if args.once:
-        run_once(tickers)
+        run_once(tickers, detect=args.detect)
     else:
-        run_scheduled(tickers)
+        run_scheduled(tickers, detect=args.detect)
 
 
 if __name__ == "__main__":
