@@ -279,6 +279,92 @@ class TestCrossSourceValidator:
 # ── AnomalyPipeline integration test ─────────────────────────────────
 
 
+class TestAnomalyPipelineDemo:
+    def test_demo_mode_thresholds(self):
+        """demo=True should lower sentiment and cross-source thresholds."""
+        from src.detection import AnomalyPipeline
+
+        pipeline = AnomalyPipeline(demo=True)
+
+        assert pipeline.demo is True
+        assert pipeline.sentiment_filter.extreme_threshold == 0.3
+        assert pipeline.sentiment_filter.extreme_ratio_threshold == 0.05
+        assert pipeline.cross_source.min_sources == 1
+
+    def test_production_mode_thresholds(self):
+        """demo=False should use normal production thresholds."""
+        from src.detection import AnomalyPipeline
+
+        pipeline = AnomalyPipeline(demo=False)
+
+        assert pipeline.demo is False
+        assert pipeline.sentiment_filter.extreme_threshold == 0.6
+        assert pipeline.sentiment_filter.extreme_ratio_threshold == 0.5
+        assert pipeline.cross_source.min_sources == 2
+
+    def test_demo_flag_generates_signals(self, db_session):
+        """Mild sentiment should generate signals in demo mode but not production mode."""
+        from src.detection import AnomalyPipeline
+
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Insert 14 days of baseline (3 articles/day)
+        for day_offset in range(1, 15):
+            day = today_start - timedelta(days=day_offset)
+            for i in range(3):
+                article = _make_article(
+                    ticker="MSFT",
+                    headline=f"Normal Microsoft news day {day_offset}",
+                    source="GenericNews",
+                    ingested_at=day + timedelta(hours=i),
+                )
+                db_session.add(article)
+
+        # Insert 15 articles recently with MILD sentiment (~10% extreme ratio)
+        # and a single source — enough for demo mode but not production
+        recent = now - timedelta(hours=1)  # within the 6-hour window
+        mild_headlines = [
+            ("Microsoft stock slightly lower today", "Reuters"),
+            ("Company reports modest decline in cloud revenue", "Reuters"),
+            ("Minor concerns about quarterly guidance", "Reuters"),
+            ("Analysts divided on near-term outlook", "Reuters"),
+            ("Market reacts to mixed earnings signals", "Reuters"),
+            ("Team reorganization announced at division", "Reuters"),
+            ("Small adjustment to product pricing expected", "Reuters"),
+            ("Regulatory review progressing normally", "Reuters"),
+            ("Industry trends show modest slowdown", "Reuters"),
+            ("Partnership deal faces minor setback", "Reuters"),
+            ("Terrible scandal rocks leadership team", "Reuters"),  # 1 extreme
+            ("New office opened in regional market", "Reuters"),
+            ("Employee survey shows stable satisfaction", "Reuters"),
+            ("Supply chain performing within expectations", "Reuters"),
+            ("Board meeting concludes with routine updates", "Reuters"),
+        ]
+
+        for headline, source in mild_headlines:
+            article = _make_article(
+                ticker="MSFT",
+                headline=headline,
+                source=source,
+                ingested_at=recent,
+            )
+            db_session.add(article)
+
+        db_session.commit()
+
+        # Demo mode should detect outliers (low thresholds)
+        demo_pipeline = AnomalyPipeline(demo=True)
+        demo_results = demo_pipeline.scan(["MSFT"], session=db_session)
+
+        # Production mode should NOT detect outliers (high thresholds)
+        prod_pipeline = AnomalyPipeline(demo=False)
+        prod_results = prod_pipeline.scan(["MSFT"], session=db_session)
+
+        assert len(demo_results) >= 1, "Demo mode should detect the mild-sentiment data"
+        assert len(prod_results) == 0, "Production mode should reject mild-sentiment data"
+
+
 class TestAnomalyPipeline:
     def test_full_pipeline(self, db_session):
         """End-to-end: volume spike + extreme sentiment + multiple sources → outlier."""

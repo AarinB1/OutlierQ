@@ -27,16 +27,34 @@ logger.setLevel(logging.INFO)
 class AnomalyPipeline:
     """Orchestrates the three-stage anomaly detection pipeline."""
 
+    # Production thresholds
+    _PROD_SENTIMENT_THRESHOLD = 0.6
+    _PROD_EXTREME_RATIO = 0.5
+    _PROD_MIN_SOURCES = 2
+
+    # Demo thresholds — lower so signals generate on normal market days
+    _DEMO_SENTIMENT_THRESHOLD = 0.3
+    _DEMO_EXTREME_RATIO = 0.05
+    _DEMO_MIN_SOURCES = 1
+
     def __init__(
         self,
         volume_threshold: float = 3.0,
-        # DEMO MODE — lower threshold for testing. Production value: 0.6
-        sentiment_threshold: float = 0.3,
-        # DEMO MODE — lower threshold for testing. Production value: 0.5
-        extreme_ratio: float = 0.05,
-        # DEMO MODE — lower threshold for testing. Production value: 2
-        min_sources: int = 1,
+        sentiment_threshold: float = 0.6,
+        extreme_ratio: float = 0.5,
+        min_sources: int = 2,
+        demo: bool = False,
     ) -> None:
+        self.demo = demo
+
+        if demo:
+            sentiment_threshold = self._DEMO_SENTIMENT_THRESHOLD
+            extreme_ratio = self._DEMO_EXTREME_RATIO
+            min_sources = self._DEMO_MIN_SOURCES
+            logger.info("AnomalyPipeline initialized in DEMO mode")
+        else:
+            logger.info("AnomalyPipeline initialized in PRODUCTION mode")
+
         self.volume_detector = VolumeDetector(threshold=volume_threshold)
         self.sentiment_filter = SentimentFilter(
             extreme_threshold=sentiment_threshold,

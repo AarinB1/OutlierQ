@@ -77,6 +77,27 @@ npm run dev
 
 The React dev server proxies `/api` requests to the FastAPI backend automatically.
 
+## Testing & Demo
+
+OutlierQ's detection thresholds are tuned for real outlier events, which means normal market days won't generate signals. Two CLI flags make testing and demos easier:
+
+- `--demo` — Lowers sentiment and cross-source thresholds so signals generate on normal market data. Volume threshold is unchanged (it already triggers on cold start).
+- `--anytime` — Runs the scheduler on simple intervals instead of restricting to Mon-Fri market hours. Useful for testing on evenings and weekends.
+
+**One-shot demo (recommended for screenshots):**
+
+```bash
+python3 scripts/run_ingestion.py --once --signals --demo --tickers AAPL,TSLA,NVDA
+```
+
+**Continuous demo (scheduled, any time of day):**
+
+```bash
+python3 scripts/run_ingestion.py --signals --demo --anytime --tickers AAPL,TSLA,NVDA
+```
+
+> **Note:** Signals generated with `--demo` use relaxed thresholds and should not be treated as real trading recommendations.
+
 ## Tech Stack
 
 - **Python 3.11+** — core language

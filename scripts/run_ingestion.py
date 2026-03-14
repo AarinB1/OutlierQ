@@ -4,7 +4,8 @@
 Usage:
     python scripts/run_ingestion.py --once --tickers AAPL,TSLA
     python scripts/run_ingestion.py --once --signals --tickers AAPL,TSLA
-    python scripts/run_ingestion.py --signals --verbose
+    python scripts/run_ingestion.py --once --signals --demo --tickers AAPL,TSLA
+    python scripts/run_ingestion.py --signals --demo --anytime --tickers AAPL,TSLA
     python scripts/run_ingestion.py --evaluate
     python scripts/run_ingestion.py --reclassify --verbose
     python scripts/run_ingestion.py --api
@@ -51,6 +52,16 @@ def parse_args() -> argparse.Namespace:
         help="Run full pipeline including signal generation (implies --detect)",
     )
     parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Lower detection thresholds so signals generate on normal market days",
+    )
+    parser.add_argument(
+        "--anytime",
+        action="store_true",
+        help="Run the scheduler regardless of market hours (for testing evenings/weekends)",
+    )
+    parser.add_argument(
         "--evaluate",
         action="store_true",
         help="Evaluate pending signals and print accuracy stats, then exit",
@@ -73,11 +84,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_detection(tickers: list[str]) -> None:
+def run_detection(tickers: list[str], demo: bool = False) -> None:
     """Run the anomaly detection pipeline and print results."""
     from src.detection import AnomalyPipeline
 
-    pipeline = AnomalyPipeline()
+    pipeline = AnomalyPipeline(demo=demo)
     events = pipeline.scan_and_store(tickers)
 
     if not events:
@@ -105,11 +116,11 @@ def run_detection(tickers: list[str]) -> None:
     print()
 
 
-def run_full_pipeline(tickers: list[str]) -> None:
+def run_full_pipeline(tickers: list[str], demo: bool = False) -> None:
     """Run the full pipeline: detection + classification + signal generation."""
     from src.detection import AnomalyPipeline
 
-    pipeline = AnomalyPipeline()
+    pipeline = AnomalyPipeline(demo=demo)
     signals = pipeline.full_pipeline(tickers)
 
     if not signals:
@@ -199,7 +210,12 @@ def run_api() -> None:
     uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)
 
 
-def run_once(tickers: list[str], detect: bool = False, signals: bool = False) -> None:
+def run_once(
+    tickers: list[str],
+    detect: bool = False,
+    signals: bool = False,
+    demo: bool = False,
+) -> None:
     """Fetch news + market data for all tickers once, then exit."""
     news = NewsFetcher()
     market = MarketFetcher()
@@ -216,21 +232,25 @@ def run_once(tickers: list[str], detect: bool = False, signals: bool = False) ->
             logger.exception("Failed to fetch market data for %s", ticker)
 
     if signals:
-        run_full_pipeline(tickers)
+        run_full_pipeline(tickers, demo=demo)
     elif detect:
-        run_detection(tickers)
+        run_detection(tickers, demo=demo)
 
 
-def run_scheduled(tickers: list[str], detect: bool = False, signals: bool = False) -> None:
+def run_scheduled(
+    tickers: list[str],
+    detect: bool = False,
+    signals: bool = False,
+    demo: bool = False,
+    anytime: bool = False,
+) -> None:
     """Start the APScheduler-based ingestion loop."""
-    from apscheduler.triggers.cron import CronTrigger
-
     from src.ingestion.scheduler import IngestionScheduler
 
-    scheduler = IngestionScheduler(tickers=tickers)
+    scheduler = IngestionScheduler(tickers=tickers, anytime=anytime)
 
     if signals or detect:
-        job_fn = (lambda: run_full_pipeline(tickers)) if signals else (lambda: run_detection(tickers))
+        job_fn = (lambda: run_full_pipeline(tickers, demo=demo)) if signals else (lambda: run_detection(tickers, demo=demo))
         job_name = "Full Pipeline" if signals else "Anomaly Detection"
 
         def _job() -> None:
@@ -240,18 +260,31 @@ def run_scheduled(tickers: list[str], detect: bool = False, signals: bool = Fals
             except Exception:
                 logger.exception("%s job failed", job_name)
 
-        scheduler.scheduler.add_job(
-            _job,
-            trigger=CronTrigger(
-                day_of_week="mon-fri",
-                hour="9-15",
-                minute="*/15",
-                timezone="US/Eastern",
-            ),
-            id="pipeline_job",
-            name=job_name,
-        )
-        logger.info("%s job added (every 15 min during market hours)", job_name)
+        if anytime:
+            from apscheduler.triggers.interval import IntervalTrigger
+
+            scheduler.scheduler.add_job(
+                _job,
+                trigger=IntervalTrigger(minutes=15),
+                id="pipeline_job",
+                name=f"{job_name} (anytime)",
+            )
+            logger.info("%s job added (every 15 min, anytime mode)", job_name)
+        else:
+            from apscheduler.triggers.cron import CronTrigger
+
+            scheduler.scheduler.add_job(
+                _job,
+                trigger=CronTrigger(
+                    day_of_week="mon-fri",
+                    hour="9-15",
+                    minute="*/15",
+                    timezone="US/Eastern",
+                ),
+                id="pipeline_job",
+                name=job_name,
+            )
+            logger.info("%s job added (every 15 min during market hours)", job_name)
 
     try:
         scheduler.start()
@@ -284,12 +317,24 @@ def main() -> None:
     tickers = [t.strip().upper() for t in args.tickers.split(",")]
     logger.info("OutlierQ ingestion — tickers: %s", tickers)
 
+    # Mode banners
+    if args.demo:
+        print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered. Signals may not reflect real outlier events.\n")
+    if args.anytime:
+        print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
+
     detect = args.detect or args.signals
 
     if args.once:
-        run_once(tickers, detect=detect, signals=args.signals)
+        run_once(tickers, detect=detect, signals=args.signals, demo=args.demo)
     else:
-        run_scheduled(tickers, detect=detect, signals=args.signals)
+        run_scheduled(
+            tickers,
+            detect=detect,
+            signals=args.signals,
+            demo=args.demo,
+            anytime=args.anytime,
+        )
 
 
 if __name__ == "__main__":
