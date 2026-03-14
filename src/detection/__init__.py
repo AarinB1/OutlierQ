@@ -30,9 +30,12 @@ class AnomalyPipeline:
     def __init__(
         self,
         volume_threshold: float = 3.0,
-        sentiment_threshold: float = 0.6,
-        extreme_ratio: float = 0.5,
-        min_sources: int = 2,
+        # DEMO MODE — lower threshold for testing. Production value: 0.6
+        sentiment_threshold: float = 0.3,
+        # DEMO MODE — lower threshold for testing. Production value: 0.5
+        extreme_ratio: float = 0.05,
+        # DEMO MODE — lower threshold for testing. Production value: 2
+        min_sources: int = 1,
     ) -> None:
         self.volume_detector = VolumeDetector(threshold=volume_threshold)
         self.sentiment_filter = SentimentFilter(
