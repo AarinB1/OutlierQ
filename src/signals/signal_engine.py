@@ -1,30 +1,383 @@
-"""Call/put signal generation — stub for Phase 4.
+"""Options signal generation from classified events.
 
-This module will take classified events and generate actionable
-options trading signals (call or put recommendations) with
-suggested strike prices and expiration dates.
-
-Planned features:
-  - Map bullish events → call signals, bearish → put signals
-  - Strike price suggestion based on current price + expected move
-  - Expiry selection based on event type (short-term for earnings, longer for legal)
-  - Confidence scoring combining event confidence + sentiment + volume
-  - Signal deduplication (don't re-signal the same event)
-  - Outcome tracking: record profit/loss after expiry
+Translates a classified outlier event into an actionable options trade
+recommendation — call or put, at what strike price, with what expiration.
+Each event type has an impact profile encoding expected price behavior.
 """
+
+import logging
+from datetime import date, timedelta
+
+from sqlalchemy.orm import Session
+
+from config.settings import LOG_FORMAT
+from src.db.database import get_session
+from src.db.tables import Signal
+from src.ingestion.market_fetcher import MarketFetcher
+
+logging.basicConfig(format=LOG_FORMAT)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# ── Event impact profiles ────────────────────────────────────────────
+
+EVENT_PROFILES: dict[str, dict] = {
+    "scandal": {
+        "direction": "put",
+        "expected_move_pct": 0.10,
+        "strike_offset_pct": 0.05,
+        "expiry_days_min": 14,
+        "expiry_days_max": 30,
+        "decay_type": "sustained",
+        "base_confidence": 0.80,
+    },
+    "legal": {
+        "direction": "put",
+        "expected_move_pct": 0.07,
+        "strike_offset_pct": 0.04,
+        "expiry_days_min": 14,
+        "expiry_days_max": 30,
+        "decay_type": "sustained",
+        "base_confidence": 0.70,
+    },
+    "earnings_miss": {
+        "direction": "put",
+        "expected_move_pct": 0.08,
+        "strike_offset_pct": 0.03,
+        "expiry_days_min": 7,
+        "expiry_days_max": 21,
+        "decay_type": "moderate",
+        "base_confidence": 0.75,
+    },
+    "recall": {
+        "direction": "put",
+        "expected_move_pct": 0.06,
+        "strike_offset_pct": 0.03,
+        "expiry_days_min": 14,
+        "expiry_days_max": 21,
+        "decay_type": "moderate",
+        "base_confidence": 0.65,
+    },
+    "fda_approval": {
+        "direction": "call",
+        "expected_move_pct": 0.15,
+        "strike_offset_pct": 0.05,
+        "expiry_days_min": 7,
+        "expiry_days_max": 14,
+        "decay_type": "spike_fade",
+        "base_confidence": 0.85,
+    },
+    "breakthrough": {
+        "direction": "call",
+        "expected_move_pct": 0.10,
+        "strike_offset_pct": 0.04,
+        "expiry_days_min": 7,
+        "expiry_days_max": 21,
+        "decay_type": "moderate",
+        "base_confidence": 0.70,
+    },
+    "major_contract": {
+        "direction": "call",
+        "expected_move_pct": 0.08,
+        "strike_offset_pct": 0.03,
+        "expiry_days_min": 7,
+        "expiry_days_max": 14,
+        "decay_type": "spike_fade",
+        "base_confidence": 0.75,
+    },
+    "earnings_beat": {
+        "direction": "call",
+        "expected_move_pct": 0.07,
+        "strike_offset_pct": 0.03,
+        "expiry_days_min": 7,
+        "expiry_days_max": 14,
+        "decay_type": "moderate",
+        "base_confidence": 0.80,
+    },
+}
+
+
+def _get_strike_increment(price: float) -> float:
+    """Return the standard options strike increment for a given price level."""
+    if price < 50:
+        return 1.0
+    elif price < 200:
+        return 2.5
+    elif price < 500:
+        return 5.0
+    else:
+        return 10.0
+
+
+def _round_to_strike(value: float, increment: float) -> float:
+    """Round a value to the nearest standard strike increment."""
+    return round(value / increment) * increment
+
+
+def _next_friday(d: date) -> date:
+    """Advance a date to the next Friday (or keep if already Friday)."""
+    days_ahead = 4 - d.weekday()  # 4 = Friday
+    if days_ahead < 0:
+        days_ahead += 7
+    elif days_ahead == 0:
+        return d
+    return d + timedelta(days=days_ahead)
 
 
 class SignalEngine:
     """Generates options trading signals from classified events."""
 
-    def generate_signal(self, event_id: str) -> dict:
-        """Generate a call/put signal for a classified event."""
-        raise NotImplementedError("Signal generation is planned for Phase 4.")
+    def __init__(self, market_fetcher: MarketFetcher | None = None) -> None:
+        self.market_fetcher = market_fetcher or MarketFetcher()
 
-    def suggest_strike(self, ticker: str, direction: str) -> float:
-        """Suggest a strike price based on current price and expected move."""
-        raise NotImplementedError("Strike suggestion is planned for Phase 4.")
+    # ── Strike computation ────────────────────────────────────────────
 
-    def suggest_expiry(self, event_type: str) -> str:
-        """Suggest an expiration date based on event type."""
-        raise NotImplementedError("Expiry suggestion is planned for Phase 4.")
+    @staticmethod
+    def compute_strike(
+        current_price: float, direction: str, offset_pct: float
+    ) -> float:
+        """Compute suggested strike price, rounded to nearest standard increment.
+
+        For puts: strike below current price (OTM put).
+        For calls: strike above current price (OTM call).
+        """
+        if direction == "put":
+            raw_strike = current_price * (1 - offset_pct)
+        else:
+            raw_strike = current_price * (1 + offset_pct)
+
+        increment = _get_strike_increment(current_price)
+        return _round_to_strike(raw_strike, increment)
+
+    # ── Expiry computation ────────────────────────────────────────────
+
+    @staticmethod
+    def compute_expiry(
+        expiry_days_min: int, expiry_days_max: int, decay_type: str
+    ) -> str:
+        """Compute suggested expiration date as YYYY-MM-DD.
+
+        - spike_fade: use min days (get in and out fast)
+        - sustained: use max days (give it time to play out)
+        - moderate: use the midpoint
+        Always rounds to the nearest Friday.
+        """
+        if decay_type == "spike_fade":
+            target_days = expiry_days_min
+        elif decay_type == "sustained":
+            target_days = expiry_days_max
+        else:  # moderate
+            target_days = (expiry_days_min + expiry_days_max) // 2
+
+        target_date = date.today() + timedelta(days=target_days)
+        expiry_date = _next_friday(target_date)
+        return expiry_date.isoformat()
+
+    # ── Contract lookup ───────────────────────────────────────────────
+
+    def find_best_contract(
+        self,
+        ticker: str,
+        direction: str,
+        target_strike: float,
+        target_expiry: str,
+    ) -> dict | None:
+        """Search the options chain for the closest matching contract.
+
+        Returns contract details dict or None if chain is unavailable.
+        """
+        try:
+            chain = self.market_fetcher.fetch_options_chain(ticker)
+        except Exception:
+            logger.warning("Failed to fetch options chain for %s", ticker)
+            return None
+
+        df_key = "calls" if direction == "call" else "puts"
+        df = chain.get(df_key)
+
+        if df is None or df.empty:
+            logger.warning("No %s contracts available for %s", direction, ticker)
+            return None
+
+        # Find the strike closest to target
+        if "strike" not in df.columns:
+            return None
+
+        df = df.copy()
+        df["strike_dist"] = (df["strike"] - target_strike).abs()
+        best = df.loc[df["strike_dist"].idxmin()]
+
+        return {
+            "contract_symbol": str(best.get("contractSymbol", "")),
+            "strike": float(best["strike"]),
+            "expiry": target_expiry,
+            "bid": float(best.get("bid", 0)),
+            "ask": float(best.get("ask", 0)),
+            "volume": int(best.get("volume", 0)) if not _is_nan(best.get("volume")) else 0,
+            "open_interest": int(best.get("openInterest", 0)) if not _is_nan(best.get("openInterest")) else 0,
+            "implied_volatility": float(best.get("impliedVolatility", 0)) if not _is_nan(best.get("impliedVolatility")) else 0,
+        }
+
+    # ── Confidence computation ────────────────────────────────────────
+
+    @staticmethod
+    def compute_confidence(
+        event_confidence: float,
+        base_confidence: float,
+        contract: dict | None,
+    ) -> float:
+        """Compute final signal confidence with market-based adjustments."""
+        confidence = (event_confidence + base_confidence) / 2.0
+
+        if contract is not None:
+            if contract.get("open_interest", 0) > 100:
+                confidence += 0.05
+            if contract.get("volume", 0) > 50:
+                confidence += 0.05
+            if contract.get("implied_volatility", 0) > 1.0:
+                confidence -= 0.10
+        else:
+            confidence -= 0.05
+
+        # Clamp to [0.1, 0.95]
+        return max(0.1, min(0.95, confidence))
+
+    # ── Signal generation ─────────────────────────────────────────────
+
+    def generate_signal(self, event: dict) -> dict | None:
+        """Generate a complete options signal from an event dict.
+
+        Takes an event dict (from AnomalyPipeline.scan or scan_and_store output)
+        and produces a trade recommendation. Returns None for "other" events.
+        """
+        event_type = event.get("event_type", "other")
+
+        if event_type not in EVENT_PROFILES:
+            logger.info(
+                "Skipping signal for %s — event type '%s' has no profile",
+                event.get("ticker", "?"), event_type,
+            )
+            return None
+
+        profile = EVENT_PROFILES[event_type]
+        ticker = event["ticker"]
+
+        # Get current price
+        try:
+            current_price = self.market_fetcher.get_current_price(ticker)
+        except Exception:
+            logger.warning("Cannot get price for %s — skipping signal", ticker)
+            return None
+
+        direction = profile["direction"]
+        strike = self.compute_strike(
+            current_price, direction, profile["strike_offset_pct"]
+        )
+        expiry = self.compute_expiry(
+            profile["expiry_days_min"],
+            profile["expiry_days_max"],
+            profile["decay_type"],
+        )
+
+        # Try to find a real contract
+        contract = self.find_best_contract(ticker, direction, strike, expiry)
+
+        # Use the real contract's strike if found
+        if contract is not None:
+            strike = contract["strike"]
+
+        event_confidence = event.get("confidence", event.get("confidence_score", 0.5))
+        confidence = self.compute_confidence(
+            event_confidence, profile["base_confidence"], contract
+        )
+
+        move_direction = "downward" if direction == "put" else "upward"
+        reasoning = (
+            f"{event_type.replace('_', ' ').title()} detected for {ticker} "
+            f"with {event_confidence:.2f} confidence. "
+            f"Suggesting {direction} at ${strike:.0f} strike expiring {expiry}. "
+            f"Expected ~{profile['expected_move_pct']:.0%} {move_direction} move "
+            f"with {profile['decay_type']} impact."
+        )
+
+        logger.info(
+            "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f) — %s",
+            direction, ticker, strike, expiry, confidence, event_type,
+        )
+
+        return {
+            "ticker": ticker,
+            "event_type": event_type,
+            "event_id": event.get("event_id") or event.get("id"),
+            "direction": direction,
+            "current_price": current_price,
+            "suggested_strike": strike,
+            "suggested_expiry": expiry,
+            "expected_move_pct": profile["expected_move_pct"],
+            "decay_type": profile["decay_type"],
+            "confidence": confidence,
+            "contract": contract,
+            "reasoning": reasoning,
+        }
+
+    def generate_signals(self, events: list[dict]) -> list[dict]:
+        """Generate signals for a batch of events, sorted by confidence."""
+        signals = []
+        for event in events:
+            signal = self.generate_signal(event)
+            if signal is not None:
+                signals.append(signal)
+
+        signals.sort(key=lambda s: s["confidence"], reverse=True)
+        logger.info("Generated %d signals from %d events", len(signals), len(events))
+        return signals
+
+    def generate_and_store(
+        self,
+        events: list[dict],
+        session: Session | None = None,
+    ) -> list[Signal]:
+        """Generate signals and store them in the signals table.
+
+        Each signal is linked to its source event via event_id.
+        """
+        def _run(s: Session) -> list[Signal]:
+            signal_dicts = self.generate_signals(events)
+            stored: list[Signal] = []
+
+            for sig in signal_dicts:
+                event_id = sig.get("event_id")
+                if not event_id:
+                    logger.warning("Signal for %s has no event_id, skipping store", sig["ticker"])
+                    continue
+
+                record = Signal(
+                    ticker=sig["ticker"],
+                    event_id=event_id,
+                    direction=sig["direction"],
+                    suggested_strike=sig["suggested_strike"],
+                    suggested_expiry=sig["suggested_expiry"],
+                    confidence=sig["confidence"],
+                )
+                s.add(record)
+                stored.append(record)
+
+            s.flush()
+            logger.info("Stored %d signals in the database", len(stored))
+            return stored
+
+        if session is not None:
+            return _run(session)
+        with get_session() as s:
+            return _run(s)
+
+
+def _is_nan(value) -> bool:
+    """Check if a value is NaN (handles pandas NaN and None)."""
+    if value is None:
+        return True
+    try:
+        import math
+        return math.isnan(float(value))
+    except (TypeError, ValueError):
+        return False

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""CLI entry point to run the OutlierQ ingestion, detection, and classification pipeline.
+"""CLI entry point to run the OutlierQ ingestion, detection, classification, and signal pipeline.
 
 Usage:
     python scripts/run_ingestion.py --once --tickers AAPL,TSLA
     python scripts/run_ingestion.py --once --detect --tickers AAPL,TSLA
-    python scripts/run_ingestion.py --detect --verbose
+    python scripts/run_ingestion.py --once --signals --tickers AAPL,TSLA
+    python scripts/run_ingestion.py --signals --verbose
     python scripts/run_ingestion.py --reclassify --verbose
 """
 
@@ -42,6 +43,11 @@ def parse_args() -> argparse.Namespace:
         "--detect",
         action="store_true",
         help="Run anomaly detection after ingestion",
+    )
+    parser.add_argument(
+        "--signals",
+        action="store_true",
+        help="Run full pipeline including signal generation (implies --detect)",
     )
     parser.add_argument(
         "--reclassify",
@@ -88,6 +94,32 @@ def run_detection(tickers: list[str]) -> None:
     print()
 
 
+def run_full_pipeline(tickers: list[str]) -> None:
+    """Run the full pipeline: detection + classification + signal generation."""
+    from src.detection import AnomalyPipeline
+
+    pipeline = AnomalyPipeline()
+    signals = pipeline.full_pipeline(tickers)
+
+    if not signals:
+        print("\nNo signals generated.")
+        return
+
+    print(f"\n{'='*60}")
+    print(f"  TRADE SIGNALS GENERATED: {len(signals)}")
+    print(f"{'='*60}")
+
+    for sig in signals:
+        direction_symbol = "CALL" if sig.direction == "call" else "PUT"
+        print(f"\n  {direction_symbol} {sig.ticker}")
+        print(f"  Strike:     ${sig.suggested_strike:.0f}")
+        print(f"  Expiry:     {sig.suggested_expiry}")
+        print(f"  Confidence: {sig.confidence:.3f}")
+        print(f"  {'─'*56}")
+
+    print()
+
+
 def run_reclassify() -> None:
     """Re-classify all existing events and print a summary."""
     from src.classification.event_classifier import EventClassifier
@@ -119,7 +151,7 @@ def run_reclassify() -> None:
     print()
 
 
-def run_once(tickers: list[str], detect: bool = False) -> None:
+def run_once(tickers: list[str], detect: bool = False, signals: bool = False) -> None:
     """Fetch news + market data for all tickers once, then exit."""
     news = NewsFetcher()
     market = MarketFetcher()
@@ -137,39 +169,44 @@ def run_once(tickers: list[str], detect: bool = False) -> None:
         except Exception:
             logger.exception("Failed to fetch market data for %s", ticker)
 
-    # Detection
-    if detect:
+    # Full pipeline (signals implies detect)
+    if signals:
+        run_full_pipeline(tickers)
+    elif detect:
         run_detection(tickers)
 
 
-def run_scheduled(tickers: list[str], detect: bool = False) -> None:
+def run_scheduled(tickers: list[str], detect: bool = False, signals: bool = False) -> None:
     """Start the APScheduler-based ingestion loop."""
+    from apscheduler.triggers.cron import CronTrigger
+
     from src.ingestion.scheduler import IngestionScheduler
 
     scheduler = IngestionScheduler(tickers=tickers)
 
-    if detect:
-        from apscheduler.triggers.cron import CronTrigger
+    if signals or detect:
+        job_fn = (lambda: run_full_pipeline(tickers)) if signals else (lambda: run_detection(tickers))
+        job_name = "Full Pipeline" if signals else "Anomaly Detection"
 
-        def _detection_job() -> None:
-            logger.info("Running scheduled anomaly detection for %s", tickers)
+        def _job() -> None:
+            logger.info("Running scheduled %s for %s", job_name.lower(), tickers)
             try:
-                run_detection(tickers)
+                job_fn()
             except Exception:
-                logger.exception("Detection job failed")
+                logger.exception("%s job failed", job_name)
 
         scheduler.scheduler.add_job(
-            _detection_job,
+            _job,
             trigger=CronTrigger(
                 day_of_week="mon-fri",
                 hour="9-15",
                 minute="*/15",
                 timezone="US/Eastern",
             ),
-            id="anomaly_detection",
-            name="Anomaly Detection",
+            id="pipeline_job",
+            name=job_name,
         )
-        logger.info("Anomaly detection job added (every 15 min during market hours)")
+        logger.info("%s job added (every 15 min during market hours)", job_name)
 
     try:
         scheduler.start()
@@ -195,10 +232,13 @@ def main() -> None:
         run_reclassify()
         return
 
+    # --signals implies --detect
+    detect = args.detect or args.signals
+
     if args.once:
-        run_once(tickers, detect=args.detect)
+        run_once(tickers, detect=detect, signals=args.signals)
     else:
-        run_scheduled(tickers, detect=args.detect)
+        run_scheduled(tickers, detect=detect, signals=args.signals)
 
 
 if __name__ == "__main__":

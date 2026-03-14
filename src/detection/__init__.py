@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from config.settings import LOG_FORMAT
 from src.classification.event_classifier import EventClassifier
 from src.db.database import get_session
-from src.db.tables import Article, Event
+from src.db.tables import Article, Event, Signal
 from src.detection.cross_source import CrossSourceValidator
 from src.detection.sentiment_filter import SentimentFilter
 from src.detection.volume_detector import VolumeDetector
@@ -205,6 +205,66 @@ class AnomalyPipeline:
             s.flush()
             logger.info("Stored %d outlier events in the database", len(events))
             return events
+
+        if session is not None:
+            return _run(session)
+        with get_session() as s:
+            return _run(s)
+
+    def full_pipeline(
+        self, tickers: list[str], session: Session | None = None
+    ) -> list[Signal]:
+        """Run the complete end-to-end pipeline: detect, classify, and generate signals.
+
+        1. scan_and_store — detection + classification
+        2. SignalEngine.generate_and_store — signal generation
+        Returns the list of created Signal objects.
+        """
+        from src.ingestion.market_fetcher import MarketFetcher
+        from src.signals.signal_engine import SignalEngine
+
+        def _run(s: Session) -> list[Signal]:
+            events = self.scan_and_store(tickers, session=s)
+
+            if not events:
+                logger.info(
+                    "Pipeline complete: %d tickers scanned -> 0 outliers detected -> 0 signals generated",
+                    len(tickers),
+                )
+                return []
+
+            # Build event dicts for the signal engine
+            event_dicts = []
+            for event in events:
+                event_dicts.append({
+                    "ticker": event.ticker,
+                    "event_type": event.event_type,
+                    "event_id": event.id,
+                    "direction": event.direction,
+                    "confidence": event.confidence,
+                    "id": event.id,
+                })
+
+            engine = SignalEngine(market_fetcher=MarketFetcher())
+            signals = engine.generate_and_store(event_dicts, session=s)
+
+            logger.info(
+                "Pipeline complete: %d tickers scanned -> %d outliers detected -> %d signals generated",
+                len(tickers), len(events), len(signals),
+            )
+
+            for sig in signals:
+                logger.info(
+                    "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f) — %s",
+                    sig.direction, sig.ticker, sig.suggested_strike or 0,
+                    sig.suggested_expiry or "N/A", sig.confidence,
+                    next(
+                        (e.event_type for e in events if e.id == sig.event_id),
+                        "unknown",
+                    ),
+                )
+
+            return signals
 
         if session is not None:
             return _run(session)
