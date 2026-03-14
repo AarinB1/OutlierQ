@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""CLI entry point to run the OutlierQ ingestion and detection pipeline.
+"""CLI entry point to run the OutlierQ ingestion, detection, and classification pipeline.
 
 Usage:
     python scripts/run_ingestion.py --once --tickers AAPL,TSLA
     python scripts/run_ingestion.py --once --detect --tickers AAPL,TSLA
     python scripts/run_ingestion.py --detect --verbose
+    python scripts/run_ingestion.py --reclassify --verbose
 """
 
 import argparse
 import logging
 import sys
+from collections import Counter
 from pathlib import Path
 
 # Allow imports from project root
@@ -42,6 +44,11 @@ def parse_args() -> argparse.Namespace:
         help="Run anomaly detection after ingestion",
     )
     parser.add_argument(
+        "--reclassify",
+        action="store_true",
+        help="Re-classify all existing events in the database and exit",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable debug-level logging",
@@ -68,13 +75,46 @@ def run_detection(tickers: list[str]) -> None:
     for event in events:
         meta = event.metadata_json or {}
         print(f"\n  Ticker:     {event.ticker}")
+        print(f"  Event Type: {event.event_type}")
         print(f"  Direction:  {event.direction}")
         print(f"  Confidence: {event.confidence:.3f}")
         print(f"  Z-Score:    {meta.get('z_score', 'N/A')}")
         print(f"  Sentiment:  {meta.get('mean_sentiment', 'N/A')}")
         print(f"  Sources:    {', '.join(meta.get('sources', []))}")
         print(f"  Themes:     {', '.join(meta.get('common_themes', []))}")
+        print(f"  Keywords:   {', '.join(meta.get('top_keywords', []))}")
         print(f"  {'─'*56}")
+
+    print()
+
+
+def run_reclassify() -> None:
+    """Re-classify all existing events and print a summary."""
+    from src.classification.event_classifier import EventClassifier
+
+    classifier = EventClassifier()
+    results = classifier.reclassify_events()
+
+    if not results:
+        print("\nNo events to reclassify.")
+        return
+
+    # Build summary
+    type_counter: Counter[str] = Counter()
+    for r in results:
+        type_counter[r["new_type"]] += 1
+
+    breakdown = ", ".join(f"{t}: {c}" for t, c in type_counter.most_common())
+
+    print(f"\n{len(results)} events reclassified: {breakdown}")
+
+    for r in results:
+        changed = r["old_type"] != r["new_type"]
+        marker = " *CHANGED*" if changed else ""
+        print(
+            f"  {r['ticker']}: {r['old_type']} -> {r['new_type']} "
+            f"({r['new_direction']}, conf={r['confidence']:.3f}){marker}"
+        )
 
     print()
 
@@ -149,6 +189,11 @@ def main() -> None:
 
     # Ensure tables exist (creates the SQLite .db file if needed)
     init_db()
+
+    # Reclassify mode — standalone operation
+    if args.reclassify:
+        run_reclassify()
+        return
 
     if args.once:
         run_once(tickers, detect=args.detect)

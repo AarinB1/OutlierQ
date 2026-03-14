@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from config.settings import LOG_FORMAT
+from src.classification.event_classifier import EventClassifier
 from src.db.database import get_session
 from src.db.tables import Article, Event
 from src.detection.cross_source import CrossSourceValidator
@@ -39,6 +40,7 @@ class AnomalyPipeline:
             extreme_ratio_threshold=extreme_ratio,
         )
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
+        self.classifier = EventClassifier()
 
     def _get_recent_articles(self, ticker: str, session: Session) -> list:
         """Fetch articles ingested in the last 6 hours for a ticker."""
@@ -145,21 +147,39 @@ class AnomalyPipeline:
     def scan_and_store(
         self, tickers: list[str], session: Session | None = None
     ) -> list[Event]:
-        """Run scan() and store confirmed outliers as Event records.
+        """Run scan(), classify each outlier, and store as Event records.
 
-        Sets event_type to "other" (Phase 3 will classify properly).
-        Direction comes from sentiment analysis.
+        Uses EventClassifier to determine event_type and direction.
+        Blends classifier confidence with detection confidence.
         """
         def _run(s: Session) -> list[Event]:
             outliers = self.scan(tickers, session=s)
             events: list[Event] = []
 
             for outlier in outliers:
+                # Fetch article objects for classification
+                articles = (
+                    s.query(Article)
+                    .filter(Article.id.in_(outlier["article_ids"]))
+                    .all()
+                )
+
+                # Classify the event
+                cls_result = self.classifier.classify_event(
+                    articles,
+                    common_themes=outlier.get("common_themes", []),
+                )
+
+                # Blend detection confidence with classifier confidence
+                blended_confidence = (
+                    outlier["confidence_score"] + cls_result["confidence"]
+                ) / 2.0
+
                 event = Event(
                     ticker=outlier["ticker"],
-                    event_type="other",
-                    direction=outlier["direction"],
-                    confidence=outlier["confidence_score"],
+                    event_type=cls_result["event_type"],
+                    direction=cls_result["direction"],
+                    confidence=blended_confidence,
                     article_ids=outlier["article_ids"],
                     metadata_json={
                         "z_score": outlier["z_score"],
@@ -168,10 +188,19 @@ class AnomalyPipeline:
                         "distinct_sources": outlier["distinct_sources"],
                         "sources": outlier["sources"],
                         "common_themes": outlier["common_themes"],
+                        "classified_type": cls_result["event_type"],
+                        "vote_distribution": cls_result["vote_distribution"],
+                        "top_keywords": cls_result["top_keywords"],
                     },
                 )
                 s.add(event)
                 events.append(event)
+
+                logger.info(
+                    "OUTLIER: %s — %s (%s) confidence=%.2f",
+                    outlier["ticker"], cls_result["event_type"],
+                    cls_result["direction"], blended_confidence,
+                )
 
             s.flush()
             logger.info("Stored %d outlier events in the database", len(events))
