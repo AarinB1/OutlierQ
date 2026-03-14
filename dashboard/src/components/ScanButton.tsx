@@ -25,35 +25,47 @@ export default function ScanButton() {
     <div className="space-y-2">
       <input
         type="text"
-        placeholder="AAPL, TSLA..."
+        placeholder="AAPL, TSLA, NVDA..."
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && handleScan()}
-        className="w-full bg-gray-800 border border-gray-700 rounded px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:border-info focus:outline-none"
+        className="w-full bg-surface-secondary border border-border rounded-lg px-3 py-2 text-xs font-mono text-txt-primary placeholder-txt-tertiary focus:border-accent-blue focus:outline-none transition-colors duration-150"
       />
       <button
         onClick={handleScan}
         disabled={scanning || !input.trim()}
-        className="w-full py-1.5 rounded bg-info text-white text-xs font-medium hover:bg-blue-600 disabled:opacity-40"
+        className={`w-full py-2 rounded-lg font-mono font-bold text-xs tracking-wider transition-all duration-150 ${
+          scanning
+            ? 'bg-accent-blue/50 text-white animate-pulse'
+            : 'bg-accent-blue text-white hover:shadow-[0_0_16px_rgba(68,138,255,0.3)]'
+        } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
       >
-        {scanning ? 'Scanning...' : 'Scan Now'}
+        {scanning ? 'SCANNING...' : '\u26A1 SCAN NOW'}
       </button>
 
       {result && (
-        <div className="text-xs text-gray-400 mt-1">
-          {result.signals_generated} signal{result.signals_generated !== 1 ? 's' : ''} generated
+        <div className="pt-1 space-y-1">
+          <p className="text-txt-tertiary text-[11px] font-sans">
+            {result.signals_generated} signal{result.signals_generated !== 1 ? 's' : ''} generated
+          </p>
           {result.signals.map((s, i) => (
-            <div key={i} className="mt-0.5">
-              <span className={s.direction === 'call' ? 'text-bullish' : 'text-bearish'}>
+            <div key={i} className="flex items-center gap-2 text-[11px]">
+              <span className={`w-1.5 h-1.5 rounded-full ${s.direction === 'call' ? 'bg-accent-green' : 'bg-accent-red'}`} />
+              <span className={`font-mono font-bold ${s.direction === 'call' ? 'text-accent-green' : 'text-accent-red'}`}>
                 {s.direction.toUpperCase()}
-              </span>{' '}
-              <span className="font-mono">{s.ticker}</span>
+              </span>
+              <span className="font-mono text-txt-primary">{s.ticker}</span>
             </div>
           ))}
+          {result.signals_generated === 0 && (
+            <p className="text-txt-tertiary text-[10px] font-sans">
+              {'\u25C7'} No outlier events detected. Markets quiet.
+            </p>
+          )}
         </div>
       )}
 
-      {error && <div className="text-xs text-bearish">{error}</div>}
+      {error && <p className="text-accent-red text-[11px]">{error}</p>}
     </div>
   )
 }

@@ -2,28 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  body {
+    @apply bg-surface-primary text-txt-primary font-sans antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0a0a0f;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
 }
 
-.font-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
+@layer components {
+  .card {
+    @apply bg-surface-secondary border border-border rounded-card p-6;
+    transition: border-color 150ms ease, transform 150ms ease;
+  }
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+  }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: rgb(17, 24, 39);
-}
-::-webkit-scrollbar-thumb {
-  background: rgb(55, 65, 81);
-  border-radius: 3px;
-}
+  .confidence-bar {
+    transition: width 400ms ease-out;
+  }
 
-/* Confidence bar animation */
-.confidence-bar {
-  transition: width 0.6s ease-out;
+  .btn-primary {
+    @apply px-5 py-2.5 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm tracking-wide;
+    transition: box-shadow 150ms ease, transform 150ms ease;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 20px rgba(68, 138, 255, 0.3);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled {
+    @apply opacity-40 cursor-not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #12121a 25%, #1a1a28 50%, #12121a 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+  }
+
+  .pill {
+    @apply inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider uppercase;
+  }
+
+  .stat-number {
+    @apply font-mono font-bold text-4xl leading-none;
+  }
+
+  .label {
+    @apply text-txt-secondary text-xs font-sans font-medium uppercase tracking-wider;
+  }
+
+  /* Count-up animation helper */
+  .count-up {
+    animation: fadeIn 600ms ease;
+  }
 }

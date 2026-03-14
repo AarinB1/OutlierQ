@@ -7,7 +7,7 @@ import EventTimeline from './components/EventTimeline'
 import AccuracyPanel from './components/AccuracyPanel'
 import TickerView from './components/TickerView'
 
-type Page = 'signals' | 'events' | 'accuracy' | 'tickers'
+export type Page = 'signals' | 'events' | 'accuracy' | 'tickers'
 
 export default function App() {
   const [page, setPage] = useState<Page>('signals')
@@ -27,10 +27,12 @@ export default function App() {
 
   return (
     <Layout page={page} setPage={setPage} connected={connected} health={health}>
-      {page === 'signals' && <SignalList />}
-      {page === 'events' && <EventTimeline />}
-      {page === 'accuracy' && <AccuracyPanel />}
-      {page === 'tickers' && <TickerView />}
+      <div key={page} className="animate-fade-in">
+        {page === 'signals' && <SignalList />}
+        {page === 'events' && <EventTimeline />}
+        {page === 'accuracy' && <AccuracyPanel />}
+        {page === 'tickers' && <TickerView />}
+      </div>
     </Layout>
   )
 }

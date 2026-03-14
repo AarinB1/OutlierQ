@@ -3,6 +3,12 @@ import { fetchSignals } from '../api'
 import type { Signal } from '../types'
 import SignalCard from './SignalCard'
 
+const FILTERS = [
+  { key: '', label: 'All' },
+  { key: 'call', label: 'Calls' },
+  { key: 'put', label: 'Puts' },
+] as const
+
 export default function SignalList() {
   const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,64 +34,83 @@ export default function SignalList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">Trade Signals</h2>
-        <div className="flex gap-2">
+      {/* Header + Filters */}
+      <div className="flex items-center justify-between mb-8">
+        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
+          {'\u26A1'} Signals
+        </h2>
+        <div className="flex items-center gap-3">
+          {/* Direction pills */}
+          <div className="flex gap-1 bg-surface-secondary rounded-lg p-1 border border-border">
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setDirection(f.key); setPage(0) }}
+                className={`px-3 py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
+                  direction === f.key
+                    ? 'bg-surface-tertiary text-txt-primary'
+                    : 'text-txt-secondary hover:text-txt-primary'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {/* Ticker input */}
           <input
             type="text"
-            placeholder="Filter by ticker..."
+            placeholder="Ticker..."
             value={ticker}
             onChange={e => { setTicker(e.target.value.toUpperCase()); setPage(0) }}
-            className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-600 focus:border-info focus:outline-none w-36"
+            className="w-28 bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm font-mono text-txt-primary placeholder-txt-tertiary focus:border-accent-blue focus:outline-none transition-colors duration-150"
           />
-          <select
-            value={direction}
-            onChange={e => { setDirection(e.target.value); setPage(0) }}
-            className="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-info focus:outline-none"
-          >
-            <option value="">All directions</option>
-            <option value="call">Calls only</option>
-            <option value="put">Puts only</option>
-          </select>
         </div>
       </div>
 
       {error && (
-        <div className="bg-bearish/10 border border-bearish/30 rounded p-3 text-sm text-bearish mb-4">
-          {error}
+        <div className="card border-accent-red/30 bg-accent-red-muted mb-6">
+          <p className="text-accent-red text-sm">{error}</p>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center text-gray-500 py-12">Loading signals...</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="skeleton h-52" />
+          ))}
+        </div>
       ) : signals.length === 0 ? (
-        <div className="text-center text-gray-500 py-12">
-          No signals found. Run a scan to generate signals.
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-txt-tertiary text-4xl mb-4">{'\u25C7'}</div>
+          <p className="text-txt-secondary text-sm mb-1">No signals yet.</p>
+          <p className="text-txt-tertiary text-xs">Run a scan to detect outlier events.</p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {signals.map(s => (
               <SignalCard key={s.id} signal={s} />
             ))}
           </div>
-          <div className="flex justify-center gap-4 mt-6">
+
+          {/* Pagination */}
+          <div className="flex items-center justify-center gap-6 mt-8">
             <button
               disabled={page === 0}
               onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1 text-sm rounded bg-gray-800 text-gray-300 disabled:opacity-30 hover:bg-gray-700"
+              className="text-txt-secondary hover:text-txt-primary disabled:opacity-30 text-sm font-sans transition-colors duration-150"
             >
-              Previous
+              {'\u2190'} Prev
             </button>
-            <span className="text-sm text-gray-500 self-center font-mono">
-              Page {page + 1}
+            <span className="text-txt-tertiary text-xs font-mono">
+              Showing {page * limit + 1}\u2013{page * limit + signals.length}
             </span>
             <button
               disabled={signals.length < limit}
               onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1 text-sm rounded bg-gray-800 text-gray-300 disabled:opacity-30 hover:bg-gray-700"
+              className="text-txt-secondary hover:text-txt-primary disabled:opacity-30 text-sm font-sans transition-colors duration-150"
             >
-              Next
+              Next {'\u2192'}
             </button>
           </div>
         </>

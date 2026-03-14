@@ -24,49 +24,81 @@ export default function TickerView() {
       .catch(e => setError(e.message))
   }, [selected])
 
-  if (loading) return <div className="text-center text-gray-500 py-12">Loading tickers...</div>
-  if (error) return <div className="bg-bearish/10 border border-bearish/30 rounded p-3 text-sm text-bearish">{error}</div>
+  if (loading) return (
+    <div>
+      <div className="skeleton h-8 w-40 mb-8" />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton h-28" />)}
+      </div>
+    </div>
+  )
+
+  if (error) return (
+    <div className="card border-accent-red/30 bg-accent-red-muted">
+      <p className="text-accent-red text-sm">{error}</p>
+    </div>
+  )
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-6">Tickers</h2>
+      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight mb-8">
+        {'\u2B21'} Tickers
+      </h2>
 
       {tickers.length === 0 ? (
-        <div className="text-center text-gray-500 py-12">No tickers tracked yet.</div>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="text-txt-tertiary text-4xl mb-4">{'\u25C7'}</div>
+          <p className="text-txt-secondary text-sm mb-1">No tickers tracked yet.</p>
+          <p className="text-txt-tertiary text-xs">Run a scan to start tracking tickers.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
-          {tickers.map(t => (
-            <button
-              key={t.ticker}
-              onClick={() => setSelected(t.ticker === selected ? null : t.ticker)}
-              className={`text-left p-4 rounded-lg border transition-colors ${
-                t.ticker === selected
-                  ? 'bg-info/10 border-info/40'
-                  : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-              }`}
-            >
-              <div className="font-bold font-mono text-lg">{t.ticker}</div>
-              <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                <div>Signals: <span className="font-mono text-gray-300">{t.total_signals}</span></div>
-                <div>Win rate: <span className="font-mono text-gray-300">{(t.win_rate * 100).toFixed(0)}%</span></div>
-                <div>Last: <span className="font-mono text-gray-400">
-                  {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '—'}
-                </span></div>
-              </div>
-            </button>
-          ))}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+          {tickers.map(t => {
+            const isActive = t.ticker === selected
+            return (
+              <button
+                key={t.ticker}
+                onClick={() => setSelected(isActive ? null : t.ticker)}
+                className={`text-left card transition-all duration-150 ${
+                  isActive
+                    ? 'border-accent-blue bg-accent-blue-muted'
+                    : 'hover:border-border-hover'
+                }`}
+              >
+                <div className="font-mono font-bold text-xl text-txt-primary mb-3">{t.ticker}</div>
+                <div className="space-y-1.5 text-xs font-sans">
+                  <div className="flex justify-between">
+                    <span className="text-txt-tertiary">Signals</span>
+                    <span className="font-mono text-txt-primary">{t.total_signals}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-txt-tertiary">Win rate</span>
+                    <span className={`font-mono ${t.win_rate >= 0.5 ? 'text-accent-green' : t.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
+                      {(t.win_rate * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-txt-tertiary">Last signal</span>
+                    <span className="font-mono text-txt-tertiary text-[11px]">
+                      {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '\u2014'}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
 
       {selected && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">
-            Signals for {selected}
+        <div className="animate-fade-in">
+          <h3 className="font-mono font-bold text-sm text-txt-secondary mb-4 tracking-tight">
+            Signals for <span className="text-txt-primary">{selected}</span>
           </h3>
           {signals.length === 0 ? (
-            <div className="text-sm text-gray-500">No signals for this ticker.</div>
+            <p className="text-txt-tertiary text-sm">No signals for this ticker.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {signals.map(s => (
                 <SignalCard key={s.id} signal={s} />
               ))}
