@@ -266,7 +266,7 @@ class AnomalyPipeline:
                     "id": event.id,
                 })
 
-            engine = SignalEngine(market_fetcher=MarketFetcher())
+            engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)
             signals = engine.generate_and_store(event_dicts, session=s)
 
             logger.info(

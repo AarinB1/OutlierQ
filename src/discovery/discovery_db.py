@@ -69,7 +69,3 @@ def was_recently_scanned(session: Session, ticker: str, within_hours: float = 2.
         .first()
         is not None
     )
-</think>
-Using proper Boolean columns:
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-StrReplace

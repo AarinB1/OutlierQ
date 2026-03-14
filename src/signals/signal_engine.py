@@ -96,6 +96,17 @@ EVENT_PROFILES: dict[str, dict] = {
     },
 }
 
+# Demo-only profile for "other" events (routine news) — direction set from event sentiment
+DEMO_OTHER_PROFILE = {
+    "direction": "call",  # overridden from event direction in generate_signal
+    "expected_move_pct": 0.05,
+    "strike_offset_pct": 0.02,
+    "expiry_days_min": 7,
+    "expiry_days_max": 14,
+    "decay_type": "moderate",
+    "base_confidence": 0.50,
+}
+
 
 def _get_strike_increment(price: float) -> float:
     """Return the standard options strike increment for a given price level."""
@@ -127,8 +138,18 @@ def _next_friday(d: date) -> date:
 class SignalEngine:
     """Generates options trading signals from classified events."""
 
-    def __init__(self, market_fetcher: MarketFetcher | None = None) -> None:
+    def __init__(
+        self,
+        market_fetcher: MarketFetcher | None = None,
+        demo: bool = False,
+    ) -> None:
         self.market_fetcher = market_fetcher or MarketFetcher()
+        self.demo = demo
+        # In demo mode, include "other" so routine news still produces signals
+        if demo:
+            self._event_profiles = {**EVENT_PROFILES, "other": dict(DEMO_OTHER_PROFILE)}
+        else:
+            self._event_profiles = EVENT_PROFILES
 
     # ── Strike computation ────────────────────────────────────────────
 
@@ -252,14 +273,18 @@ class SignalEngine:
         """
         event_type = event.get("event_type", "other")
 
-        if event_type not in EVENT_PROFILES:
+        if event_type not in self._event_profiles:
             logger.info(
                 "Skipping signal for %s — event type '%s' has no profile",
                 event.get("ticker", "?"), event_type,
             )
             return None
 
-        profile = EVENT_PROFILES[event_type]
+        profile = dict(self._event_profiles[event_type])
+        # Demo mode "other": direction from event sentiment (call = neutral/bullish, put = bearish)
+        if self.demo and event_type == "other":
+            event_direction = (event.get("direction") or "bullish").lower()
+            profile["direction"] = "put" if event_direction == "bearish" else "call"
         ticker = event["ticker"]
 
         # Get current price
