@@ -338,3 +338,50 @@ export interface EdgarResult {
   "8k_analysis": Edgar8kAnalysis;
   insider_analysis: EdgarInsiderAnalysis;
 }
+
+export interface MlReadiness {
+  total_signals: number;
+  signals_with_outcomes: number;
+  profit_count: number;
+  loss_count: number;
+  expired_count: number;
+  ready_to_train: boolean;
+  message: string;
+}
+
+export interface MlTrainingMetrics {
+  model_type?: string;
+  n_samples?: number;
+  n_features?: number;
+  train_size?: number;
+  test_size?: number;
+  accuracy?: number;
+  precision?: number;
+  recall?: number;
+  f1_score?: number;
+  confusion_matrix?: number[][];
+  feature_importances_top10?: [string, number][];
+}
+
+export interface MlComparisonRow {
+  ticker: string;
+  keyword_prediction: string;
+  ml_prediction: string;
+  actual_outcome: string;
+}
+
+export interface MlComparison {
+  n_evaluated: number;
+  model_accuracy: number;
+  keyword_accuracy: number;
+  comparison: MlComparisonRow[];
+}
+
+export interface MlStatus {
+  is_trained: boolean;
+  training_metrics: MlTrainingMetrics;
+  feature_importances: [string, number][];
+  training_data_size: number;
+  readiness_check: MlReadiness;
+  recent_comparison: MlComparison;
+}

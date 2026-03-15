@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchStats, fetchConfusion, triggerEvaluate } from '../api'
-import type { AccuracyStats, ConfusionMatrix } from '../types'
+import { fetchStats, fetchConfusion, triggerEvaluate, fetchMlReadiness, fetchMlStatus, triggerMlTrain } from '../api'
+import type { AccuracyStats, ConfusionMatrix, MlReadiness, MlStatus } from '../types'
 
 function useCountUp(target: number, duration = 600): number {
   const [value, setValue] = useState(0)
@@ -29,12 +29,20 @@ export default function AccuracyPanel() {
   const [confusion, setConfusion] = useState<ConfusionMatrix | null>(null)
   const [loading, setLoading] = useState(true)
   const [evaluating, setEvaluating] = useState(false)
+  const [trainingMl, setTrainingMl] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mlReadiness, setMlReadiness] = useState<MlReadiness | null>(null)
+  const [mlStatus, setMlStatus] = useState<MlStatus | null>(null)
 
   const loadData = () => {
     setLoading(true)
-    Promise.all([fetchStats(), fetchConfusion()])
-      .then(([s, c]) => { setStats(s); setConfusion(c) })
+    Promise.all([fetchStats(), fetchConfusion(), fetchMlReadiness(), fetchMlStatus()])
+      .then(([s, c, readiness, status]) => {
+        setStats(s)
+        setConfusion(c)
+        setMlReadiness(readiness)
+        setMlStatus(status)
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }
@@ -47,6 +55,14 @@ export default function AccuracyPanel() {
       .then(() => loadData())
       .catch(e => setError(e.message))
       .finally(() => setEvaluating(false))
+  }
+
+  const handleTrainMl = () => {
+    setTrainingMl(true)
+    triggerMlTrain()
+      .then(() => loadData())
+      .catch(e => setError(e.message))
+      .finally(() => setTrainingMl(false))
   }
 
   // Animated stat values
@@ -74,6 +90,11 @@ export default function AccuracyPanel() {
   if (!stats || !confusion) return null
 
   const eventTypes = Object.entries(stats.by_event_type).sort((a, b) => b[1].win_rate - a[1].win_rate)
+  const readiness = mlReadiness ?? mlStatus?.readiness_check ?? null
+  const progress = readiness ? Math.min(100, (readiness.signals_with_outcomes / 30) * 100) : 0
+  const isTrained = mlStatus?.is_trained ?? false
+  const topFeatures = mlStatus?.feature_importances ?? []
+  const recentMlComparison = mlStatus?.recent_comparison
 
   return (
     <div className="space-y-6">
@@ -85,6 +106,102 @@ export default function AccuracyPanel() {
         <button onClick={handleEvaluate} disabled={evaluating} className="btn-primary">
           {evaluating ? 'EVALUATING...' : 'EVALUATE PENDING'}
         </button>
+      </div>
+
+      {/* ML model status */}
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="label">ML Model</h3>
+          <div className={`text-xs font-mono px-2 py-1 rounded ${
+            isTrained ? 'bg-accent-green-muted text-accent-green' : 'bg-surface-secondary text-txt-tertiary'
+          }`}>
+            {isTrained ? 'Trained' : 'Not trained'}
+          </div>
+        </div>
+
+        {isTrained && mlStatus?.training_metrics ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+            <div className="text-txt-secondary">Accuracy: <span className="text-txt-primary">{((mlStatus.training_metrics.accuracy ?? 0) * 100).toFixed(1)}%</span></div>
+            <div className="text-txt-secondary">F1: <span className="text-txt-primary">{((mlStatus.training_metrics.f1_score ?? 0) * 100).toFixed(1)}%</span></div>
+            <div className="text-txt-secondary">Precision: <span className="text-txt-primary">{((mlStatus.training_metrics.precision ?? 0) * 100).toFixed(1)}%</span></div>
+            <div className="text-txt-secondary">Recall: <span className="text-txt-primary">{((mlStatus.training_metrics.recall ?? 0) * 100).toFixed(1)}%</span></div>
+          </div>
+        ) : (
+          <p className="text-txt-tertiary text-xs">Model has not been trained yet.</p>
+        )}
+
+        {readiness && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-txt-secondary">
+              <span>Readiness</span>
+              <span className="font-mono">{readiness.signals_with_outcomes}/30</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-surface-secondary">
+              <div className="h-full rounded-full bg-accent-blue confidence-bar" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-xs text-txt-tertiary">{readiness.message}</p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTrainMl}
+            disabled={trainingMl || !(readiness?.ready_to_train)}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {trainingMl ? 'TRAINING...' : 'TRAIN ML MODEL'}
+          </button>
+          {!readiness?.ready_to_train && (
+            <span className="text-xs text-txt-tertiary">Collect more outcomes before training.</span>
+          )}
+        </div>
+
+        {isTrained && topFeatures.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs uppercase tracking-wider text-txt-tertiary font-sans">Top Feature Importances</h4>
+            <div className="space-y-1.5">
+              {topFeatures.slice(0, 10).map(([name, importance]) => (
+                <div key={name} className="flex items-center gap-3 text-xs">
+                  <span className="w-40 truncate text-txt-secondary font-sans">{name}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-surface-secondary">
+                    <div className="h-full rounded-full bg-accent-green" style={{ width: `${Math.max(2, importance * 100)}%` }} />
+                  </div>
+                  <span className="w-14 text-right font-mono text-txt-tertiary">{(importance * 100).toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isTrained && recentMlComparison && recentMlComparison.n_evaluated > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-mono text-txt-secondary">
+              Recent comparison ({recentMlComparison.n_evaluated}): ML {(recentMlComparison.model_accuracy * 100).toFixed(1)}% vs Keyword {(recentMlComparison.keyword_accuracy * 100).toFixed(1)}%
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-txt-tertiary uppercase tracking-wider">
+                    <th className="text-left pb-2 pr-3">Ticker</th>
+                    <th className="text-left pb-2 pr-3">Keyword</th>
+                    <th className="text-left pb-2 pr-3">ML</th>
+                    <th className="text-left pb-2">Actual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentMlComparison.comparison.slice(0, 20).map((row, idx) => (
+                    <tr key={`${row.ticker}-${idx}`} className={idx % 2 === 0 ? 'bg-surface-secondary' : ''}>
+                      <td className="py-1.5 pr-3 font-mono text-txt-primary">{row.ticker}</td>
+                      <td className="py-1.5 pr-3 text-txt-secondary">{row.keyword_prediction}</td>
+                      <td className="py-1.5 pr-3 text-txt-secondary">{row.ml_prediction}</td>
+                      <td className="py-1.5 text-txt-secondary">{row.actual_outcome}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top stats */}

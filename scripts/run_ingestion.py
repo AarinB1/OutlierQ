@@ -12,6 +12,9 @@ Usage:
     python scripts/run_ingestion.py --once --discover
     python scripts/run_ingestion.py --discover-only
     python scripts/run_ingestion.py --autopilot --demo --anytime   # fully autonomous
+    python scripts/run_ingestion.py --ml-status
+    python scripts/run_ingestion.py --train-ml
+    python scripts/run_ingestion.py --once --signals --use-ml --tickers AAPL,TSLA
 """
 
 import argparse
@@ -99,14 +102,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run fully autonomous: discover, ingest, and generate signals on a schedule (implies --signals --detect --discover)",
     )
+    parser.add_argument(
+        "--train-ml",
+        action="store_true",
+        help="Train ML model from labeled historical signals and exit",
+    )
+    parser.add_argument(
+        "--ml-status",
+        action="store_true",
+        help="Print ML model status/readiness and exit",
+    )
+    parser.add_argument(
+        "--use-ml",
+        action="store_true",
+        help="Use ML-enhanced ensemble classifier during pipeline runs",
+    )
     return parser.parse_args()
 
 
-def run_detection(tickers: list[str], demo: bool = False) -> None:
+def run_detection(tickers: list[str], demo: bool = False, use_ml: bool = False) -> None:
     """Run the anomaly detection pipeline and print results."""
     from src.detection import AnomalyPipeline
 
-    pipeline = AnomalyPipeline(demo=demo)
+    pipeline = AnomalyPipeline(demo=demo, use_ml=use_ml)
     events = pipeline.scan_and_store(tickers)
 
     if not events:
@@ -134,11 +152,11 @@ def run_detection(tickers: list[str], demo: bool = False) -> None:
     print()
 
 
-def run_full_pipeline(tickers: list[str], demo: bool = False) -> None:
+def run_full_pipeline(tickers: list[str], demo: bool = False, use_ml: bool = False) -> None:
     """Run the full pipeline: detection + classification + signal generation."""
     from src.detection import AnomalyPipeline
 
-    pipeline = AnomalyPipeline(demo=demo)
+    pipeline = AnomalyPipeline(demo=demo, use_ml=use_ml)
     signals = pipeline.full_pipeline(tickers)
 
     if not signals:
@@ -228,7 +246,91 @@ def run_api() -> None:
     uvicorn.run("src.api.app:app", host="0.0.0.0", port=8000, reload=True)
 
 
-def _discovery_orchestrator(demo: bool = False):
+def run_ml_status() -> None:
+    """Print ML model readiness and trained-model status."""
+    from src.ml.model import OutlierQModel
+    from src.ml.trainer import ModelTrainer
+
+    trainer = ModelTrainer()
+    readiness = trainer.check_readiness()
+    model = OutlierQModel()
+    loaded = model.load()
+
+    print(f"\n{'='*60}")
+    print("  ML MODEL STATUS")
+    print(f"{'='*60}")
+    print(f"  Ready to train:          {readiness['ready_to_train']}")
+    print(f"  Signals with outcomes:   {readiness['signals_with_outcomes']}/30")
+    print(
+        "  Profit / Loss / Expired: "
+        f"{readiness['profit_count']} / {readiness['loss_count']} / {readiness['expired_count']}"
+    )
+    print(f"  Status:                  {readiness['message']}")
+
+    if loaded:
+        metrics = model.training_metrics
+        print("\n  Trained model:           YES")
+        print(f"  Accuracy:                {float(metrics.get('accuracy', 0.0)):.3f}")
+        print(f"  Precision:               {float(metrics.get('precision', 0.0)):.3f}")
+        print(f"  Recall:                  {float(metrics.get('recall', 0.0)):.3f}")
+        print(f"  F1 score:                {float(metrics.get('f1_score', 0.0)):.3f}")
+        print(f"  Training samples:        {int(metrics.get('n_samples', 0))}")
+        top = metrics.get("feature_importances_top10", [])
+        if top:
+            print("\n  Top Features:")
+            for name, importance in top:
+                print(f"    - {name}: {float(importance):.4f}")
+    else:
+        print("\n  Trained model:           NO")
+        print("  No saved model found at .cache/ml_model.pkl")
+    print()
+
+
+def run_train_ml() -> None:
+    """Train ML model if readiness criteria are met."""
+    from src.ml.trainer import ModelTrainer
+
+    trainer = ModelTrainer()
+    readiness = trainer.check_readiness()
+
+    print(f"\n{'='*60}")
+    print("  ML READINESS CHECK")
+    print(f"{'='*60}")
+    print(f"  Signals with outcomes: {readiness['signals_with_outcomes']}/30")
+    print(
+        "  Profit / Loss / Expired: "
+        f"{readiness['profit_count']} / {readiness['loss_count']} / {readiness['expired_count']}"
+    )
+    print(f"  {readiness['message']}")
+
+    if not readiness["ready_to_train"]:
+        needed = max(0, 30 - int(readiness["signals_with_outcomes"]))
+        print(f"\nNeed {needed} more evaluated signals before ML training.\n")
+        return
+
+    result = trainer.train()
+    if "error" in result:
+        print(f"\nTraining failed: {result['error']}")
+        print(result.get("details", {}))
+        print()
+        return
+
+    print("\nModel training complete:")
+    print(f"  Accuracy:   {float(result.get('accuracy', 0.0)):.3f}")
+    print(f"  Precision:  {float(result.get('precision', 0.0)):.3f}")
+    print(f"  Recall:     {float(result.get('recall', 0.0)):.3f}")
+    print(f"  F1 score:   {float(result.get('f1_score', 0.0)):.3f}")
+    print(f"  Samples:    {int(result.get('n_samples', 0))}")
+    print("  Saved to:   .cache/ml_model.pkl")
+    top = result.get("feature_importances_top10", [])
+    if top:
+        print("\nTop feature importances:")
+        for name, importance in top:
+            print(f"  - {name}: {float(importance):.4f}")
+    print()
+
+
+def _discovery_orchestrator(demo: bool = False, use_ml: bool = False):
     """Build DiscoveryOrchestrator with real dependencies."""
     import finnhub
     from config.settings import FINNHUB_API_KEY
@@ -241,7 +343,7 @@ def _discovery_orchestrator(demo: bool = False):
     if not client:
         raise ValueError("FINNHUB_API_KEY required for discovery. Set it in .env")
     market = MarketFetcher()
-    pipeline = AnomalyPipeline(demo=demo)
+    pipeline = AnomalyPipeline(demo=demo, use_ml=use_ml)
     engine = SignalEngine(market_fetcher=market)
     return DiscoveryOrchestrator(
         db_session=None,
@@ -284,17 +386,17 @@ def _print_discoveries(discoveries: list[dict]) -> None:
     print("\n" + "=" * 40)
 
 
-def run_discover_only() -> None:
+def run_discover_only(use_ml: bool = False) -> None:
     """Run discovery and print results; do not run pipeline."""
-    orch = _discovery_orchestrator()
+    orch = _discovery_orchestrator(use_ml=use_ml)
     discoveries = orch.discover()
     _print_discoveries(discoveries)
     print("Exiting (--discover-only). Use --discover to also run the pipeline.\n")
 
 
-def run_discover_and_scan(demo: bool = False) -> None:
+def run_discover_and_scan(demo: bool = False, use_ml: bool = False) -> None:
     """Run discovery, print discovered tickers, then feed into pipeline."""
-    orch = _discovery_orchestrator(demo=demo)
+    orch = _discovery_orchestrator(demo=demo, use_ml=use_ml)
     discoveries = orch.discover()
     _print_discoveries(discoveries)
     if not discoveries:
@@ -312,6 +414,7 @@ def run_once(
     detect: bool = False,
     signals: bool = False,
     demo: bool = False,
+    use_ml: bool = False,
 ) -> None:
     """Fetch news + market data for all tickers once, then exit."""
     news = NewsFetcher()
@@ -329,9 +432,9 @@ def run_once(
             logger.exception("Failed to fetch market data for %s", ticker)
 
     if signals:
-        run_full_pipeline(tickers, demo=demo)
+        run_full_pipeline(tickers, demo=demo, use_ml=use_ml)
     elif detect:
-        run_detection(tickers, demo=demo)
+        run_detection(tickers, demo=demo, use_ml=use_ml)
 
 
 ACTIVE_TICKERS_CACHE_TTL = 300  # 5 minutes
@@ -357,7 +460,7 @@ def _invalidate_active_tickers_cache() -> None:
     _active_tickers_ts = 0
 
 
-def run_autopilot(demo: bool = False, anytime: bool = False) -> None:
+def run_autopilot(demo: bool = False, anytime: bool = False, use_ml: bool = False) -> None:
     """Run fully autonomous: discovery, ingestion, pipeline on schedule; status every hour."""
     from datetime import datetime, timedelta, timezone
     from apscheduler.schedulers.blocking import BlockingScheduler
@@ -367,7 +470,7 @@ def run_autopilot(demo: bool = False, anytime: bool = False) -> None:
     from src.discovery.discovery_db import DiscoveredTicker
 
     print("\n🚀 AUTOPILOT MODE — OutlierQ is running autonomously. Discovering and monitoring all stocks.\n")
-    orch = _discovery_orchestrator(demo=demo)
+    orch = _discovery_orchestrator(demo=demo, use_ml=use_ml)
 
     # Heartbeat for API /api/status
     _cache_dir = Path(__file__).resolve().parent.parent / ".cache"
@@ -473,6 +576,7 @@ def run_scheduled(
     demo: bool = False,
     anytime: bool = False,
     discover: bool = False,
+    use_ml: bool = False,
 ) -> None:
     """Start the APScheduler-based ingestion loop."""
     from src.ingestion.scheduler import IngestionScheduler
@@ -480,7 +584,11 @@ def run_scheduled(
     scheduler = IngestionScheduler(tickers=tickers, anytime=anytime)
 
     if signals or detect:
-        job_fn = (lambda: run_full_pipeline(tickers, demo=demo)) if signals else (lambda: run_detection(tickers, demo=demo))
+        job_fn = (
+            lambda: run_full_pipeline(tickers, demo=demo, use_ml=use_ml)
+        ) if signals else (
+            lambda: run_detection(tickers, demo=demo, use_ml=use_ml)
+        )
         job_name = "Full Pipeline" if signals else "Anomaly Detection"
 
         def _job() -> None:
@@ -534,7 +642,7 @@ def run_scheduled(
         def _discover_job() -> None:
             logger.info("Running scheduled discovery")
             try:
-                run_discover_and_scan(demo=demo)
+                run_discover_and_scan(demo=demo, use_ml=use_ml)
             except Exception:
                 logger.exception("Discovery job failed")
 
@@ -582,6 +690,14 @@ def main() -> None:
         run_api()
         return
 
+    if args.ml_status:
+        run_ml_status()
+        return
+
+    if args.train_ml:
+        run_train_ml()
+        return
+
     if args.evaluate:
         run_evaluate()
         return
@@ -591,7 +707,7 @@ def main() -> None:
         return
 
     if args.discover_only:
-        run_discover_only()
+        run_discover_only(use_ml=args.use_ml)
         return
 
     tickers = [t.strip().upper() for t in args.tickers.split(",")]
@@ -604,10 +720,18 @@ def main() -> None:
             print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered.\n")
         if args.anytime:
             print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
-        run_autopilot(demo=args.demo, anytime=args.anytime)
+        run_autopilot(demo=args.demo, anytime=args.anytime, use_ml=args.use_ml)
         return
 
     logger.info("OutlierQ ingestion — tickers: %s", tickers)
+    if args.use_ml:
+        from src.ml.model import OutlierQModel
+
+        model = OutlierQModel()
+        if not model.load():
+            print("\n--use-ml requires a trained model at .cache/ml_model.pkl. Run --train-ml first.\n")
+            return
+        print("\nUsing ML-enhanced classifier (ensemble mode)\n")
     if args.demo:
         print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered. Signals may not reflect real outlier events.\n")
     if args.anytime:
@@ -615,9 +739,15 @@ def main() -> None:
 
     if args.once:
         if args.discover:
-            run_discover_and_scan(demo=args.demo)
+            run_discover_and_scan(demo=args.demo, use_ml=args.use_ml)
         else:
-            run_once(tickers, detect=detect, signals=signals, demo=args.demo)
+            run_once(
+                tickers,
+                detect=detect,
+                signals=signals,
+                demo=args.demo,
+                use_ml=args.use_ml,
+            )
     else:
         run_scheduled(
             tickers,
@@ -626,6 +756,7 @@ def main() -> None:
             demo=args.demo,
             anytime=args.anytime,
             discover=args.discover,
+            use_ml=args.use_ml,
         )
 
 

@@ -47,8 +47,10 @@ class AnomalyPipeline:
         extreme_ratio: float = 0.5,
         min_sources: int = 2,
         demo: bool = False,
+        use_ml: bool = False,
     ) -> None:
         self.demo = demo
+        self.use_ml = use_ml
 
         if demo:
             sentiment_threshold = self._DEMO_SENTIMENT_THRESHOLD
@@ -67,7 +69,20 @@ class AnomalyPipeline:
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
         self.options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
         self.edgar = EdgarMonitor()
-        self.classifier = EventClassifier()
+        if use_ml:
+            try:
+                from src.ml.ensemble import EnsembleClassifier
+
+                self.classifier = EnsembleClassifier()
+                logger.info("ML-enhanced ensemble classifier enabled")
+            except Exception as exc:
+                logger.warning(
+                    "Failed to initialize ensemble classifier (%s). Falling back to keyword classifier.",
+                    exc,
+                )
+                self.classifier = EventClassifier()
+        else:
+            self.classifier = EventClassifier()
 
     def _get_recent_articles(self, ticker: str, session: Session) -> list:
         """Fetch articles ingested in the last 6 hours for a ticker."""
@@ -348,15 +363,22 @@ class AnomalyPipeline:
                 )
 
                 # Classify the event
-                cls_result = self.classifier.classify_event(
-                    articles,
-                    common_themes=outlier.get("common_themes", []),
-                    event_hint=outlier.get("source"),
-                    options_flow=outlier.get("options_flow"),
-                    edgar_data=outlier.get("edgar_data"),
-                    fallback_direction=outlier.get("direction"),
-                    fallback_confidence=outlier.get("confidence_score"),
-                )
+                if hasattr(self.classifier, "classify"):
+                    cls_result = self.classifier.classify(
+                        articles,
+                        event_data=outlier,
+                        common_themes=outlier.get("common_themes", []),
+                    )
+                else:
+                    cls_result = self.classifier.classify_event(
+                        articles,
+                        common_themes=outlier.get("common_themes", []),
+                        event_hint=outlier.get("source"),
+                        options_flow=outlier.get("options_flow"),
+                        edgar_data=outlier.get("edgar_data"),
+                        fallback_direction=outlier.get("direction"),
+                        fallback_confidence=outlier.get("confidence_score"),
+                    )
 
                 # Blend detection confidence with classifier confidence
                 blended_confidence = (
@@ -382,6 +404,8 @@ class AnomalyPipeline:
                         "classified_type": cls_result["event_type"],
                         "vote_distribution": cls_result["vote_distribution"],
                         "top_keywords": cls_result["top_keywords"],
+                        "ml_prediction": cls_result.get("ml_prediction"),
+                        "ensemble_method": cls_result.get("ensemble_method"),
                     },
                 )
                 s.add(event)

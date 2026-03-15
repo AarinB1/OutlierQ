@@ -20,6 +20,9 @@ import type {
   OptionsFlowResult,
   TechnicalIndicators,
   EdgarResult,
+  MlReadiness,
+  MlStatus,
+  MlTrainingMetrics,
 } from './types';
 
 const BASE_URL = '/api';
@@ -167,4 +170,16 @@ export async function fetchIndicators(ticker: string): Promise<TechnicalIndicato
 
 export async function fetchEdgar(ticker: string): Promise<EdgarResult | null> {
   return fetchJSON(`/ticker/${ticker}/edgar`);
+}
+
+export async function fetchMlReadiness(): Promise<MlReadiness> {
+  return fetchJSON('/ml/readiness');
+}
+
+export async function fetchMlStatus(): Promise<MlStatus> {
+  return fetchJSON('/ml/status');
+}
+
+export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: string; details?: unknown }> {
+  return fetchJSON('/ml/train', { method: 'POST' });
 }

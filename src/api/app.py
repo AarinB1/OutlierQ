@@ -157,6 +157,55 @@ def get_confusion(db: Session = Depends(get_db)) -> dict:
     return tracker.get_confusion_matrix(session=db)
 
 
+# ── ML ────────────────────────────────────────────────────────────────
+
+
+@app.get("/api/ml/readiness")
+def ml_readiness(db: Session = Depends(get_db)) -> dict:
+    from src.ml.trainer import ModelTrainer
+
+    trainer = ModelTrainer()
+    return trainer.check_readiness(session=db)
+
+
+@app.post("/api/ml/train")
+def ml_train(db: Session = Depends(get_db)) -> dict:
+    from src.ml.trainer import ModelTrainer
+
+    trainer = ModelTrainer()
+    result = trainer.train(session=db)
+    if "error" in result:
+        return result
+    return result
+
+
+@app.get("/api/ml/status")
+def ml_status(db: Session = Depends(get_db)) -> dict:
+    from src.ml.model import OutlierQModel
+    from src.ml.trainer import ModelTrainer
+
+    trainer = ModelTrainer()
+    readiness = trainer.check_readiness(session=db)
+    model = OutlierQModel()
+    is_trained = model.load()
+    importances = model.get_feature_importances()[:10] if is_trained else []
+    recent_eval = trainer.evaluate_on_recent(session=db, n=20) if is_trained else {
+        "n_evaluated": 0,
+        "model_accuracy": 0.0,
+        "keyword_accuracy": 0.0,
+        "comparison": [],
+    }
+    metrics = model.training_metrics if is_trained else {}
+    return {
+        "is_trained": is_trained,
+        "training_metrics": metrics,
+        "feature_importances": importances,
+        "training_data_size": int(metrics.get("n_samples", 0)) if metrics else 0,
+        "readiness_check": readiness,
+        "recent_comparison": recent_eval,
+    }
+
+
 # ── Tickers ───────────────────────────────────────────────────────────
 
 

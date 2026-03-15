@@ -20,6 +20,7 @@ htmlcov/
 .coverage
 .cache/huggingface/
 .cache/company_tickers.json
+.cache/ml_model.pkl
 
 # IDE
 .vscode/

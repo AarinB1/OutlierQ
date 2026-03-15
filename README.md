@@ -98,6 +98,35 @@ python3 scripts/run_ingestion.py --signals --demo --anytime --tickers AAPL,TSLA,
 
 > **Note:** Signals generated with `--demo` use relaxed thresholds and should not be treated as real trading recommendations.
 
+## ML Model
+
+OutlierQ now includes an ML classifier scaffold that augments the keyword classifier.
+
+- **Default behavior:** keyword classifier remains the primary system.
+- **ML mode:** once trained, you can enable an ensemble path that blends keyword + ML confidence.
+- **Training requirement:** ML training needs accumulated labeled outcomes (profit/loss/expired) before it is meaningful.
+
+**Train the model (when enough labeled signals exist):**
+
+```bash
+python3 scripts/run_ingestion.py --train-ml
+```
+
+**Check readiness and model status:**
+
+```bash
+python3 scripts/run_ingestion.py --ml-status
+```
+
+The ML feature set combines:
+
+- FinBERT sentiment features
+- News volume anomaly features
+- Unusual options flow features
+- Technical indicators
+- EDGAR filing/insider activity features
+- Existing keyword-classifier outputs
+
 ## Tech Stack
 
 - **Python 3.11+** — core language
