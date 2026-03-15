@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   AreaChart,
   Area,
@@ -18,11 +17,14 @@ interface Props {
   onPeriodChange: (p: string) => void
 }
 
-const PERIODS = ['1mo', '3mo', '6mo', '1y', '2y'] as const
+const PERIODS = ['1d', '1w', '1mo', '3mo', '6mo', '1y', '2y'] as const
 
 function formatDate(iso: string, period: string): string {
   const d = new Date(iso)
-  if (period === '1mo' || period === '3mo') {
+  if (period === '1d') {
+    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  }
+  if (period === '1w' || period === '1mo' || period === '3mo') {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
   return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })

@@ -194,9 +194,8 @@ def ticker_price_history(
 
 
 @app.get("/api/ticker/{ticker}/intraday")
-def ticker_intraday(ticker: str) -> dict:
-    data = _stock_svc.get_intraday(ticker.upper())
-    return {"ticker": ticker.upper(), "interval": "5m", "data": data}
+def ticker_intraday(ticker: str) -> list[dict]:
+    return _stock_svc.get_intraday(ticker.upper())
 
 
 @app.get("/api/ticker/{ticker}/info")
@@ -212,10 +211,11 @@ def ticker_stats(ticker: str) -> dict:
 @app.get("/api/ticker/{ticker}/chart-data")
 def ticker_chart_data(
     ticker: str,
-    period: str = Query("6mo"),
+    period: str = Query("6mo", pattern="^(1d|1w|5d|1mo|3mo|6mo|1y|2y|5y|max)$"),
     db: Session = Depends(get_db),
 ) -> dict:
-    return _stock_svc.get_chart_data(ticker.upper(), period=period, session=db)
+    yf_period = {"1w": "5d"}.get(period, period)
+    return _stock_svc.get_chart_data(ticker.upper(), period=yf_period, session=db)
 
 
 @app.get("/api/ticker/{ticker}/summary")

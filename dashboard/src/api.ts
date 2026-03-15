@@ -143,6 +143,10 @@ export async function fetchKeyStats(ticker: string): Promise<KeyStats> {
 }
 
 export async function fetchChartData(ticker: string, period: string = '6mo'): Promise<ChartData> {
+  if (period === '1d') {
+    const prices = await fetchJSON<PricePoint[]>(`/ticker/${ticker}/intraday`);
+    return { prices, signals: [], events: [] };
+  }
   return fetchJSON(`/ticker/${ticker}/chart-data?period=${period}`);
 }
 
