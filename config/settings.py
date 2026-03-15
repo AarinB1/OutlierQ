@@ -32,3 +32,8 @@ DEFAULT_TICKERS: list[str] = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN"]
 
 # Logging format
 LOG_FORMAT: str = "[%(asctime)s] %(name)s %(levelname)s: %(message)s"
+
+# FinBERT settings
+FINBERT_MODEL: str = os.getenv("FINBERT_MODEL", "ProsusAI/finbert")
+FINBERT_DEVICE: str | None = os.getenv("FINBERT_DEVICE", None)
+FINBERT_BATCH_SIZE: int = int(os.getenv("FINBERT_BATCH_SIZE", "16"))

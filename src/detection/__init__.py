@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from config.settings import LOG_FORMAT
+from config.settings import FINBERT_BATCH_SIZE, LOG_FORMAT
 from src.classification.event_classifier import EventClassifier
 from src.db.database import get_session
 from src.db.tables import Article, Event, Signal
@@ -59,6 +59,7 @@ class AnomalyPipeline:
         self.sentiment_filter = SentimentFilter(
             extreme_threshold=sentiment_threshold,
             extreme_ratio_threshold=extreme_ratio,
+            batch_size=FINBERT_BATCH_SIZE,
         )
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
         self.classifier = EventClassifier()

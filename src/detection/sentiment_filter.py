@@ -1,20 +1,14 @@
-"""Sentiment magnitude scoring using VADER.
-
-Analyzes article headlines for extreme sentiment language. VADER returns
-a compound score from -1.0 (most negative) to +1.0 (most positive).
-Articles with |compound| >= 0.6 are classified as "extreme sentiment".
-A ticker passes the sentiment filter when at least half its articles
-contain extreme language.
-"""
+"""Sentiment magnitude scoring using FinBERT (with VADER fallback)."""
 
 import logging
+import time
 
 from sqlalchemy.orm import Session
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from config.settings import LOG_FORMAT
+from config.settings import FINBERT_BATCH_SIZE, FINBERT_DEVICE, LOG_FORMAT
 from src.db.database import get_session
 from src.db.tables import Article
+from src.detection.finbert_analyzer import FinBERTAnalyzer
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -28,23 +22,35 @@ class SentimentFilter:
         self,
         extreme_threshold: float = 0.6,
         extreme_ratio_threshold: float = 0.5,
+        batch_size: int = FINBERT_BATCH_SIZE,
     ) -> None:
         self.extreme_threshold = extreme_threshold
         self.extreme_ratio_threshold = extreme_ratio_threshold
-        self._analyzer = SentimentIntensityAnalyzer()
+        self.batch_size = max(1, batch_size)
+        self.finbert = FinBERTAnalyzer(
+            device=FINBERT_DEVICE,
+            extreme_threshold=extreme_threshold,
+        )
+        logger.info(
+            "SentimentFilter initialized with FinBERT (extreme_threshold=%.2f, extreme_ratio=%.2f)",
+            extreme_threshold,
+            extreme_ratio_threshold,
+        )
 
     def score_headline(self, headline: str) -> dict:
-        """Score a single headline with VADER.
+        """Score a single headline with FinBERT.
 
         Returns dict with compound, pos, neg, neu scores and is_extreme flag.
         """
-        scores = self._analyzer.polarity_scores(headline)
+        finbert_scores = self.finbert.analyze(headline)
         return {
-            "compound": scores["compound"],
-            "pos": scores["pos"],
-            "neg": scores["neg"],
-            "neu": scores["neu"],
-            "is_extreme": abs(scores["compound"]) >= self.extreme_threshold,
+            "compound": float(finbert_scores["compound"]),
+            "pos": float(finbert_scores["positive"]),
+            "neg": float(finbert_scores["negative"]),
+            "neu": float(finbert_scores["neutral"]),
+            "is_extreme": bool(finbert_scores["is_extreme"]),
+            "confidence": float(finbert_scores["confidence"]),
+            "label": str(finbert_scores["label"]),
         }
 
     def score_batch(self, articles: list) -> dict:
@@ -64,12 +70,35 @@ class SentimentFilter:
             }
 
         ticker = articles[0].ticker
-        scores: list[dict] = []
+        headlines = [article.headline for article in articles]
+        start = time.perf_counter()
+        finbert_results = self.finbert.analyze_batch(
+            headlines,
+            batch_size=self.batch_size,
+        )
+        elapsed = time.perf_counter() - start
+        per_headline_ms = (elapsed / len(headlines) * 1000.0) if headlines else 0.0
+        logger.info(
+            "Batch sentiment analysis: %d headlines in %.2fs (%.0fms/headline)",
+            len(headlines),
+            elapsed,
+            per_headline_ms,
+        )
 
-        for article in articles:
-            result = self.score_headline(article.headline)
-            result["article_id"] = article.id
-            scores.append(result)
+        scores: list[dict] = []
+        for article, result in zip(articles, finbert_results, strict=False):
+            scores.append(
+                {
+                    "article_id": article.id,
+                    "compound": float(result["compound"]),
+                    "pos": float(result["positive"]),
+                    "neg": float(result["negative"]),
+                    "neu": float(result["neutral"]),
+                    "is_extreme": bool(result["is_extreme"]),
+                    "confidence": float(result["confidence"]),
+                    "label": str(result["label"]),
+                }
+            )
 
         compounds = [s["compound"] for s in scores]
         mean_sentiment = sum(compounds) / len(compounds)
@@ -78,8 +107,7 @@ class SentimentFilter:
         extreme_ratio = extreme_count / len(scores)
 
         # Determine direction
-        # VADER skews positive on financial text, so bearish threshold is lower.
-        if mean_sentiment < -0.1:
+        if mean_sentiment < -0.2:
             direction = "bearish"
         elif mean_sentiment > 0.2:
             direction = "bullish"
@@ -110,10 +138,11 @@ class SentimentFilter:
     ) -> None:
         """Write sentiment_score and sentiment_magnitude back to the articles table."""
         def _update(s: Session) -> None:
-            for article in articles:
-                result = self.score_headline(article.headline)
-                article.sentiment_score = result["compound"]
-                article.sentiment_magnitude = abs(result["compound"])
+            headlines = [article.headline for article in articles]
+            scores = self.finbert.analyze_batch(headlines, batch_size=self.batch_size)
+            for article, result in zip(articles, scores, strict=False):
+                article.sentiment_score = float(result["compound"])
+                article.sentiment_magnitude = float(result["confidence"])
                 s.add(article)
             logger.info("Updated sentiment scores for %d articles", len(articles))
 
