@@ -369,6 +369,60 @@ class TestGenerateSignal:
 
         assert signal is None
 
+    def test_edgar_only_keeps_classified_profile(self, mock_market):
+        """EDGAR-source events should keep classified profile parameters."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal(
+            {
+                "ticker": "AAPL",
+                "event_type": "scandal",  # classified from EDGAR item mapping
+                "event_id": "evt-edgar-scandal",
+                "confidence": 0.8,
+                "metadata": {
+                    "source": "edgar",
+                    "edgar_data": {
+                        "combined_direction": "bearish",
+                        "combined_severity": 0.9,
+                        "summary": "Restatement filing detected",
+                        "8k_analysis": {"recent_8k_count": 1},
+                    },
+                },
+            }
+        )
+        assert signal is not None
+        # Must use scandal profile, not generic edgar profile.
+        assert signal["expected_move_pct"] == EVENT_PROFILES["scandal"]["expected_move_pct"]
+        assert signal["decay_type"] == EVENT_PROFILES["scandal"]["decay_type"]
+        assert signal["direction"] == "put"
+
+    def test_news_with_edgar_data_applies_edgar_direction(self, mock_market):
+        """News-pipeline events with EDGAR data should use EDGAR direction override."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal(
+            {
+                "ticker": "AAPL",
+                "event_type": "major_contract",
+                "event_id": "evt-news-edgar",
+                "confidence": 0.75,
+                "metadata": {
+                    "source": "news_pipeline",
+                    "edgar_data": {
+                        "combined_direction": "bearish",
+                        "combined_severity": 0.7,
+                        "summary": "Bearish SEC filing context",
+                        "8k_analysis": {"recent_8k_count": 2},
+                    },
+                },
+            }
+        )
+        assert signal is not None
+        # Keep profile characteristics from classified event type.
+        assert signal["expected_move_pct"] == EVENT_PROFILES["major_contract"]["expected_move_pct"]
+        assert signal["decay_type"] == EVENT_PROFILES["major_contract"]["decay_type"]
+        # But override direction from EDGAR data.
+        assert signal["direction"] == "put"
+        assert "SEC filing detected" in signal["reasoning"]
+
 
 # ── Batch and store ───────────────────────────────────────────────────
 

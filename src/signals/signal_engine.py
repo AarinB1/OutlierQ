@@ -476,10 +476,7 @@ class SignalEngine:
 
         metadata = event.get("metadata") or {}
         source = str(metadata.get("source", "")).lower()
-        if event_type == "edgar" or source == "edgar":
-            profile = dict(self._event_profiles["edgar"])
-        else:
-            profile = dict(self._event_profiles[event_type])
+        profile = dict(self._event_profiles[event_type])
         options_meta = metadata.get("options_flow") or event.get("options_flow") or {}
 
         # Demo mode "other": direction from event sentiment (call = neutral/bullish, put = bearish)
@@ -495,11 +492,12 @@ class SignalEngine:
             else:
                 profile["direction"] = "call"
         edgar_meta = metadata.get("edgar_data") or event.get("edgar_data") or {}
-        if event_type == "edgar" or source == "edgar":
-            edgar_direction = str(
-                edgar_meta.get("combined_direction", event.get("direction", "bearish"))
-            ).lower()
-            profile["direction"] = "put" if edgar_direction == "bearish" else "call"
+        if edgar_meta:
+            edgar_direction = str(edgar_meta.get("combined_direction", "")).lower()
+            if edgar_direction == "bearish":
+                profile["direction"] = "put"
+            elif edgar_direction == "bullish":
+                profile["direction"] = "call"
         ticker = event["ticker"]
 
         # Get current price
@@ -558,7 +556,7 @@ class SignalEngine:
                 f"{unusual_count} contracts with conviction {max_conviction:.2f}. "
                 f"Smart money appears {smart_money}."
             )
-        if event_type == "edgar" or source == "edgar":
+        if edgar_meta:
             summary = str(edgar_meta.get("summary", "SEC filing activity detected"))
             filing_count = int(edgar_meta.get("8k_analysis", {}).get("recent_8k_count", 0))
             severity = float(edgar_meta.get("combined_severity", event_confidence))
