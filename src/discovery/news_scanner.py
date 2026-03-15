@@ -21,6 +21,10 @@ RATE_LIMIT_DELAY = 1.0  # seconds between category requests
 VALID_TICKER_CACHE_TTL = 24 * 3600  # 24 hours
 NEWS_LOOKBACK_HOURS = 6
 MIN_MENTIONS = 3
+MIN_MENTIONS_CROSS_CONFIRM = 2  # when ticker also in volume screener
+
+# Sector ETF proxies for company_news — articles often mention small caps in the sector
+SECTOR_ETF_PROXIES = ["XBI", "IBB", "IWM", "SCHA", "ARKK", "QQQ", "XLE", "ICLN"]
 
 # Common words that look like tickers — exclude from extraction
 FALSE_POSITIVE_TICKERS = frozenset({
@@ -157,9 +161,65 @@ class BroadNewsScanner:
 
         return list(found)
 
-    def scan(self) -> list[dict]:
-        """Main entry: fetch general news, extract tickers, return non-S&P500 with >= MIN_MENTIONS."""
+    def scan_sector_news(self) -> list[dict]:
+        """Fetch company news for sector ETF proxies (XBI, IWM, etc.), extract tickers from articles, return discoveries."""
+        from datetime import date as date_type
+
+        now = datetime.now(timezone.utc)
+        to_date = date_type(now.year, now.month, now.day)
+        from_date = to_date - timedelta(days=2)
+        from_str = from_date.isoformat()
+        to_str = to_date.isoformat()
+
+        mention_count: dict[str, int] = {}
+        sample_headlines: dict[str, list[str]] = {}
+        etf_set = set(SECTOR_ETF_PROXIES)
+
+        for symbol in SECTOR_ETF_PROXIES:
+            try:
+                raw = self.client.company_news(symbol, _from=from_str, to=to_str)
+                if not raw:
+                    continue
+                for item in raw:
+                    headline = item.get("headline") or ""
+                    summary = item.get("summary") or ""
+                    tickers = self.extract_tickers(headline, summary)
+                    for t in tickers:
+                        if t in etf_set:
+                            continue
+                        mention_count[t] = mention_count.get(t, 0) + 1
+                        head_list = sample_headlines.setdefault(t, [])
+                        if headline and headline not in head_list and len(head_list) < 3:
+                            head_list.append(headline[:200])
+            except Exception as e:
+                logger.warning("Finnhub company_news(%s) failed: %s", symbol, e)
+            time.sleep(RATE_LIMIT_DELAY)
+
+        sp500 = self.get_sp500_tickers()
+        valid = self.get_valid_tickers()
+        results: list[dict] = []
+        for ticker, count in mention_count.items():
+            if count < MIN_MENTIONS_CROSS_CONFIRM:
+                continue
+            if ticker in sp500:
+                continue
+            if valid and ticker not in valid:
+                continue
+            results.append({
+                "ticker": ticker.upper(),
+                "mention_count": count,
+                "sources": [],
+                "sample_headlines": (sample_headlines.get(ticker) or [])[:3],
+                "discovery_method": "news_scanner",
+                "discovered_at": now,
+            })
+        logger.info("Sector news scan: %d tickers from ETF articles", len(results))
+        return results
+
+    def scan(self, volume_tickers: set[str] | None = None) -> list[dict]:
+        """Main entry: fetch general + sector news, extract tickers, return non-S&P500 with >= MIN_MENTIONS (or 2 if cross-confirmed)."""
         articles = self.fetch_general_news()
+        sector_results = self.scan_sector_news()
         cutoff = datetime.now(timezone.utc) - timedelta(hours=NEWS_LOOKBACK_HOURS)
 
         mention_count: dict[str, int] = {}
@@ -183,11 +243,21 @@ class BroadNewsScanner:
                 if headline and headline not in head_list and len(head_list) < 3:
                     head_list.append(headline[:200])
 
+        for r in sector_results:
+            t = r["ticker"].upper()
+            mention_count[t] = mention_count.get(t, 0) + r.get("mention_count", 0)
+            for h in (r.get("sample_headlines") or [])[:3]:
+                head_list = sample_headlines.setdefault(t, [])
+                if h and h not in head_list and len(head_list) < 3:
+                    head_list.append(h[:200])
+
         sp500 = self.get_sp500_tickers()
         valid = self.get_valid_tickers()
+        volume_set = volume_tickers or set()
         results: list[dict] = []
         for ticker, count in mention_count.items():
-            if count < MIN_MENTIONS:
+            min_mentions = MIN_MENTIONS_CROSS_CONFIRM if (volume_set and ticker in volume_set) else MIN_MENTIONS
+            if count < min_mentions:
                 continue
             if ticker in sp500:
                 continue
@@ -205,7 +275,7 @@ class BroadNewsScanner:
         unique_tickers = len(mention_count)
         non_sp500_3plus = len(results)
         logger.info(
-            "Broad scan found %d articles, extracted %d unique tickers, %d non-S&P500 with %d+ mentions",
-            len(articles), unique_tickers, non_sp500_3plus, MIN_MENTIONS,
+            "Broad scan found %d articles + sector, %d unique tickers, %d non-S&P500 with threshold met",
+            len(articles), unique_tickers, non_sp500_3plus,
         )
         return results

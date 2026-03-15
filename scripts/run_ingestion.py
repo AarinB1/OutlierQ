@@ -11,6 +11,7 @@ Usage:
     python scripts/run_ingestion.py --api
     python scripts/run_ingestion.py --once --discover
     python scripts/run_ingestion.py --discover-only
+    python scripts/run_ingestion.py --autopilot --demo --anytime   # fully autonomous
 """
 
 import argparse
@@ -92,6 +93,11 @@ def parse_args() -> argparse.Namespace:
         "--discover-only",
         action="store_true",
         help="Run discovery and print discovered tickers only (no pipeline scan)",
+    )
+    parser.add_argument(
+        "--autopilot",
+        action="store_true",
+        help="Run fully autonomous: discover, ingest, and generate signals on a schedule (implies --signals --detect --discover)",
     )
     return parser.parse_args()
 
@@ -328,6 +334,138 @@ def run_once(
         run_detection(tickers, demo=demo)
 
 
+ACTIVE_TICKERS_CACHE_TTL = 300  # 5 minutes
+_active_tickers_cache: list[str] = []
+_active_tickers_ts: float = 0
+
+
+def _get_active_tickers_cached(orch) -> list[str]:
+    import time
+    global _active_tickers_cache, _active_tickers_ts
+    now = time.time()
+    if _active_tickers_cache and (now - _active_tickers_ts) < ACTIVE_TICKERS_CACHE_TTL:
+        return _active_tickers_cache
+    _active_tickers_cache = orch.get_active_tickers()
+    _active_tickers_ts = now
+    return _active_tickers_cache
+
+
+def _invalidate_active_tickers_cache() -> None:
+    """Clear cache so next cycle picks up newly discovered tickers."""
+    global _active_tickers_cache, _active_tickers_ts
+    _active_tickers_cache = []
+    _active_tickers_ts = 0
+
+
+def run_autopilot(demo: bool = False, anytime: bool = False) -> None:
+    """Run fully autonomous: discovery, ingestion, pipeline on schedule; status every hour."""
+    from datetime import datetime, timedelta, timezone
+    from apscheduler.schedulers.blocking import BlockingScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from src.db.tables import Signal
+    from src.discovery.discovery_db import DiscoveredTicker
+
+    print("\n🚀 AUTOPILOT MODE — OutlierQ is running autonomously. Discovering and monitoring all stocks.\n")
+    orch = _discovery_orchestrator(demo=demo)
+
+    # Heartbeat for API /api/status
+    _cache_dir = Path(__file__).resolve().parent.parent / ".cache"
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    _heartbeat = _cache_dir / "autopilot_status.json"
+    def _write_heartbeat() -> None:
+        import json
+        _heartbeat.write_text(json.dumps({
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "tickers_monitored": len(_get_active_tickers_cached(orch)),
+        }))
+
+    _write_heartbeat()
+
+    # Initial discovery + scan
+    try:
+        signals = orch.discover_and_scan()
+        logger.info("Initial autopilot scan: %d signals generated", len(signals))
+        _invalidate_active_tickers_cache()
+    except Exception:
+        logger.exception("Initial autopilot discover_and_scan failed")
+
+    scheduler = BlockingScheduler()
+
+    def discovery_job() -> None:
+        try:
+            orch.discover_and_store_only()
+            _invalidate_active_tickers_cache()
+        except Exception:
+            logger.exception("Autopilot discovery job failed")
+
+    def ingestion_job() -> None:
+        tickers = _get_active_tickers_cached(orch)
+        if not tickers:
+            return
+        try:
+            news = NewsFetcher()
+            articles = news.fetch_batch(tickers)
+            news.store_articles(articles)
+        except Exception:
+            logger.exception("Autopilot ingestion job failed")
+
+    def pipeline_job() -> None:
+        tickers = _get_active_tickers_cached(orch)
+        if not tickers:
+            return
+        try:
+            orch.pipeline.full_pipeline(tickers)
+        except Exception:
+            logger.exception("Autopilot pipeline job failed")
+
+    def feedback_job() -> None:
+        try:
+            from src.signals.feedback_tracker import FeedbackTracker
+            FeedbackTracker().evaluate_all_pending()
+        except Exception:
+            logger.exception("Autopilot feedback job failed")
+
+    def status_job() -> None:
+        try:
+            from src.db.database import get_session
+            now = datetime.now(timezone.utc)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            with get_session() as s:
+                n_tickers = len(_get_active_tickers_cached(orch))
+                signals_today = s.query(Signal).filter(Signal.created_at >= today_start).count()
+                discoveries_today = s.query(DiscoveredTicker).filter(DiscoveredTicker.discovered_at >= today_start).count()
+            logger.info(
+                "AUTOPILOT STATUS: monitoring %d tickers, %d signals generated today, %d discoveries today",
+                n_tickers, signals_today, discoveries_today,
+            )
+            _write_heartbeat()
+        except Exception:
+            logger.exception("Autopilot status job failed")
+
+    scheduler.add_job(discovery_job, trigger=IntervalTrigger(minutes=30), id="autopilot_discovery", name="Discovery")
+    scheduler.add_job(ingestion_job, trigger=IntervalTrigger(minutes=15), id="autopilot_ingestion", name="News ingestion")
+    run_date_5min = datetime.now(timezone.utc) + timedelta(minutes=5)
+    scheduler.add_job(
+        pipeline_job,
+        trigger=IntervalTrigger(minutes=15),
+        id="autopilot_pipeline",
+        name="Full pipeline",
+        next_run_time=run_date_5min,
+    )
+    scheduler.add_job(feedback_job, trigger=IntervalTrigger(hours=6), id="autopilot_feedback", name="Feedback evaluation")
+    scheduler.add_job(status_job, trigger=IntervalTrigger(hours=1), id="autopilot_status", name="Status")
+
+    logger.info(
+        "Autopilot scheduler: discovery every 30 min, ingestion every 15 min, pipeline every 15 min (offset 5), feedback every 6 h, status every 1 h"
+    )
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown(wait=False)
+        logger.info("Autopilot stopped by user.")
+
+
 def run_scheduled(
     tickers: list[str],
     detect: bool = False,
@@ -457,16 +595,23 @@ def main() -> None:
         return
 
     tickers = [t.strip().upper() for t in args.tickers.split(",")]
-    logger.info("OutlierQ ingestion — tickers: %s", tickers)
+    detect = args.detect or args.signals or args.discover or args.autopilot
+    signals = args.signals or args.discover or args.autopilot
 
-    # Mode banners
+    if args.autopilot:
+        logger.info("OutlierQ autopilot — no fixed ticker list")
+        if args.demo:
+            print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered.\n")
+        if args.anytime:
+            print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
+        run_autopilot(demo=args.demo, anytime=args.anytime)
+        return
+
+    logger.info("OutlierQ ingestion — tickers: %s", tickers)
     if args.demo:
         print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered. Signals may not reflect real outlier events.\n")
     if args.anytime:
         print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
-
-    detect = args.detect or args.signals or args.discover
-    signals = args.signals or args.discover
 
     if args.once:
         if args.discover:

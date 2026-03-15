@@ -54,14 +54,24 @@ export default function SignalCard({ signal }: Props) {
         </div>
       </div>
 
-      {/* Event type */}
-      {signal.event && (
-        <div className="mb-3">
+      {/* Event type + exploratory + discovery source */}
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {signal.event && (
           <span className="inline-block px-2.5 py-1 rounded-md bg-surface-tertiary text-txt-secondary text-[11px] font-sans font-medium">
             {signal.event.event_type.replace(/_/g, ' ')}
           </span>
-        </div>
-      )}
+        )}
+        {signal.exploratory && (
+          <span className="inline-block px-2 py-0.5 rounded bg-accent-amber/20 text-accent-amber text-[10px] font-sans font-medium uppercase tracking-wider">
+            Exploratory
+          </span>
+        )}
+        {signal.discovery_source && (
+          <span className="inline-block px-2 py-0.5 rounded bg-surface-tertiary text-txt-tertiary text-[10px] font-sans">
+            {signal.discovery_source === 'both' ? 'Discovered via news + volume' : signal.discovery_source === 'news_scanner' ? 'Discovered via news' : signal.discovery_source === 'volume_screener' ? 'Discovered via volume' : 'Manual'}
+          </span>
+        )}
+      </div>
 
       {/* Outcome + P&L */}
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-border">

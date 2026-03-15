@@ -254,7 +254,7 @@ class AnomalyPipeline:
                 )
                 return []
 
-            # Build event dicts for the signal engine
+            # Build event dicts for the signal engine (include metadata for exploratory signals)
             event_dicts = []
             for event in events:
                 event_dicts.append({
@@ -264,6 +264,7 @@ class AnomalyPipeline:
                     "direction": event.direction,
                     "confidence": event.confidence,
                     "id": event.id,
+                    "metadata": event.metadata_json or {},
                 })
 
             engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)

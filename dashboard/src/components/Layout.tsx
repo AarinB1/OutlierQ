@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
-import type { HealthStatus } from '../types'
+import type { HealthStatus, AutopilotStatus } from '../types'
 import type { Page } from '../App'
+import { fetchStatus } from '../api'
 import ScanButton from './ScanButton'
 
 interface Props {
@@ -18,6 +20,37 @@ const NAV: { key: Page; icon: string; label: string }[] = [
   { key: 'tickers', icon: '\u2B21', label: 'Tickers' },
   { key: 'discovery', icon: '\u25C8', label: 'Discovery' },
 ]
+
+function LayoutStatus() {
+  const [status, setStatus] = useState<AutopilotStatus | null>(null)
+  useEffect(() => {
+    fetchStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null))
+    const t = setInterval(() => {
+      fetchStatus().then(setStatus).catch(() => {})
+    }, 60000)
+    return () => clearInterval(t)
+  }, [])
+  if (!status) return null
+  return (
+    <div className="px-3 pb-3 max-md:hidden border-t border-border pt-3 mt-auto">
+      <div className="space-y-1.5 text-txt-tertiary text-xs font-mono">
+        <p>Monitoring {status.tickers_monitored} tickers</p>
+        <p>{status.signals_today} signals today</p>
+        {status.is_autopilot_running && (
+          <p className="flex items-center gap-1.5 text-accent-green">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-green opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-green" />
+            </span>
+            AUTOPILOT ACTIVE
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function Layout({ page, setPage, connected, health, children }: Props) {
   return (
@@ -60,6 +93,9 @@ export default function Layout({ page, setPage, connected, health, children }: P
         <div className="px-3 pb-3 max-md:hidden">
           <ScanButton />
         </div>
+
+        {/* Status / Autopilot */}
+        {connected && <LayoutStatus />}
 
         {/* Footer */}
         <div className="px-4 pb-4 flex items-center gap-2 text-txt-tertiary text-xs font-mono max-lg:px-2 max-lg:justify-center max-md:hidden">

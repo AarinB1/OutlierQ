@@ -188,6 +188,112 @@ def evaluate(db: Session = Depends(get_db)) -> dict:
     return {"evaluated": len(results), "results": results}
 
 
+# ── Active tickers & status ───────────────────────────────────────────
+
+
+@app.get("/api/active-tickers")
+def active_tickers(db: Session = Depends(get_db)) -> dict:
+    """Return tickers OutlierQ is currently monitoring, grouped by source."""
+    from datetime import timedelta
+    from src.db.tables import Event
+    from src.discovery.discovery_db import DiscoveredTicker
+
+    now = datetime.now(timezone.utc)
+    events_cutoff = now - timedelta(hours=48)
+    discovered_cutoff = now - timedelta(hours=24)
+
+    from_events = {row[0] for row in db.query(Event.ticker).filter(Event.detected_at >= events_cutoff).distinct().all()}
+    from_discovered = {
+        row[0] for row in
+        db.query(DiscoveredTicker.ticker).filter(
+            DiscoveredTicker.discovered_at >= discovered_cutoff
+        ).distinct().all()
+    }
+    all_active = list(from_events | from_discovered)
+
+    # Per-ticker discovery method (last 24h)
+    ticker_method: dict[str, set[str]] = {}
+    for row in db.query(DiscoveredTicker.ticker, DiscoveredTicker.discovery_method).filter(
+        DiscoveredTicker.discovered_at >= discovered_cutoff
+    ).all():
+        t, m = row[0], row[1]
+        ticker_method.setdefault(t, set()).add(m)
+
+    manual = [t for t in all_active if t not in ticker_method]
+    news_scanner = [t for t, methods in ticker_method.items() if methods == {"news_scanner"}]
+    volume_screener = [t for t, methods in ticker_method.items() if methods == {"volume_screener"}]
+    both = [t for t, methods in ticker_method.items() if "both" in methods or len(methods) > 1]
+
+    return {
+        "tickers": all_active,
+        "by_source": {
+            "manual": manual,
+            "news_scanner": news_scanner,
+            "volume_screener": volume_screener,
+            "both": both,
+        },
+        "count": len(all_active),
+    }
+
+
+@app.get("/api/status")
+def status(db: Session = Depends(get_db)) -> dict:
+    """Return autopilot status: monitoring count, signals today, last scan, etc."""
+    from datetime import timedelta
+    from pathlib import Path
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    signals_today = db.query(Signal).filter(Signal.created_at >= today_start).count()
+    discoveries_today = db.query(DiscoveredTicker).filter(
+        DiscoveredTicker.discovered_at >= today_start
+    ).count()
+
+    last_signal = db.query(Signal).order_by(Signal.created_at.desc()).first()
+    last_scan = last_signal.created_at.isoformat() if last_signal and last_signal.created_at else None
+
+    # Active ticker count (same logic as active-tickers)
+    events_cutoff = now - timedelta(hours=48)
+    discovered_cutoff = now - timedelta(hours=24)
+    from_events = db.query(Event.ticker).filter(Event.detected_at >= events_cutoff).distinct().count()
+    from_disc = db.query(DiscoveredTicker.ticker).filter(
+        DiscoveredTicker.discovered_at >= discovered_cutoff
+    ).distinct().all()
+    from_disc_set = set(row[0] for row in from_disc)
+    from_ev = db.query(Event.ticker).filter(Event.detected_at >= events_cutoff).distinct().all()
+    from_ev_set = set(row[0] for row in from_ev)
+    tickers_monitored = len(from_ev_set | from_disc_set)
+
+    heartbeat_path = Path(__file__).resolve().parent.parent.parent / ".cache" / "autopilot_status.json"
+    is_autopilot_running = False
+    next_scan = None
+    if heartbeat_path.exists():
+        try:
+            import json
+            data = json.loads(heartbeat_path.read_text())
+            ts = data.get("last_updated")
+            if ts:
+                try:
+                    last_updated = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    if (now - last_updated).total_seconds() < 7200:  # 2 hours
+                        is_autopilot_running = True
+                    next_scan = data.get("next_scan")
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            pass
+
+    return {
+        "is_autopilot_running": is_autopilot_running,
+        "tickers_monitored": tickers_monitored,
+        "signals_today": signals_today,
+        "discoveries_today": discoveries_today,
+        "last_scan": last_scan,
+        "next_scan": next_scan,
+    }
+
+
 # ── Discoveries ───────────────────────────────────────────────────────
 
 
@@ -345,6 +451,8 @@ def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:
         "outcome_pnl": sig.outcome_pnl,
         "created_at": sig.created_at.isoformat() if sig.created_at else None,
         "event_id": sig.event_id,
+        "exploratory": getattr(sig, "exploratory", False) or False,
+        "discovery_source": getattr(sig, "discovery_source", None),
     }
     if event:
         d["event"] = _event_to_dict(event)

@@ -107,6 +107,19 @@ DEMO_OTHER_PROFILE = {
     "base_confidence": 0.50,
 }
 
+# Exploratory signal thresholds (for "other" events in production)
+EXPLORATORY_MIN_CONFIDENCE = 0.6
+EXPLORATORY_BULLISH_SENTIMENT = 0.15
+EXPLORATORY_BEARISH_SENTIMENT = -0.15
+EXPLORATORY_PROFILE = {
+    "expected_move_pct": 0.04,
+    "strike_offset_pct": 0.02,
+    "expiry_days_min": 7,
+    "expiry_days_max": 14,
+    "decay_type": "moderate",
+    "base_confidence": 0.45,
+}
+
 
 def _get_strike_increment(price: float) -> float:
     """Return the standard options strike increment for a given price level."""
@@ -265,15 +278,84 @@ class SignalEngine:
 
     # ── Signal generation ─────────────────────────────────────────────
 
+    def generate_exploratory_signal(self, event: dict) -> dict | None:
+        """Generate a conservative signal for 'other' events when detection confidence is high and sentiment is directional."""
+        detection_confidence = event.get("confidence", event.get("confidence_score", 0))
+        if detection_confidence < EXPLORATORY_MIN_CONFIDENCE:
+            logger.info(
+                "Exploratory skip %s — detection confidence %.2f < %.2f",
+                event.get("ticker", "?"), detection_confidence, EXPLORATORY_MIN_CONFIDENCE,
+            )
+            return None
+        metadata = event.get("metadata") or {}
+        mean_sentiment = metadata.get("mean_sentiment", 0.0)
+        if mean_sentiment > EXPLORATORY_BULLISH_SENTIMENT:
+            direction = "call"
+        elif mean_sentiment < EXPLORATORY_BEARISH_SENTIMENT:
+            direction = "put"
+        else:
+            logger.info(
+                "Exploratory skip %s — sentiment %.3f too neutral",
+                event.get("ticker", "?"), mean_sentiment,
+            )
+            return None
+
+        ticker = event["ticker"]
+        try:
+            current_price = self.market_fetcher.get_current_price(ticker)
+        except Exception:
+            logger.warning("Cannot get price for %s — skipping exploratory signal", ticker)
+            return None
+
+        strike = self.compute_strike(
+            current_price, direction, EXPLORATORY_PROFILE["strike_offset_pct"]
+        )
+        expiry = self.compute_expiry(
+            EXPLORATORY_PROFILE["expiry_days_min"],
+            EXPLORATORY_PROFILE["expiry_days_max"],
+            EXPLORATORY_PROFILE["decay_type"],
+        )
+        contract = self.find_best_contract(ticker, direction, strike, expiry)
+        if contract is not None:
+            strike = contract["strike"]
+        confidence = self.compute_confidence(
+            detection_confidence, EXPLORATORY_PROFILE["base_confidence"], contract
+        )
+        reasoning = (
+            "Exploratory signal — unusual activity detected but event type unclear. "
+            "Based on sentiment direction."
+        )
+        logger.info(
+            "SIGNAL (exploratory): %s %s @ $%.0f exp %s (confidence=%.2f)",
+            direction, ticker, strike, expiry, confidence,
+        )
+        return {
+            "ticker": ticker,
+            "event_type": "other",
+            "event_id": event.get("event_id") or event.get("id"),
+            "direction": direction,
+            "current_price": current_price,
+            "suggested_strike": strike,
+            "suggested_expiry": expiry,
+            "expected_move_pct": EXPLORATORY_PROFILE["expected_move_pct"],
+            "decay_type": EXPLORATORY_PROFILE["decay_type"],
+            "confidence": confidence,
+            "contract": contract,
+            "reasoning": reasoning,
+            "exploratory": True,
+        }
+
     def generate_signal(self, event: dict) -> dict | None:
         """Generate a complete options signal from an event dict.
 
         Takes an event dict (from AnomalyPipeline.scan or scan_and_store output)
-        and produces a trade recommendation. Returns None for "other" events.
+        and produces a trade recommendation. For 'other' events, uses exploratory logic when appropriate.
         """
         event_type = event.get("event_type", "other")
 
         if event_type not in self._event_profiles:
+            if event_type == "other":
+                return self.generate_exploratory_signal(event)
             logger.info(
                 "Skipping signal for %s — event type '%s' has no profile",
                 event.get("ticker", "?"), event_type,
@@ -343,6 +425,7 @@ class SignalEngine:
             "confidence": confidence,
             "contract": contract,
             "reasoning": reasoning,
+            "exploratory": False,
         }
 
     def generate_signals(self, events: list[dict]) -> list[dict]:
@@ -383,6 +466,8 @@ class SignalEngine:
                     suggested_strike=sig["suggested_strike"],
                     suggested_expiry=sig["suggested_expiry"],
                     confidence=sig["confidence"],
+                    exploratory=sig.get("exploratory", False),
+                    discovery_source=sig.get("discovery_source"),
                 )
                 s.add(record)
                 stored.append(record)

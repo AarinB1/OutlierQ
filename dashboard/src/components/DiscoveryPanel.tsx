@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { fetchDiscoveries, fetchDiscoveryStats, triggerDiscover, triggerScan } from '../api'
-import type { DiscoveryRecord, DiscoveryStats } from '../types'
+import { fetchDiscoveries, fetchDiscoveryStats, fetchActiveTickers, triggerDiscover, triggerScan } from '../api'
+import type { DiscoveryRecord, DiscoveryStats, ActiveTickers } from '../types'
 
 function methodBadges(method: string) {
   const m = method.toLowerCase()
@@ -26,6 +26,7 @@ function timeAgo(iso: string | null): string {
 export default function DiscoveryPanel() {
   const [discoveries, setDiscoveries] = useState<DiscoveryRecord[]>([])
   const [stats, setStats] = useState<DiscoveryStats | null>(null)
+  const [activeTickers, setActiveTickers] = useState<ActiveTickers | null>(null)
   const [loading, setLoading] = useState(true)
   const [discovering, setDiscovering] = useState(false)
   const [scanningTicker, setScanningTicker] = useState<string | null>(null)
@@ -34,10 +35,11 @@ export default function DiscoveryPanel() {
   const load = () => {
     setLoading(true)
     setError(null)
-    Promise.all([fetchDiscoveries({ limit: 50 }), fetchDiscoveryStats()])
-      .then(([list, s]) => {
+    Promise.all([fetchDiscoveries({ limit: 50 }), fetchDiscoveryStats(), fetchActiveTickers()])
+      .then(([list, s, active]) => {
         setDiscoveries(list)
         setStats(s)
+        setActiveTickers(active)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -79,6 +81,38 @@ export default function DiscoveryPanel() {
           {discovering ? 'Discovering...' : 'Discover Now'}
         </button>
       </div>
+
+      {activeTickers && (
+        <div className="card mb-6">
+          <p className="label text-txt-tertiary mb-2">Active tickers ({activeTickers.count} monitored)</p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            {activeTickers.by_source.manual.length > 0 && (
+              <div>
+                <span className="text-txt-tertiary font-sans">Manual / events:</span>
+                <span className="font-mono text-txt-primary ml-1">{activeTickers.by_source.manual.length}</span>
+              </div>
+            )}
+            {activeTickers.by_source.news_scanner.length > 0 && (
+              <div>
+                <span className="text-accent-blue font-sans">News:</span>
+                <span className="font-mono text-txt-primary ml-1">{activeTickers.by_source.news_scanner.length}</span>
+              </div>
+            )}
+            {activeTickers.by_source.volume_screener.length > 0 && (
+              <div>
+                <span className="text-accent-amber font-sans">Volume:</span>
+                <span className="font-mono text-txt-primary ml-1">{activeTickers.by_source.volume_screener.length}</span>
+              </div>
+            )}
+            {activeTickers.by_source.both.length > 0 && (
+              <div>
+                <span className="text-accent-green font-sans">Both:</span>
+                <span className="font-mono text-txt-primary ml-1">{activeTickers.by_source.both.length}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

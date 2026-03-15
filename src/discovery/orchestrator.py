@@ -1,14 +1,15 @@
 """Discovery orchestrator — combines scanners and feeds results into the anomaly pipeline."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from config.settings import LOG_FORMAT
 from src.db.database import get_session
-from src.discovery.discovery_db import store_discovery, was_recently_scanned
+from src.db.tables import Event
+from src.discovery.discovery_db import DiscoveredTicker, store_discovery, was_recently_scanned
 from src.discovery.news_scanner import BroadNewsScanner
 from src.discovery.volume_screener import VolumeScreener
 
@@ -42,8 +43,9 @@ class DiscoveryOrchestrator:
 
     def discover(self, session: Session | None = None) -> list[dict]:
         """Run all scanners, merge results, dedupe by recent scan, return unified discovery list."""
-        news_results = self.news_scanner.scan()
         volume_results = self.volume_screener.screen()
+        volume_tickers = {r["ticker"].upper() for r in volume_results}
+        news_results = self.news_scanner.scan(volume_tickers=volume_tickers)
 
         # Merge by ticker
         merged: dict[str, dict] = {}
@@ -94,20 +96,90 @@ class DiscoveryOrchestrator:
         with get_session() as s:
             return run(s)
 
-    def feed_discoveries(self, discoveries: list[dict], session: Session | None = None) -> list[Any]:
-        """Store discovery records, ingest news for discovered tickers, run full pipeline. Call after discover()."""
-        from src.ingestion.news_fetcher import NewsFetcher
-        from src.discovery.discovery_db import DiscoveredTicker, store_discovery
-
+    def discover_and_store_only(self, session: Session | None = None) -> list[dict]:
+        """Run discovery and store discovery records only (no news ingest, no pipeline). For autopilot discovery job."""
+        discoveries = self.discover(session=session)
         if not discoveries:
             return []
 
-        def _run(s: Session) -> list[Any]:
-            tickers = [d["ticker"] for d in discoveries]
-            news_fetcher = NewsFetcher()
-            discovery_rows: list[DiscoveredTicker] = []
+        def _run(s: Session) -> list[dict]:
             for d in discoveries:
                 method = "both" if len(d["discovery_methods"]) >= 2 else d["discovery_methods"][0]
+                store_discovery(s, {
+                    "ticker": d["ticker"],
+                    "discovery_method": method,
+                    "discovery_confidence": d["discovery_confidence"],
+                    "mention_count": d.get("mention_count"),
+                    "volume_ratio": d.get("volume_ratio"),
+                    "sample_headlines": d.get("sample_headlines"),
+                    "discovered_at": d.get("discovered_at"),
+                    "scanned": False,
+                    "signal_generated": False,
+                })
+            s.flush()
+            return discoveries
+
+        if session is not None:
+            return _run(session)
+        with get_session() as s:
+            return _run(s)
+
+    def get_active_tickers(self, session: Session | None = None) -> list[str]:
+        """Return tickers OutlierQ is actively watching: events in last 48h + discovered in last 24h, merged and deduped."""
+        def _run(s: Session) -> list[str]:
+            now = datetime.now(timezone.utc)
+            events_cutoff = now - timedelta(hours=48)
+            discovered_cutoff = now - timedelta(hours=24)
+            from_event = (
+                s.query(Event.ticker)
+                .filter(Event.detected_at >= events_cutoff)
+                .distinct()
+                .all()
+            )
+            from_discovered = (
+                s.query(DiscoveredTicker.ticker)
+                .filter(DiscoveredTicker.discovered_at >= discovered_cutoff)
+                .distinct()
+                .all()
+            )
+            tickers = set()
+            for (t,) in from_event:
+                tickers.add(t.upper())
+            for (t,) in from_discovered:
+                tickers.add(t.upper())
+            return list(tickers)
+
+        if session is not None:
+            return _run(session)
+        with get_session() as s:
+            return _run(s)
+
+    def feed_discoveries(
+        self,
+        discoveries: list[dict],
+        additional_tickers: list[str] | None = None,
+        session: Session | None = None,
+    ) -> list[Any]:
+        """Store discovery records, ingest news for all tickers (discovered + additional), run full pipeline."""
+        from src.ingestion.news_fetcher import NewsFetcher
+        from src.discovery.discovery_db import store_discovery
+
+        discovery_by_ticker = {}
+        for d in discoveries:
+            t = d["ticker"].upper()
+            discovery_by_ticker[t] = "both" if len(d["discovery_methods"]) >= 2 else d["discovery_methods"][0]
+
+        all_tickers = list(dict.fromkeys(
+            [d["ticker"].upper() for d in discoveries] + (additional_tickers or [])
+        ))
+        if not all_tickers:
+            return []
+
+        def _run(s: Session) -> list[Any]:
+            news_fetcher = NewsFetcher()
+            discovery_rows: list[Any] = []
+            for d in discoveries:
+                method = discovery_by_ticker[d["ticker"].upper()]
                 row = store_discovery(s, {
                     "ticker": d["ticker"],
                     "discovery_method": method,
@@ -121,16 +193,21 @@ class DiscoveryOrchestrator:
                 })
                 discovery_rows.append(row)
             s.flush()
+
             try:
-                articles = news_fetcher.fetch_batch(tickers)
+                articles = news_fetcher.fetch_batch(all_tickers)
                 news_fetcher.store_articles(articles)
             except Exception as e:
-                logger.warning("News fetch for discovered tickers failed: %s", e)
-            signals = self.pipeline.full_pipeline(tickers, session=s)
+                logger.warning("News fetch for %d tickers failed: %s", len(all_tickers), e)
+
+            signals = self.pipeline.full_pipeline(all_tickers, session=s)
             signal_tickers = {sig.ticker for sig in signals}
             for row in discovery_rows:
                 if row.ticker in signal_tickers:
                     row.signal_generated = True
+            for sig in signals:
+                if sig.ticker in discovery_by_ticker:
+                    sig.discovery_source = discovery_by_ticker[sig.ticker]
             s.flush()
             return signals
 
@@ -140,22 +217,30 @@ class DiscoveryOrchestrator:
             return _run(s)
 
     def discover_and_scan(self, session: Session | None = None) -> list[Any]:
-        """Discover tickers, ingest news, run full pipeline, return generated signals."""
+        """Fully autonomous: discover tickers, merge with active (events 48h + discovered 24h), ingest news, run pipeline, return signals."""
         discoveries = self.discover(session=session)
-        if not discoveries:
-            logger.info("Discovery: 0 tickers found -> nothing to scan")
+        active = self.get_active_tickers(session=session)
+        all_tickers = list(dict.fromkeys(
+            [d["ticker"].upper() for d in discoveries] + active
+        ))
+        if not all_tickers:
+            logger.info("Discovery: 0 tickers found, 0 active -> nothing to scan")
             return []
         from_both = sum(1 for d in discoveries if len(d["discovery_methods"]) >= 2)
         from_news_only = sum(1 for d in discoveries if d["discovery_methods"] == ["news_scanner"])
         from_volume_only = sum(1 for d in discoveries if d["discovery_methods"] == ["volume_screener"])
         logger.info(
-            "Discovery: %d tickers found (%d from news, %d from volume, %d from both) -> feeding pipeline",
-            len(discoveries), from_news_only, from_volume_only, from_both,
+            "Discovery: %d new + %d active = %d tickers to scan (%d from news, %d from volume, %d from both)",
+            len(discoveries), len(active), len(all_tickers), from_news_only, from_volume_only, from_both,
         )
-        signals = self.feed_discoveries(discoveries, session=session)
+        signals = self.feed_discoveries(
+            discoveries,
+            additional_tickers=[t for t in active if t not in {d["ticker"].upper() for d in discoveries}],
+            session=session,
+        )
         logger.info(
-            "Discovery: %d tickers found (%d from news, %d from volume, %d from both) -> %d signals generated",
-            len(discoveries), from_news_only, from_volume_only, from_both, len(signals),
+            "Pipeline complete: %d tickers scanned -> %d signals generated",
+            len(all_tickers), len(signals),
         )
         return signals
 

@@ -41,10 +41,30 @@ def get_session() -> Generator[Session, None, None]:
         session.close()
 
 
+def migrate_db() -> None:
+    """Add new columns to existing tables if missing (SQLite-friendly migration)."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "signals" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("signals")}
+    with engine.connect() as conn:
+        if "exploratory" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN exploratory INTEGER DEFAULT 0 NOT NULL"))
+            conn.commit()
+            logger.info("Added signals.exploratory column.")
+        if "discovery_source" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN discovery_source VARCHAR"))
+            conn.commit()
+            logger.info("Added signals.discovery_source column.")
+
+
 def init_db() -> None:
     """Create all tables. Safe to call multiple times — existing tables are skipped."""
     from src.db.tables import Article, Event, Signal  # noqa: F401
     from src.discovery.discovery_db import DiscoveredTicker  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    migrate_db()
     logger.info("Database tables initialized.")

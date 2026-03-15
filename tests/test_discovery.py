@@ -238,6 +238,82 @@ def test_was_recently_scanned(db_session):
     assert was_recently_scanned(db_session, "MRNA", within_hours=0.2) is False
 
 
+def test_get_active_tickers(db_session):
+    """Active tickers = events in last 48h + discovered in last 24h; older events excluded."""
+    from src.db.tables import Event
+    from src.discovery.orchestrator import DiscoveryOrchestrator
+
+    now = datetime.now(timezone.utc)
+    # Event 24h ago -> in active list (within 48h)
+    evt_recent = Event(
+        id="evt-1",
+        ticker="MRNA",
+        event_type="fda_approval",
+        direction="bullish",
+        confidence=0.8,
+        detected_at=now - timedelta(hours=24),
+    )
+    db_session.add(evt_recent)
+    # Event 50h ago -> not in active list
+    evt_old = Event(
+        id="evt-2",
+        ticker="OLD",
+        event_type="scandal",
+        direction="bearish",
+        confidence=0.7,
+        detected_at=now - timedelta(hours=50),
+    )
+    db_session.add(evt_old)
+    store_discovery(db_session, {
+        "ticker": "IONQ",
+        "discovery_method": "news_scanner",
+        "discovery_confidence": 0.5,
+        "discovered_at": now - timedelta(hours=12),
+        "scanned": False,
+        "signal_generated": False,
+    })
+    store_discovery(db_session, {
+        "ticker": "STALE",
+        "discovery_method": "news_scanner",
+        "discovery_confidence": 0.5,
+        "discovered_at": now - timedelta(hours=48),
+        "scanned": False,
+        "signal_generated": False,
+    })
+    db_session.commit()
+
+    mock_finnhub = MagicMock()
+    mock_market = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_engine = MagicMock()
+    orch = DiscoveryOrchestrator(db_session, mock_finnhub, mock_market, mock_pipeline, mock_engine)
+    active = orch.get_active_tickers(session=db_session)
+    assert "MRNA" in active
+    assert "IONQ" in active
+    assert "OLD" not in active
+    assert "STALE" not in active
+
+
+def test_dynamic_watchlist(db_session):
+    """Volume screener watchlist includes tickers from recent news discoveries."""
+    from src.discovery.volume_screener import VolumeScreener
+
+    store_discovery(db_session, {
+        "ticker": "NEWS1",
+        "discovery_method": "news_scanner",
+        "discovery_confidence": 0.5,
+        "discovered_at": datetime.now(timezone.utc) - timedelta(days=2),
+        "scanned": False,
+        "signal_generated": False,
+    })
+    db_session.commit()
+
+    market = MagicMock()
+    screener = VolumeScreener(market, db_session)
+    watchlist = screener.get_watchlist()
+    assert "NEWS1" in watchlist
+
+
 # ── Discovery to signal (full flow) ────────────────────────────────────
 
 

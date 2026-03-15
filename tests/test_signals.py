@@ -262,16 +262,69 @@ class TestGenerateSignal:
         assert signal["direction"] == "call"
         assert signal["suggested_strike"] >= 150.0  # at or above current price
 
-    def test_other_returns_none(self, mock_market):
-        """'other' event type should return None (no profile)."""
+    def test_other_returns_none_when_low_confidence(self, mock_market):
+        """'other' event with low detection confidence returns None (no exploratory)."""
         engine = SignalEngine(market_fetcher=mock_market)
         signal = engine.generate_signal({
             "ticker": "AAPL",
             "event_type": "other",
             "event_id": "evt-789",
             "confidence": 0.50,
+            "metadata": {"mean_sentiment": 0.3},
         })
+        assert signal is None
 
+    def test_exploratory_signal_bullish(self, mock_market):
+        """Event type 'other' with mean_sentiment 0.3 -> generates call signal with exploratory=True."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "other",
+            "event_id": "evt-exp",
+            "confidence": 0.65,
+            "metadata": {"mean_sentiment": 0.3},
+        })
+        assert signal is not None
+        assert signal["direction"] == "call"
+        assert signal["exploratory"] is True
+        assert signal["ticker"] == "AAPL"
+
+    def test_exploratory_signal_bearish(self, mock_market):
+        """Event type 'other' with mean_sentiment -0.3 -> generates put signal."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "other",
+            "event_id": "evt-exp2",
+            "confidence": 0.7,
+            "metadata": {"mean_sentiment": -0.3},
+        })
+        assert signal is not None
+        assert signal["direction"] == "put"
+        assert signal["exploratory"] is True
+
+    def test_exploratory_signal_neutral_skips(self, mock_market):
+        """Event type 'other' with mean_sentiment 0.05 (too neutral) -> returns None."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "other",
+            "event_id": "evt-neut",
+            "confidence": 0.7,
+            "metadata": {"mean_sentiment": 0.05},
+        })
+        assert signal is None
+
+    def test_exploratory_low_confidence_skips(self, mock_market):
+        """Event type 'other' with detection confidence 0.4 -> returns None."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        signal = engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "other",
+            "event_id": "evt-low",
+            "confidence": 0.4,
+            "metadata": {"mean_sentiment": 0.3},
+        })
         assert signal is None
 
     def test_signal_includes_contract(self, mock_market):

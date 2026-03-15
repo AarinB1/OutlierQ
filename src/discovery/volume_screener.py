@@ -2,7 +2,7 @@
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -16,6 +16,8 @@ logger.setLevel(logging.INFO)
 
 VOLUME_RATIO_THRESHOLD = 3.0
 PRICE_MOVE_PCT_THRESHOLD = 5.0
+WATCHLIST_CAP = 300
+NEWS_DISCOVERY_DAYS = 7
 
 # Curated small/mid-cap watchlist across sectors
 DEFAULT_WATCHLIST = [
@@ -43,14 +45,54 @@ class VolumeScreener:
         self.db_session = db_session
 
     def get_watchlist(self) -> list[str]:
-        """Return tickers to screen. Uses CUSTOM_WATCHLIST env or default curated list."""
+        """Dynamic watchlist: base list + tickers from news discovery (last 7d) + tickers that generated signals, capped at 300."""
         custom = os.getenv("CUSTOM_WATCHLIST")
         if custom:
             tickers = [t.strip().upper() for t in custom.split(",") if t.strip()]
             if tickers:
                 logger.info("Using CUSTOM_WATCHLIST: %d tickers", len(tickers))
-                return tickers
-        return list(dict.fromkeys(DEFAULT_WATCHLIST))  # dedupe, preserve order
+                return tickers[:WATCHLIST_CAP]
+
+        base = list(dict.fromkeys(DEFAULT_WATCHLIST))
+        from_news: list[str] = []
+        from_signals: list[str] = []
+
+        def _query(sess: Any) -> None:
+            from src.discovery.discovery_db import DiscoveredTicker
+            from src.db.tables import Signal
+
+            nonlocal from_news, from_signals
+            cutoff = datetime.now(timezone.utc) - timedelta(days=NEWS_DISCOVERY_DAYS)
+            news_rows = (
+                sess.query(DiscoveredTicker.ticker)
+                .filter(
+                    DiscoveredTicker.discovered_at >= cutoff,
+                    DiscoveredTicker.discovery_method.in_(("news_scanner", "both")),
+                )
+                .distinct()
+                .all()
+            )
+            from_news = [r[0].upper() for r in news_rows]
+            signal_tickers = sess.query(Signal.ticker).distinct().all()
+            from_signals = [r[0].upper() for r in signal_tickers]
+
+        try:
+            if self.db_session is not None:
+                _query(self.db_session)
+            else:
+                from src.db.database import get_session
+                with get_session() as s:
+                    _query(s)
+        except Exception as e:
+            logger.warning("Could not load dynamic watchlist from DB: %s", e)
+
+        combined = list(dict.fromkeys(base + from_news + from_signals))
+        capped = combined[:WATCHLIST_CAP]
+        logger.info(
+            "Watchlist: %d base + %d from news + %d from signals = %d total (capped %d)",
+            len(base), len(from_news), len(from_signals), len(combined), len(capped),
+        )
+        return capped
 
     def screen(self) -> list[dict]:
         """Check volume and price for watchlist; return tickers with 3x+ volume or 5%+ move."""

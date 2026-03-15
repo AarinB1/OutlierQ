@@ -5,6 +5,8 @@ import type {
   ConfusionMatrix,
   TickerSummary,
   HealthStatus,
+  AutopilotStatus,
+  ActiveTickers,
   ScanResult,
   EvaluateResult,
   DiscoveryRecord,
@@ -27,6 +29,14 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function fetchHealth(): Promise<HealthStatus> {
   return fetchJSON('/health');
+}
+
+export async function fetchStatus(): Promise<AutopilotStatus> {
+  return fetchJSON('/status');
+}
+
+export async function fetchActiveTickers(): Promise<ActiveTickers> {
+  return fetchJSON('/active-tickers');
 }
 
 export async function fetchSignals(params?: {

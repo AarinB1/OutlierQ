@@ -21,6 +21,8 @@ export interface Signal {
   created_at: string | null;
   event_id: string;
   event?: EventData;
+  exploratory?: boolean;
+  discovery_source?: string | null;
 }
 
 export interface AccuracyStats {
@@ -77,6 +79,26 @@ export interface HealthStatus {
   signals_count: number;
   events_count: number;
   last_scan: string | null;
+}
+
+export interface AutopilotStatus {
+  is_autopilot_running: boolean;
+  tickers_monitored: number;
+  signals_today: number;
+  discoveries_today: number;
+  last_scan: string | null;
+  next_scan: string | null;
+}
+
+export interface ActiveTickers {
+  tickers: string[];
+  by_source: {
+    manual: string[];
+    news_scanner: string[];
+    volume_screener: string[];
+    both: string[];
+  };
+  count: number;
 }
 
 export interface ScanResult {

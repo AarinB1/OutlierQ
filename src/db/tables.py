@@ -7,7 +7,7 @@ JSON columns are used instead of JSONB/ARRAY (PostgreSQL-specific types).
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, JSON, String, Text
 
 from src.db.database import Base
 
@@ -68,6 +68,8 @@ class Signal(Base):
     created_at = Column(DateTime, default=_utcnow)
     outcome = Column(String, nullable=True)          # profit / loss / expired
     outcome_pnl = Column(Float, nullable=True)
+    exploratory = Column(Boolean, default=False, nullable=False)
+    discovery_source = Column(String, nullable=True)  # "manual", "news_scanner", "volume_screener", "both", or null
 
     def __repr__(self) -> str:
         return f"<Signal {self.ticker} {self.direction} conf={self.confidence:.2f}>"
