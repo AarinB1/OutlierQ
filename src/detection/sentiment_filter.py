@@ -78,7 +78,8 @@ class SentimentFilter:
         extreme_ratio = extreme_count / len(scores)
 
         # Determine direction
-        if mean_sentiment < -0.2:
+        # VADER skews positive on financial text, so bearish threshold is lower.
+        if mean_sentiment < -0.1:
             direction = "bearish"
         elif mean_sentiment > 0.2:
             direction = "bullish"

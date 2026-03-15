@@ -50,6 +50,8 @@ _KEYWORD_DICTS: dict[str, list[tuple[str, int]]] = {
         # Low weight (1)
         ("resigned", 1), ("fired", 1), ("controversy", 1), ("allegations", 1),
         ("accused", 1), ("probe", 1), ("ethics", 1),
+        ("toxic culture", 1), ("harassment", 1), ("data breach", 1),
+        ("privacy violation", 1), ("executive departure", 1),
     ],
     "legal": [
         # High weight (3)
@@ -60,7 +62,8 @@ _KEYWORD_DICTS: dict[str, list[tuple[str, int]]] = {
         ("subpoena", 2), ("settlement", 2), ("litigation", 2),
         # Low weight (1)
         ("legal", 1), ("court", 1), ("dispute", 1), ("ruling", 1),
-        ("patent", 1), ("violation", 1),
+        ("patent", 1), ("violation", 1), ("investigation", 1), ("probe", 1),
+        ("scrutiny", 1), ("congressional hearing", 1), ("ftc", 1), ("doj", 1),
     ],
     "earnings_miss": [
         # High weight (3)
@@ -68,10 +71,15 @@ _KEYWORD_DICTS: dict[str, list[tuple[str, int]]] = {
         ("guidance cut", 3), ("lowered outlook", 3),
         # Medium weight (2)
         ("below expectations", 2), ("disappointing results", 2), ("weak earnings", 2),
-        ("revenue decline", 2), ("loss widens", 2),
+        ("revenue decline", 2), ("loss widens", 2), ("downgrade", 2), ("sell rating", 2),
+        ("price target cut", 2), ("margin pressure", 2), ("demand weakness", 2),
+        ("inventory buildup", 2),
         # Low weight (1)
         ("missed estimates", 1), ("underperformed", 1), ("quarterly loss", 1),
-        ("slowdown", 1), ("downturn", 1),
+        ("slowdown", 1), ("downturn", 1), ("headwinds", 1), ("challenging environment", 1),
+        ("soft demand", 1), ("cautious outlook", 1), ("negative revision", 1), ("warns", 1),
+        ("concern", 1), ("risk", 1), ("decline", 1), ("drops", 1), ("falls", 1),
+        ("slump", 1), ("tumbles", 1), ("plunges", 1), ("selloff", 1),
     ],
     "recall": [
         # High weight (3)

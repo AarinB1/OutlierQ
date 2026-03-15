@@ -187,6 +187,23 @@ class TestSentimentFilter:
         assert result["extreme_ratio"] >= 0.5
         assert result["direction"] == "bearish"
 
+    def test_mildly_negative_is_bearish(self, db_session):
+        """Headlines with mild negative sentiment (mean ~ -0.12) should now be bearish."""
+        articles = [
+            _make_article(headline="Company faces headwinds and cautious outlook"),
+            _make_article(headline="Demand weakness raises concern for investors"),
+            _make_article(headline="Analysts warn of challenging environment ahead"),
+            _make_article(headline="Normal quarterly update released"),
+        ]
+        for a in articles:
+            db_session.add(a)
+        db_session.flush()
+
+        sf = SentimentFilter(extreme_threshold=0.3, extreme_ratio_threshold=0.05)
+        result = sf.score_batch(articles)
+
+        assert result["direction"] == "bearish"
+
     def test_score_batch_fails(self, db_session):
         """Batch with mostly mild headlines should not pass the filter."""
         articles = [

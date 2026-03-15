@@ -108,6 +108,10 @@ class StockDataService:
         self._set_cached(cache_key, result)
         return result
 
+    # Backward-compatible alias used by existing tests/callers.
+    def get_company_info(self, ticker: str) -> dict:
+        return self.get_info(ticker)
+
     # ── Key stats ──────────────────────────────────────────────────────
 
     def get_stats(self, ticker: str) -> dict:
@@ -154,6 +158,10 @@ class StockDataService:
 
         self._set_cached(cache_key, result)
         return result
+
+    # Backward-compatible alias used by existing tests/callers.
+    def get_key_stats(self, ticker: str) -> dict:
+        return self.get_stats(ticker)
 
     # ── Chart overlays ─────────────────────────────────────────────────
 
@@ -240,3 +248,9 @@ class StockDataService:
             "signals": self.get_signals_overlay(ticker, session=session),
             "events": self.get_events_overlay(ticker, session=session),
         }
+
+    # Backward-compatible alias used by existing tests/callers.
+    def get_ticker_summary(
+        self, ticker: str, session: Session | None = None
+    ) -> dict:
+        return self.get_summary(ticker, session=session)
