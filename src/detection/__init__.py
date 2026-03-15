@@ -16,6 +16,7 @@ from src.classification.event_classifier import EventClassifier
 from src.db.database import get_session
 from src.db.tables import Article, Event, Signal
 from src.detection.cross_source import CrossSourceValidator
+from src.detection.edgar_monitor import EdgarMonitor
 from src.detection.options_flow import OptionsFlowDetector
 from src.detection.sentiment_filter import SentimentFilter
 from src.detection.volume_detector import VolumeDetector
@@ -65,6 +66,7 @@ class AnomalyPipeline:
         )
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
         self.options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
+        self.edgar = EdgarMonitor()
         self.classifier = EventClassifier()
 
     def _get_recent_articles(self, ticker: str, session: Session) -> list:
@@ -79,6 +81,10 @@ class AnomalyPipeline:
     def _check_options_flow(self, ticker: str) -> dict | None:
         """Run unusual options activity scan for a single ticker."""
         return self.options_flow.scan_ticker(ticker)
+
+    def _check_edgar(self, ticker: str) -> dict | None:
+        """Run SEC EDGAR monitor for a single ticker."""
+        return self.edgar.scan_ticker(ticker)
 
     def scan(self, tickers: list[str], session: Session | None = None) -> list[dict]:
         """Run the full three-stage detection pipeline.
@@ -241,13 +247,78 @@ class AnomalyPipeline:
                         options_data["max_conviction"],
                     )
 
+            # Stage 5: SEC EDGAR filing cross-validation and EDGAR-only detections
+            edgar_results = self.edgar.scan_batch(tickers)
+            edgar_map = {row["ticker"]: row for row in edgar_results}
+            existing_tickers = {o["ticker"] for o in outliers}
+
+            for outlier in outliers:
+                ticker = outlier["ticker"]
+                edgar_data = edgar_map.get(ticker)
+                if not edgar_data:
+                    continue
+
+                outlier["edgar_data"] = edgar_data
+                confidence = float(outlier["confidence_score"]) + 0.08
+                edgar_direction = edgar_data.get("combined_direction", "neutral")
+                if (
+                    edgar_direction in {"bullish", "bearish"}
+                    and outlier.get("direction") == edgar_direction
+                ):
+                    confidence += 0.05
+                outlier["confidence_score"] = max(0.0, min(1.0, confidence))
+
+            for ticker, edgar_data in edgar_map.items():
+                if ticker in existing_tickers:
+                    continue
+                if (
+                    edgar_data.get("has_significant_filing")
+                    and float(edgar_data.get("combined_severity", 0.0)) >= 0.6
+                ):
+                    confidence = float(edgar_data["combined_severity"]) * 0.85
+                    outliers.append(
+                        {
+                            "ticker": ticker,
+                            "z_score": 0.0,
+                            "today_count": 0,
+                            "baseline_mean": 0.0,
+                            "baseline_std": 0.0,
+                            "mean_sentiment": 0.0,
+                            "max_magnitude": float(edgar_data["combined_severity"]),
+                            "extreme_ratio": 0.0,
+                            "direction": edgar_data.get("combined_direction", "neutral"),
+                            "distinct_sources": 0,
+                            "sources": [],
+                            "common_themes": [],
+                            "article_count": 0,
+                            "article_ids": [],
+                            "confidence_score": confidence,
+                            "source": "edgar",
+                            "edgar_data": edgar_data,
+                        }
+                    )
+                    logger.info(
+                        "EDGAR-ONLY OUTLIER: %s — %s",
+                        ticker,
+                        edgar_data.get("summary", "significant filing"),
+                    )
+                elif (
+                    edgar_data.get("has_unusual_insider_activity")
+                    and not edgar_data.get("has_significant_filing")
+                ):
+                    logger.info(
+                        "EDGAR info only for %s: unusual Form 4 activity without significant 8-K items",
+                        ticker,
+                    )
+
             logger.info(
-                "Scanned %d tickers: %d volume spikes -> %d passed sentiment -> %d confirmed outliers (%d options-flow)",
+                "Scanned %d tickers: %d volume spikes -> %d passed sentiment -> %d confirmed outliers (%d options-flow, %d edgar)",
                 len(tickers),
                 len(spiked_tickers),
                 len(sentiment_passed),
                 len(outliers),
                 len(options_results),
+                len(edgar_results),
             )
             return outliers
 
@@ -282,6 +353,7 @@ class AnomalyPipeline:
                     common_themes=outlier.get("common_themes", []),
                     event_hint=outlier.get("source"),
                     options_flow=outlier.get("options_flow"),
+                    edgar_data=outlier.get("edgar_data"),
                     fallback_direction=outlier.get("direction"),
                     fallback_confidence=outlier.get("confidence_score"),
                 )
@@ -306,6 +378,7 @@ class AnomalyPipeline:
                         "common_themes": outlier["common_themes"],
                         "source": outlier.get("source", "news_pipeline"),
                         "options_flow": outlier.get("options_flow"),
+                        "edgar_data": outlier.get("edgar_data"),
                         "classified_type": cls_result["event_type"],
                         "vote_distribution": cls_result["vote_distribution"],
                         "top_keywords": cls_result["top_keywords"],

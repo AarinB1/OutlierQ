@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators } from '../api'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators, fetchEdgar } from '../api'
 import type {
   TickerSummary,
   ChartData,
@@ -7,6 +7,7 @@ import type {
   KeyStats,
   OptionsFlowResult,
   TechnicalIndicators,
+  EdgarResult,
 } from '../types'
 import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
@@ -30,6 +31,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [optionsFlow, setOptionsFlow] = useState<OptionsFlowResult | null>(null)
   const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null)
+  const [edgarData, setEdgarData] = useState<EdgarResult | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [period, setPeriod] = useState('6mo')
 
@@ -54,6 +56,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       setChartData(null)
       setOptionsFlow(null)
       setIndicators(null)
+      setEdgarData(null)
       return
     }
     setDetailLoading(true)
@@ -64,13 +67,15 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       fetchChartData(selected, period),
       fetchOptionsFlow(selected),
       fetchIndicators(selected),
+      fetchEdgar(selected),
     ])
-      .then(([i, s, c, o, ind]) => {
+      .then(([i, s, c, o, ind, edgar]) => {
         setInfo(i)
         setStats(s)
         setChartData(c)
         setOptionsFlow(o)
         setIndicators(ind ?? c.indicators ?? null)
+        setEdgarData(edgar)
       })
       .catch(e => setError(e.message))
       .finally(() => setDetailLoading(false))
@@ -185,6 +190,96 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
                   </span>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {edgarData?.significant_findings && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-mono font-bold text-sm text-txt-primary">SEC Filings</h3>
+              <span className={`pill ${
+                edgarData.combined_direction === 'bearish'
+                  ? 'bg-accent-red-muted text-accent-red'
+                  : edgarData.combined_direction === 'bullish'
+                    ? 'bg-accent-green-muted text-accent-green'
+                    : 'bg-surface-tertiary text-txt-secondary'
+              }`}>
+                {edgarData.combined_direction.toUpperCase()}
+              </span>
+            </div>
+
+            <p className="text-xs text-txt-secondary mb-3">{edgarData.summary}</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-xs">
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">8-K filings (3d)</div>
+                <div className="font-mono text-base text-txt-primary">
+                  {edgarData["8k_analysis"]?.recent_8k_count ?? 0}
+                </div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Form 4 filings (7d)</div>
+                <div className="font-mono text-base text-txt-primary">
+                  {edgarData.insider_analysis?.total_form4s ?? 0}
+                </div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Insider activity</div>
+                <div className="font-mono text-base text-txt-primary">
+                  {(edgarData.insider_analysis?.activity_level || 'normal').toUpperCase()}
+                </div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Most significant item</div>
+                <div className="font-mono text-base text-txt-primary">
+                  {edgarData["8k_analysis"]?.most_significant_item || '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-txt-secondary text-xs">Combined severity</span>
+                <span className="font-mono text-xs text-txt-secondary">
+                  {Math.round((edgarData.combined_severity || 0) * 100)}%
+                </span>
+              </div>
+              <div className="h-1 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <div
+                  className="h-full rounded-full bg-accent-amber"
+                  style={{ width: `${(edgarData.combined_severity || 0) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {(edgarData["8k_analysis"]?.filings || []).slice(0, 5).map((filing, idx) => {
+                const items = filing.items || []
+                const hasHighBearish = items.some(item => ['4.02', '3.01'].includes(item))
+                const hasModerate = items.some(item => ['2.06', '2.05', '5.02', '1.02', '4.01'].includes(item))
+                const hasBullish = items.some(item => ['1.01', '2.01'].includes(item))
+                const itemColor = hasHighBearish
+                  ? 'text-accent-red'
+                  : hasModerate
+                    ? 'text-accent-amber'
+                    : hasBullish
+                      ? 'text-accent-green'
+                      : 'text-txt-secondary'
+                return (
+                  <div key={`${filing.url}-${idx}`} className="bg-surface-tertiary rounded p-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono text-[11px] text-txt-secondary">{filing.filing_date}</span>
+                      <span className={`font-mono text-[11px] ${itemColor}`}>
+                        {items.length ? items.join(', ') : 'No items'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-txt-primary truncate">
+                      {filing.description}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

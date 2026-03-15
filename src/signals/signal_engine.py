@@ -105,6 +105,15 @@ EVENT_PROFILES: dict[str, dict] = {
         "decay_type": "spike_fade",
         "base_confidence": 0.70,
     },
+    "edgar": {
+        "direction": "put",
+        "expected_move_pct": 0.07,
+        "strike_offset_pct": 0.03,
+        "expiry_days_min": 7,
+        "expiry_days_max": 21,
+        "decay_type": "moderate",
+        "base_confidence": 0.72,
+    },
 }
 
 # Demo-only profile for "other" events (routine news) — direction set from event sentiment
@@ -465,8 +474,12 @@ class SignalEngine:
             )
             return None
 
-        profile = dict(self._event_profiles[event_type])
         metadata = event.get("metadata") or {}
+        source = str(metadata.get("source", "")).lower()
+        if event_type == "edgar" or source == "edgar":
+            profile = dict(self._event_profiles["edgar"])
+        else:
+            profile = dict(self._event_profiles[event_type])
         options_meta = metadata.get("options_flow") or event.get("options_flow") or {}
 
         # Demo mode "other": direction from event sentiment (call = neutral/bullish, put = bearish)
@@ -481,6 +494,12 @@ class SignalEngine:
                 profile["direction"] = "put"
             else:
                 profile["direction"] = "call"
+        edgar_meta = metadata.get("edgar_data") or event.get("edgar_data") or {}
+        if event_type == "edgar" or source == "edgar":
+            edgar_direction = str(
+                edgar_meta.get("combined_direction", event.get("direction", "bearish"))
+            ).lower()
+            profile["direction"] = "put" if edgar_direction == "bearish" else "call"
         ticker = event["ticker"]
 
         # Get current price
@@ -538,6 +557,20 @@ class SignalEngine:
                 " Unusual options activity detected: "
                 f"{unusual_count} contracts with conviction {max_conviction:.2f}. "
                 f"Smart money appears {smart_money}."
+            )
+        if event_type == "edgar" or source == "edgar":
+            summary = str(edgar_meta.get("summary", "SEC filing activity detected"))
+            filing_count = int(edgar_meta.get("8k_analysis", {}).get("recent_8k_count", 0))
+            severity = float(edgar_meta.get("combined_severity", event_confidence))
+            if severity >= 0.75:
+                severity_desc = "high severity"
+            elif severity >= 0.5:
+                severity_desc = "moderate severity"
+            else:
+                severity_desc = "low severity"
+            reasoning += (
+                f" SEC filing detected: {summary}. "
+                f"{filing_count} 8-K filings with {severity_desc}."
             )
 
         logger.info(

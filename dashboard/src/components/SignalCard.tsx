@@ -17,6 +17,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
   const technicalContext = signal.event?.metadata?.technical_context
   const hasUoa = signal.event?.event_type === 'options_flow' || Boolean(optionsMeta)
   const smartMoneyDirection = optionsMeta?.direction
+  const hasSec = Boolean(signal.event?.metadata?.edgar_data)
 
   return (
     <div className={`card relative overflow-hidden border-l-[3px] ${isCall ? 'border-l-accent-green' : 'border-l-accent-red'}`}>
@@ -100,6 +101,11 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
         {hasUoa && (
           <span className="inline-block px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-sans font-medium uppercase tracking-wider">
             UOA
+          </span>
+        )}
+        {hasSec && (
+          <span className="inline-block px-2 py-0.5 rounded bg-accent-amber/20 text-accent-amber text-[10px] font-sans font-medium uppercase tracking-wider">
+            SEC
           </span>
         )}
         {signal.exploratory && (

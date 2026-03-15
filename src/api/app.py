@@ -15,6 +15,7 @@ from config.settings import LOG_FORMAT
 from src.db.database import SessionLocal, init_db
 from src.db.tables import Article, Event, Signal
 from src.data.stock_data import StockDataService
+from src.detection.edgar_monitor import EdgarMonitor
 from src.detection.options_flow import OptionsFlowDetector
 from src.discovery.discovery_db import DiscoveredTicker
 from src.ingestion.market_fetcher import MarketFetcher
@@ -185,6 +186,7 @@ def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
 _stock_svc = StockDataService()
 _options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
 _technical = TechnicalAnalyzer(market_fetcher=MarketFetcher())
+_edgar = EdgarMonitor()
 
 
 @app.get("/api/ticker/{ticker}/price-history")
@@ -240,6 +242,14 @@ def ticker_options_flow(ticker: str) -> dict:
 @app.get("/api/ticker/{ticker}/indicators")
 def ticker_indicators(ticker: str) -> dict | None:
     return _technical.get_ticker_indicators(ticker.upper())
+
+
+@app.get("/api/ticker/{ticker}/edgar")
+def ticker_edgar(ticker: str) -> dict:
+    result = _edgar.scan_ticker(ticker.upper())
+    if result is None:
+        return {"ticker": ticker.upper(), "significant_findings": False}
+    return {**result, "significant_findings": True}
 
 
 # ── Actions ───────────────────────────────────────────────────────────

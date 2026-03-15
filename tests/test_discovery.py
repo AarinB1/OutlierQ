@@ -329,6 +329,8 @@ def test_discovery_to_signal(db_session):
     mock_finnhub.stock_symbols.return_value = [{"symbol": "MRNA"}]
     market = MarketFetcher()
     pipeline = AnomalyPipeline(demo=True)
+    pipeline.options_flow.scan_batch = lambda _tickers: []
+    pipeline.edgar.scan_batch = lambda _tickers: []
     from src.signals.signal_engine import SignalEngine
     engine = SignalEngine(market_fetcher=market)
     orch = DiscoveryOrchestrator(db_session, mock_finnhub, market, pipeline, engine)

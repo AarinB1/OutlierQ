@@ -273,6 +273,7 @@ class TestOptionsFlowDetector:
                 }
             ]
         )
+        pipeline.edgar.scan_batch = MagicMock(return_value=[])
 
         outliers = pipeline.scan(["AAPL"], session=MagicMock())
         assert len(outliers) == 1
@@ -296,6 +297,7 @@ class TestOptionsFlowDetector:
                 }
             ]
         )
+        pipeline.edgar.scan_batch = MagicMock(return_value=[])
 
         outliers = pipeline.scan(["TSLA"], session=MagicMock())
         assert len(outliers) == 1

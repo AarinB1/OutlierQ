@@ -30,6 +30,7 @@ export interface EventMetadata {
     top_contracts?: OptionsFlowContract[];
     put_call_ratio?: number;
   };
+  edgar_data?: EdgarResult;
   technical_context?: TechnicalContext;
   technical_notes?: string[];
   [key: string]: unknown;
@@ -296,4 +297,44 @@ export interface TechnicalIndicators {
   relative_volume: number;
   trend_20d: number | null;
   trend_50d: number | null;
+}
+
+export interface EdgarFiling {
+  filing_date: string;
+  form_type: string;
+  description: string;
+  url: string;
+  items: string[];
+}
+
+export interface Edgar8kAnalysis {
+  total_filings: number;
+  recent_8k_count: number;
+  highly_bearish_count: number;
+  moderately_bearish_count: number;
+  potentially_bullish_count: number;
+  most_significant_item: string;
+  direction: 'bullish' | 'bearish' | 'neutral';
+  severity: number;
+  filings: EdgarFiling[];
+}
+
+export interface EdgarInsiderAnalysis {
+  total_form4s: number;
+  days_covered: number;
+  filings_per_day: number;
+  is_unusual: boolean;
+  activity_level: 'high' | 'moderate' | 'normal';
+}
+
+export interface EdgarResult {
+  ticker: string;
+  significant_findings?: boolean;
+  combined_direction: 'bullish' | 'bearish' | 'neutral';
+  combined_severity: number;
+  has_significant_filing: boolean;
+  has_unusual_insider_activity: boolean;
+  summary: string;
+  "8k_analysis": Edgar8kAnalysis;
+  insider_analysis: EdgarInsiderAnalysis;
 }

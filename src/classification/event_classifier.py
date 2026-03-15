@@ -32,6 +32,7 @@ _DIRECTION_MAP: dict[str, str] = {
     "major_contract": "bullish",
     "earnings_beat": "bullish",
     "options_flow": "neutral",
+    "edgar": "neutral",
     "other": "neutral",
 }
 
@@ -229,6 +230,7 @@ class EventClassifier:
         common_themes: list[str] | None = None,
         event_hint: str | None = None,
         options_flow: dict | None = None,
+        edgar_data: dict | None = None,
         fallback_direction: str | None = None,
         fallback_confidence: float | None = None,
     ) -> dict:
@@ -256,6 +258,46 @@ class EventClassifier:
                     "confidence": confidence,
                     "article_classifications": [],
                     "vote_distribution": {"options_flow": 1},
+                    "top_keywords": [],
+                }
+            if event_hint == "edgar":
+                direction = "neutral"
+                if edgar_data and edgar_data.get("combined_direction") in {"bullish", "bearish"}:
+                    direction = str(edgar_data["combined_direction"])
+                elif fallback_direction in {"bullish", "bearish"}:
+                    direction = str(fallback_direction)
+
+                event_type = "other"
+                item = (
+                    str(
+                        (edgar_data or {})
+                        .get("8k_analysis", {})
+                        .get("most_significant_item", "")
+                    )
+                    .strip()
+                )
+                if item == "4.02":
+                    event_type = "scandal"
+                elif item == "3.01":
+                    event_type = "legal"
+                elif item in {"2.06", "2.05"}:
+                    event_type = "earnings_miss"
+                elif item == "5.02":
+                    event_type = "scandal" if direction == "bearish" else "other"
+                elif item in {"1.01", "2.01"}:
+                    event_type = "major_contract"
+
+                confidence = (
+                    float(edgar_data.get("combined_severity", 0.0))
+                    if edgar_data
+                    else float(fallback_confidence or 0.0)
+                )
+                return {
+                    "event_type": event_type,
+                    "direction": direction,
+                    "confidence": confidence,
+                    "article_classifications": [],
+                    "vote_distribution": {event_type: 1},
                     "top_keywords": [],
                 }
             return {

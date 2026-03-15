@@ -19,6 +19,7 @@ build/
 htmlcov/
 .coverage
 .cache/huggingface/
+.cache/company_tickers.json
 
 # IDE
 .vscode/

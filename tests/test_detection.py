@@ -374,10 +374,12 @@ class TestAnomalyPipelineDemo:
 
         # Demo mode should detect outliers (low thresholds)
         demo_pipeline = AnomalyPipeline(demo=True)
+        demo_pipeline.edgar.scan_batch = lambda _tickers: []
         demo_results = demo_pipeline.scan(["MSFT"], session=db_session)
 
         # Production mode should NOT detect outliers (high thresholds)
         prod_pipeline = AnomalyPipeline(demo=False)
+        prod_pipeline.edgar.scan_batch = lambda _tickers: []
         prod_results = prod_pipeline.scan(["MSFT"], session=db_session)
 
         assert len(demo_results) >= 1, "Demo mode should detect the mild-sentiment data"
@@ -453,6 +455,7 @@ class TestAnomalyPipeline:
             "scores": [],
         }
         pipeline.sentiment_filter.update_article_scores = lambda _articles, session=None: None
+        pipeline.edgar.scan_batch = lambda _tickers: []
 
         results = pipeline.scan(["TSLA"], session=db_session)
 
@@ -497,6 +500,7 @@ class TestAnomalyPipeline:
         db_session.commit()
 
         pipeline = AnomalyPipeline()
+        pipeline.edgar.scan_batch = lambda _tickers: []
         results = pipeline.scan(["AAPL"], session=db_session)
 
         # Should not detect because volume didn't spike

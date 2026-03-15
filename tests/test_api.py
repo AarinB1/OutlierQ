@@ -223,6 +223,35 @@ class TestIndicatorsEndpoint:
         assert data["indicators"]["ticker"] == "AAPL"
 
 
+class TestEdgarEndpoint:
+    @patch("src.api.app._edgar")
+    def test_edgar_no_significant_findings(self, mock_edgar):
+        mock_edgar.scan_ticker.return_value = None
+        resp = client.get("/api/ticker/AAPL/edgar")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ticker"] == "AAPL"
+        assert data["significant_findings"] is False
+
+    @patch("src.api.app._edgar")
+    def test_edgar_significant_findings(self, mock_edgar):
+        mock_edgar.scan_ticker.return_value = {
+            "ticker": "AAPL",
+            "combined_direction": "bearish",
+            "combined_severity": 0.8,
+            "has_significant_filing": True,
+            "has_unusual_insider_activity": False,
+            "summary": "1 bearish 8-K filing in 3 days",
+            "8k_analysis": {"recent_8k_count": 1, "filings": []},
+            "insider_analysis": {"total_form4s": 1, "activity_level": "normal"},
+        }
+        resp = client.get("/api/ticker/AAPL/edgar")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["significant_findings"] is True
+        assert data["combined_direction"] == "bearish"
+
+
 class TestEvaluateEndpoint:
     def test_evaluate_runs(self):
         resp = client.post("/api/evaluate")

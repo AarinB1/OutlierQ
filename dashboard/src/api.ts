@@ -19,6 +19,7 @@ import type {
   TickerFullSummary,
   OptionsFlowResult,
   TechnicalIndicators,
+  EdgarResult,
 } from './types';
 
 const BASE_URL = '/api';
@@ -162,4 +163,8 @@ export async function fetchOptionsFlow(ticker: string): Promise<OptionsFlowResul
 
 export async function fetchIndicators(ticker: string): Promise<TechnicalIndicators | null> {
   return fetchJSON(`/ticker/${ticker}/indicators`);
+}
+
+export async function fetchEdgar(ticker: string): Promise<EdgarResult | null> {
+  return fetchJSON(`/ticker/${ticker}/edgar`);
 }
