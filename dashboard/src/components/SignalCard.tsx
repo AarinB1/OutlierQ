@@ -13,7 +13,8 @@ function confidenceColor(c: number): string {
 
 export default function SignalCard({ signal, onTickerClick }: Props) {
   const isCall = signal.direction === 'call'
-  const optionsMeta = (signal.event?.metadata as { options_flow?: { direction?: string } } | null)?.options_flow
+  const optionsMeta = signal.event?.metadata?.options_flow
+  const technicalContext = signal.event?.metadata?.technical_context
   const hasUoa = signal.event?.event_type === 'options_flow' || Boolean(optionsMeta)
   const smartMoneyDirection = optionsMeta?.direction
 
@@ -60,6 +61,34 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
           />
         </div>
       </div>
+
+      {technicalContext && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-sans ${
+            technicalContext.rsi_signal === 'oversold'
+              ? 'bg-accent-green-muted text-accent-green'
+              : technicalContext.rsi_signal === 'overbought'
+                ? 'bg-accent-red-muted text-accent-red'
+                : 'bg-surface-tertiary text-txt-secondary'
+          }`}>
+            RSI {technicalContext.rsi.toFixed(0)} ({technicalContext.rsi_signal})
+          </span>
+          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-sans ${
+            technicalContext.macd_signal.includes('bullish')
+              ? 'bg-accent-green-muted text-accent-green'
+              : technicalContext.macd_signal.includes('bearish')
+                ? 'bg-accent-red-muted text-accent-red'
+                : 'bg-surface-tertiary text-txt-secondary'
+          }`}>
+            MACD {technicalContext.macd_signal}
+          </span>
+          {technicalContext.relative_volume > 2 && (
+            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-sans bg-accent-blue/20 text-accent-blue">
+              Vol {technicalContext.relative_volume.toFixed(2)}x
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Event type + exploratory + discovery source */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">

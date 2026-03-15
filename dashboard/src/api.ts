@@ -18,6 +18,7 @@ import type {
   ChartData,
   TickerFullSummary,
   OptionsFlowResult,
+  TechnicalIndicators,
 } from './types';
 
 const BASE_URL = '/api';
@@ -157,4 +158,8 @@ export async function fetchTickerSummary(ticker: string): Promise<TickerFullSumm
 
 export async function fetchOptionsFlow(ticker: string): Promise<OptionsFlowResult> {
   return fetchJSON(`/ticker/${ticker}/options-flow`);
+}
+
+export async function fetchIndicators(ticker: string): Promise<TechnicalIndicators | null> {
+  return fetchJSON(`/ticker/${ticker}/indicators`);
 }

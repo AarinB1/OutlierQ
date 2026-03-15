@@ -18,6 +18,7 @@ from src.data.stock_data import StockDataService
 from src.detection.options_flow import OptionsFlowDetector
 from src.discovery.discovery_db import DiscoveredTicker
 from src.ingestion.market_fetcher import MarketFetcher
+from src.indicators.technical import TechnicalAnalyzer
 from src.signals.feedback_tracker import FeedbackTracker
 
 logging.basicConfig(format=LOG_FORMAT)
@@ -183,6 +184,7 @@ def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
 
 _stock_svc = StockDataService()
 _options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
+_technical = TechnicalAnalyzer(market_fetcher=MarketFetcher())
 
 
 @app.get("/api/ticker/{ticker}/price-history")
@@ -217,7 +219,9 @@ def ticker_chart_data(
     db: Session = Depends(get_db),
 ) -> dict:
     yf_period = {"1w": "5d"}.get(period, period)
-    return _stock_svc.get_chart_data(ticker.upper(), period=yf_period, session=db)
+    data = _stock_svc.get_chart_data(ticker.upper(), period=yf_period, session=db)
+    data["indicators"] = _technical.get_ticker_indicators(ticker.upper())
+    return data
 
 
 @app.get("/api/ticker/{ticker}/summary")
@@ -231,6 +235,11 @@ def ticker_options_flow(ticker: str) -> dict:
     if result is None:
         return {"ticker": ticker.upper(), "unusual_activity": False}
     return result
+
+
+@app.get("/api/ticker/{ticker}/indicators")
+def ticker_indicators(ticker: str) -> dict | None:
+    return _technical.get_ticker_indicators(ticker.upper())
 
 
 # ── Actions ───────────────────────────────────────────────────────────

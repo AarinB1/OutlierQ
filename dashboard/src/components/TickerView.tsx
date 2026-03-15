@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow } from '../api'
-import type { TickerSummary, ChartData, CompanyInfo, KeyStats, OptionsFlowResult } from '../types'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators } from '../api'
+import type {
+  TickerSummary,
+  ChartData,
+  CompanyInfo,
+  KeyStats,
+  OptionsFlowResult,
+  TechnicalIndicators,
+} from '../types'
 import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
@@ -22,6 +29,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   const [stats, setStats] = useState<KeyStats | null>(null)
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [optionsFlow, setOptionsFlow] = useState<OptionsFlowResult | null>(null)
+  const [indicators, setIndicators] = useState<TechnicalIndicators | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [period, setPeriod] = useState('6mo')
 
@@ -45,6 +53,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       setStats(null)
       setChartData(null)
       setOptionsFlow(null)
+      setIndicators(null)
       return
     }
     setDetailLoading(true)
@@ -54,8 +63,15 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       fetchKeyStats(selected),
       fetchChartData(selected, period),
       fetchOptionsFlow(selected),
+      fetchIndicators(selected),
     ])
-      .then(([i, s, c, o]) => { setInfo(i); setStats(s); setChartData(c); setOptionsFlow(o) })
+      .then(([i, s, c, o, ind]) => {
+        setInfo(i)
+        setStats(s)
+        setChartData(c)
+        setOptionsFlow(o)
+        setIndicators(ind ?? c.indicators ?? null)
+      })
       .catch(e => setError(e.message))
       .finally(() => setDetailLoading(false))
   }, [selected, period])
@@ -111,6 +127,67 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
         )}
 
         {stats && <StatsGrid stats={stats} />}
+
+        {indicators && (
+          <div className="card">
+            <h3 className="font-mono font-bold text-sm text-txt-primary mb-4">Technical Indicators</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary mb-1">RSI (14)</div>
+                <div className="font-mono text-base text-txt-primary">{indicators.rsi_14.toFixed(1)}</div>
+                <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] ${
+                  indicators.rsi_signal === 'oversold'
+                    ? 'bg-accent-green-muted text-accent-green'
+                    : indicators.rsi_signal === 'overbought'
+                      ? 'bg-accent-red-muted text-accent-red'
+                      : 'bg-surface-secondary text-txt-secondary'
+                }`}>
+                  {indicators.rsi_signal}
+                </span>
+              </div>
+
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary mb-1">Bollinger %B</div>
+                <div className="font-mono text-base text-txt-primary">{indicators.bollinger_pct_b.toFixed(2)}</div>
+                <div className="relative mt-2 h-1 rounded-full bg-surface-secondary">
+                  <div
+                    className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-accent-blue"
+                    style={{ left: `${Math.max(0, Math.min(100, indicators.bollinger_pct_b * 100))}%`, transform: 'translate(-50%, -50%)' }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary mb-1">ATR (14)</div>
+                <div className="font-mono text-base text-txt-primary">${indicators.atr_14.toFixed(2)}</div>
+                <div className="font-mono text-[11px] text-txt-secondary">{indicators.atr_pct.toFixed(1)}%</div>
+              </div>
+
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary mb-1">MACD</div>
+                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${
+                  indicators.macd_signal.includes('bullish')
+                    ? 'bg-accent-green-muted text-accent-green'
+                    : indicators.macd_signal.includes('bearish')
+                      ? 'bg-accent-red-muted text-accent-red'
+                      : 'bg-surface-secondary text-txt-secondary'
+                }`}>
+                  {indicators.macd_signal}
+                </span>
+              </div>
+
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary mb-1">Relative Volume</div>
+                <div className="font-mono text-base text-txt-primary">{indicators.relative_volume.toFixed(2)}x</div>
+                {indicators.relative_volume > 2.0 && (
+                  <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] bg-accent-blue/20 text-accent-blue">
+                    High Volume
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {optionsFlow?.unusual_activity && (
           <div className="card">

@@ -6,14 +6,16 @@ Each event type has an impact profile encoding expected price behavior.
 """
 
 import logging
+import math
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from config.settings import LOG_FORMAT
 from src.db.database import get_session
-from src.db.tables import Signal
+from src.db.tables import Event, Signal
 from src.ingestion.market_fetcher import MarketFetcher
+from src.indicators.technical import TechnicalAnalyzer
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -166,6 +168,7 @@ class SignalEngine:
         demo: bool = False,
     ) -> None:
         self.market_fetcher = market_fetcher or MarketFetcher()
+        self.technical = TechnicalAnalyzer(self.market_fetcher)
         self.demo = demo
         # In demo mode, include "other" so routine news still produces signals
         if demo:
@@ -286,6 +289,97 @@ class SignalEngine:
         return max(0.1, min(0.95, confidence))
 
     # ── Signal generation ─────────────────────────────────────────────
+
+    def _apply_technical_adjustments(
+        self,
+        signal_dict: dict,
+        indicators: dict,
+    ) -> dict:
+        """Apply small confidence modifiers from technical context."""
+        adjusted = dict(signal_dict)
+        direction = adjusted.get("direction", "call")
+        confidence = float(adjusted.get("confidence", 0.5))
+        adjustments_applied: list[str] = []
+        reasoning_notes: list[str] = []
+
+        rsi = float(indicators.get("rsi_14", 50.0))
+        pct_b = float(indicators.get("bollinger_pct_b", 0.5))
+        macd_signal = str(indicators.get("macd_signal", "neutral"))
+        relative_volume = float(indicators.get("relative_volume", 0.0))
+        atr_pct = float(indicators.get("atr_pct", 0.0))
+
+        if direction == "put" and rsi > 70:
+            confidence += 0.05
+            adjustments_applied.append("RSI overbought aligns with bearish setup (+0.05)")
+        elif direction == "put" and rsi < 30:
+            confidence -= 0.05
+            adjustments_applied.append("RSI oversold may limit downside (-0.05)")
+        elif direction == "call" and rsi < 30:
+            confidence += 0.05
+            adjustments_applied.append("RSI oversold aligns with bullish rebound (+0.05)")
+        elif direction == "call" and rsi > 70:
+            confidence -= 0.05
+            adjustments_applied.append("RSI overbought may cap upside (-0.05)")
+
+        if direction == "put" and pct_b > 0.8:
+            confidence += 0.03
+            adjustments_applied.append("Price near upper Bollinger band supports downside (+0.03)")
+        elif direction == "put" and pct_b < 0.2:
+            confidence -= 0.03
+            adjustments_applied.append("Price near lower Bollinger band may limit downside (-0.03)")
+        elif direction == "call" and pct_b < 0.2:
+            confidence += 0.03
+            adjustments_applied.append("Price near lower Bollinger band supports upside (+0.03)")
+        elif direction == "call" and pct_b > 0.8:
+            confidence -= 0.03
+            adjustments_applied.append("Price near upper Bollinger band may limit upside (-0.03)")
+
+        macd_is_bullish = "bullish" in macd_signal
+        if (direction == "call" and macd_is_bullish) or (direction == "put" and not macd_is_bullish):
+            confidence += 0.03
+            adjustments_applied.append("MACD trend aligns with signal direction (+0.03)")
+        elif macd_signal != "neutral":
+            confidence -= 0.03
+            adjustments_applied.append("MACD trend conflicts with signal direction (-0.03)")
+
+        if relative_volume > 2.0:
+            confidence += 0.02
+            adjustments_applied.append("Relative volume above 2x confirms participation (+0.02)")
+
+        suggested_expiry = adjusted.get("suggested_expiry")
+        days_to_expiry = 7
+        try:
+            if suggested_expiry:
+                expiry_dt = date.fromisoformat(str(suggested_expiry))
+                days_to_expiry = max(1, (expiry_dt - date.today()).days)
+        except ValueError:
+            days_to_expiry = 7
+
+        atr_based_move = (atr_pct / 100.0) * math.sqrt(float(days_to_expiry))
+        expected_move_pct = float(adjusted.get("expected_move_pct", 0.0))
+        if atr_based_move > 0:
+            if expected_move_pct > atr_based_move * 2:
+                reasoning_notes.append(
+                    "Expected move may be ambitious given recent volatility."
+                )
+            elif expected_move_pct < atr_based_move * 0.5:
+                reasoning_notes.append(
+                    "Stock volatility suggests larger move potential."
+                )
+
+        adjusted["confidence"] = max(0.1, min(0.95, confidence))
+        adjusted["technical_context"] = {
+            "rsi": rsi,
+            "rsi_signal": indicators.get("rsi_signal", "neutral"),
+            "bollinger_pct_b": pct_b,
+            "bollinger_signal": indicators.get("bollinger_signal", "lower_half"),
+            "atr_pct": atr_pct,
+            "macd_signal": macd_signal,
+            "relative_volume": relative_volume,
+            "adjustments_applied": adjustments_applied,
+        }
+        adjusted["technical_notes"] = reasoning_notes
+        return adjusted
 
     def generate_exploratory_signal(self, event: dict) -> dict | None:
         """Generate a conservative signal for 'other' events when detection confidence is high and sentiment is directional."""
@@ -450,8 +544,7 @@ class SignalEngine:
             "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f) — %s",
             direction, ticker, strike, expiry, confidence, event_type,
         )
-
-        return {
+        signal = {
             "ticker": ticker,
             "event_type": event_type,
             "event_id": event.get("event_id") or event.get("id"),
@@ -466,6 +559,29 @@ class SignalEngine:
             "reasoning": reasoning,
             "exploratory": False,
         }
+        try:
+            indicators = self.technical.get_ticker_indicators(ticker)
+            if indicators is not None:
+                signal = self._apply_technical_adjustments(signal, indicators)
+                technical_context = signal.get("technical_context", {})
+                signal["reasoning"] += (
+                    " Technical context: "
+                    f"RSI {technical_context.get('rsi', 0):.1f} "
+                    f"({technical_context.get('rsi_signal', 'neutral')}), "
+                    f"BB%B {technical_context.get('bollinger_pct_b', 0):.2f}, "
+                    f"MACD {technical_context.get('macd_signal', 'neutral')}."
+                )
+                for note in signal.get("technical_notes", []):
+                    signal["reasoning"] += f" {note}"
+                logger.info(
+                    "Technical adjustments for %s: %s",
+                    ticker,
+                    technical_context.get("adjustments_applied", []),
+                )
+        except Exception as exc:
+            logger.warning("Technical adjustment failed for %s: %s", ticker, exc)
+
+        return signal
 
     def generate_signals(self, events: list[dict]) -> list[dict]:
         """Generate signals for a batch of events, sorted by confidence."""
@@ -510,6 +626,18 @@ class SignalEngine:
                 )
                 s.add(record)
                 stored.append(record)
+
+                technical_context = sig.get("technical_context")
+                if technical_context:
+                    event = s.query(Event).filter(Event.id == event_id).first()
+                    if event is not None:
+                        metadata = dict(event.metadata_json or {})
+                        metadata["technical_context"] = technical_context
+                        notes = sig.get("technical_notes")
+                        if notes:
+                            metadata["technical_notes"] = notes
+                        event.metadata_json = metadata
+                        s.add(event)
 
             s.flush()
             logger.info("Stored %d signals in the database", len(stored))

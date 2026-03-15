@@ -185,6 +185,44 @@ class TestOptionsFlowEndpoint:
         assert data["direction"] == "bullish"
 
 
+class TestIndicatorsEndpoint:
+    @patch("src.api.app._technical")
+    def test_indicators_endpoint(self, mock_technical):
+        mock_technical.get_ticker_indicators.return_value = {
+            "ticker": "AAPL",
+            "rsi_14": 55.0,
+            "rsi_signal": "neutral",
+            "bollinger_pct_b": 0.6,
+            "atr_pct": 2.1,
+            "macd_signal": "bullish",
+            "relative_volume": 1.2,
+        }
+        resp = client.get("/api/ticker/AAPL/indicators")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ticker"] == "AAPL"
+        assert data["rsi_signal"] == "neutral"
+
+    @patch("src.api.app._technical")
+    @patch("src.api.app._stock_svc")
+    def test_chart_data_includes_indicators(self, mock_stock_svc, mock_technical):
+        mock_stock_svc.get_chart_data.return_value = {"prices": [], "signals": [], "events": []}
+        mock_technical.get_ticker_indicators.return_value = {
+            "ticker": "AAPL",
+            "rsi_14": 48.0,
+            "rsi_signal": "neutral",
+            "bollinger_pct_b": 0.4,
+            "atr_pct": 1.8,
+            "macd_signal": "bearish",
+            "relative_volume": 0.9,
+        }
+        resp = client.get("/api/ticker/AAPL/chart-data")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "indicators" in data
+        assert data["indicators"]["ticker"] == "AAPL"
+
+
 class TestEvaluateEndpoint:
     def test_evaluate_runs(self):
         resp = client.post("/api/evaluate")

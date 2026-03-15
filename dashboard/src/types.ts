@@ -6,7 +6,33 @@ export interface EventData {
   confidence: number;
   detected_at: string | null;
   article_ids: string[] | null;
-  metadata: Record<string, unknown> | null;
+  metadata: EventMetadata | null;
+}
+
+export interface TechnicalContext {
+  rsi: number;
+  rsi_signal: 'overbought' | 'oversold' | 'neutral';
+  bollinger_pct_b: number;
+  bollinger_signal: string;
+  atr_pct: number;
+  macd_signal: string;
+  relative_volume: number;
+  adjustments_applied: string[];
+}
+
+export interface EventMetadata {
+  options_flow?: {
+    direction?: string;
+    unusual_contract_count?: number;
+    max_conviction?: number;
+    dominant_expiry?: string;
+    dominant_strike?: number;
+    top_contracts?: OptionsFlowContract[];
+    put_call_ratio?: number;
+  };
+  technical_context?: TechnicalContext;
+  technical_notes?: string[];
+  [key: string]: unknown;
 }
 
 export interface Signal {
@@ -213,6 +239,7 @@ export interface ChartData {
   prices: PricePoint[];
   signals: SignalOverlay[];
   events: EventOverlay[];
+  indicators?: TechnicalIndicators | null;
 }
 
 export interface TickerFullSummary {
@@ -252,4 +279,21 @@ export interface OptionsFlowResult {
   top_contracts?: OptionsFlowContract[];
   unusual_contracts?: OptionsFlowContract[];
   put_call_ratio?: number;
+}
+
+export interface TechnicalIndicators {
+  ticker: string;
+  current_price: number;
+  rsi_14: number;
+  rsi_signal: 'overbought' | 'oversold' | 'neutral';
+  bollinger_pct_b: number;
+  bollinger_bandwidth: number;
+  bollinger_signal: string;
+  atr_14: number;
+  atr_pct: number;
+  macd_signal: string;
+  macd_histogram: number;
+  relative_volume: number;
+  trend_20d: number | null;
+  trend_50d: number | null;
 }
