@@ -16,8 +16,10 @@ from src.classification.event_classifier import EventClassifier
 from src.db.database import get_session
 from src.db.tables import Article, Event, Signal
 from src.detection.cross_source import CrossSourceValidator
+from src.detection.options_flow import OptionsFlowDetector
 from src.detection.sentiment_filter import SentimentFilter
 from src.detection.volume_detector import VolumeDetector
+from src.ingestion.market_fetcher import MarketFetcher
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -62,6 +64,7 @@ class AnomalyPipeline:
             batch_size=FINBERT_BATCH_SIZE,
         )
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
+        self.options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
         self.classifier = EventClassifier()
 
     def _get_recent_articles(self, ticker: str, session: Session) -> list:
@@ -72,6 +75,10 @@ class AnomalyPipeline:
             .filter(Article.ticker == ticker, Article.ingested_at >= cutoff)
             .all()
         )
+
+    def _check_options_flow(self, ticker: str) -> dict | None:
+        """Run unusual options activity scan for a single ticker."""
+        return self.options_flow.scan_ticker(ticker)
 
     def scan(self, tickers: list[str], session: Session | None = None) -> list[dict]:
         """Run the full three-stage detection pipeline.
@@ -144,6 +151,7 @@ class AnomalyPipeline:
                     "article_count": cross_result["article_count"],
                     "article_ids": article_ids,
                     "confidence_score": confidence,
+                    "source": "news_pipeline",
                 }
                 outliers.append(outlier)
 
@@ -155,9 +163,91 @@ class AnomalyPipeline:
                     cross_result["common_themes"], confidence,
                 )
 
+            # Stage 4: Options flow cross-validation and options-only detections
+            options_results = self.options_flow.scan_batch(tickers)
+            options_map = {row["ticker"]: row for row in options_results}
+            existing_tickers = {o["ticker"] for o in outliers}
+
+            for outlier in outliers:
+                ticker = outlier["ticker"]
+                options_data = options_map.get(ticker)
+                if not options_data:
+                    continue
+
+                outlier["options_flow"] = {
+                    "direction": options_data["direction"],
+                    "unusual_contract_count": options_data["unusual_contract_count"],
+                    "max_conviction": options_data["max_conviction"],
+                    "dominant_expiry": options_data["dominant_expiry"],
+                    "dominant_strike": options_data["dominant_strike"],
+                    "top_contracts": options_data["top_contracts"],
+                    "put_call_ratio": options_data["put_call_ratio"],
+                }
+
+                confidence = float(outlier["confidence_score"]) + 0.1
+                sentiment_dir = outlier.get("direction", "neutral")
+                flow_dir = options_data.get("direction", "neutral")
+                if (
+                    flow_dir in {"bullish", "bearish"}
+                    and sentiment_dir in {"bullish", "bearish"}
+                ):
+                    if flow_dir == sentiment_dir:
+                        confidence += 0.05
+                    else:
+                        confidence -= 0.1
+                outlier["confidence_score"] = max(0.0, min(1.0, confidence))
+
+            for ticker, options_data in options_map.items():
+                if ticker in existing_tickers:
+                    continue
+                if (
+                    options_data.get("max_conviction", 0.0) >= 0.7
+                    and options_data.get("unusual_contract_count", 0) >= 3
+                ):
+                    confidence = float(options_data["max_conviction"]) * 0.8
+                    outlier = {
+                        "ticker": ticker,
+                        "z_score": 0.0,
+                        "today_count": 0,
+                        "baseline_mean": 0.0,
+                        "baseline_std": 0.0,
+                        "mean_sentiment": 0.0,
+                        "max_magnitude": options_data["max_conviction"],
+                        "extreme_ratio": 0.0,
+                        "direction": options_data["direction"],
+                        "distinct_sources": 0,
+                        "sources": [],
+                        "common_themes": [],
+                        "article_count": 0,
+                        "article_ids": [],
+                        "confidence_score": confidence,
+                        "source": "options_flow",
+                        "options_flow": {
+                            "direction": options_data["direction"],
+                            "unusual_contract_count": options_data["unusual_contract_count"],
+                            "max_conviction": options_data["max_conviction"],
+                            "dominant_expiry": options_data["dominant_expiry"],
+                            "dominant_strike": options_data["dominant_strike"],
+                            "top_contracts": options_data["top_contracts"],
+                            "put_call_ratio": options_data["put_call_ratio"],
+                        },
+                    }
+                    outliers.append(outlier)
+                    logger.info(
+                        "OPTIONS-ONLY OUTLIER: %s — %s, %d unusual contracts, conviction=%.2f",
+                        ticker,
+                        options_data["direction"],
+                        options_data["unusual_contract_count"],
+                        options_data["max_conviction"],
+                    )
+
             logger.info(
-                "Scanned %d tickers: %d volume spikes -> %d passed sentiment -> %d confirmed outliers",
-                len(tickers), len(spiked_tickers), len(sentiment_passed), len(outliers),
+                "Scanned %d tickers: %d volume spikes -> %d passed sentiment -> %d confirmed outliers (%d options-flow)",
+                len(tickers),
+                len(spiked_tickers),
+                len(sentiment_passed),
+                len(outliers),
+                len(options_results),
             )
             return outliers
 
@@ -190,6 +280,10 @@ class AnomalyPipeline:
                 cls_result = self.classifier.classify_event(
                     articles,
                     common_themes=outlier.get("common_themes", []),
+                    event_hint=outlier.get("source"),
+                    options_flow=outlier.get("options_flow"),
+                    fallback_direction=outlier.get("direction"),
+                    fallback_confidence=outlier.get("confidence_score"),
                 )
 
                 # Blend detection confidence with classifier confidence
@@ -210,6 +304,8 @@ class AnomalyPipeline:
                         "distinct_sources": outlier["distinct_sources"],
                         "sources": outlier["sources"],
                         "common_themes": outlier["common_themes"],
+                        "source": outlier.get("source", "news_pipeline"),
+                        "options_flow": outlier.get("options_flow"),
                         "classified_type": cls_result["event_type"],
                         "vote_distribution": cls_result["vote_distribution"],
                         "top_keywords": cls_result["top_keywords"],
@@ -242,7 +338,6 @@ class AnomalyPipeline:
         2. SignalEngine.generate_and_store — signal generation
         Returns the list of created Signal objects.
         """
-        from src.ingestion.market_fetcher import MarketFetcher
         from src.signals.signal_engine import SignalEngine
 
         def _run(s: Session) -> list[Signal]:

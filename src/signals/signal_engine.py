@@ -94,6 +94,15 @@ EVENT_PROFILES: dict[str, dict] = {
         "decay_type": "moderate",
         "base_confidence": 0.80,
     },
+    "options_flow": {
+        "direction": "call",
+        "expected_move_pct": 0.08,
+        "strike_offset_pct": 0.0,
+        "expiry_days_min": 5,
+        "expiry_days_max": 14,
+        "decay_type": "spike_fade",
+        "base_confidence": 0.70,
+    },
 }
 
 # Demo-only profile for "other" events (routine news) — direction set from event sentiment
@@ -363,10 +372,21 @@ class SignalEngine:
             return None
 
         profile = dict(self._event_profiles[event_type])
+        metadata = event.get("metadata") or {}
+        options_meta = metadata.get("options_flow") or event.get("options_flow") or {}
+
         # Demo mode "other": direction from event sentiment (call = neutral/bullish, put = bearish)
         if self.demo and event_type == "other":
             event_direction = (event.get("direction") or "bullish").lower()
             profile["direction"] = "put" if event_direction == "bearish" else "call"
+        if event_type == "options_flow":
+            flow_direction = str(
+                options_meta.get("direction", event.get("direction", "bullish"))
+            ).lower()
+            if flow_direction == "bearish":
+                profile["direction"] = "put"
+            else:
+                profile["direction"] = "call"
         ticker = event["ticker"]
 
         # Get current price
@@ -385,6 +405,16 @@ class SignalEngine:
             profile["expiry_days_max"],
             profile["decay_type"],
         )
+        if event_type == "options_flow":
+            dominant_strike = options_meta.get("dominant_strike")
+            if dominant_strike is not None:
+                try:
+                    strike = float(dominant_strike)
+                except (TypeError, ValueError):
+                    pass
+            dominant_expiry = options_meta.get("dominant_expiry")
+            if dominant_expiry:
+                expiry = str(dominant_expiry)
 
         # Try to find a real contract
         contract = self.find_best_contract(ticker, direction, strike, expiry)
@@ -406,6 +436,15 @@ class SignalEngine:
             f"Expected ~{profile['expected_move_pct']:.0%} {move_direction} move "
             f"with {profile['decay_type']} impact."
         )
+        if event_type == "options_flow":
+            unusual_count = int(options_meta.get("unusual_contract_count", 0))
+            max_conviction = float(options_meta.get("max_conviction", 0.0))
+            smart_money = str(options_meta.get("direction", "neutral"))
+            reasoning += (
+                " Unusual options activity detected: "
+                f"{unusual_count} contracts with conviction {max_conviction:.2f}. "
+                f"Smart money appears {smart_money}."
+            )
 
         logger.info(
             "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f) — %s",

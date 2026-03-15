@@ -31,6 +31,7 @@ _DIRECTION_MAP: dict[str, str] = {
     "breakthrough": "bullish",
     "major_contract": "bullish",
     "earnings_beat": "bullish",
+    "options_flow": "neutral",
     "other": "neutral",
 }
 
@@ -226,6 +227,10 @@ class EventClassifier:
         self,
         articles: list,
         common_themes: list[str] | None = None,
+        event_hint: str | None = None,
+        options_flow: dict | None = None,
+        fallback_direction: str | None = None,
+        fallback_confidence: float | None = None,
     ) -> dict:
         """Classify a group of articles flagged as an outlier event.
 
@@ -233,6 +238,26 @@ class EventClassifier:
         Ties are broken by highest average score for that type.
         """
         if not articles:
+            if event_hint == "options_flow":
+                dynamic_direction = "neutral"
+                if options_flow and options_flow.get("direction") in {"bullish", "bearish"}:
+                    dynamic_direction = str(options_flow["direction"])
+                elif fallback_direction in {"bullish", "bearish"}:
+                    dynamic_direction = str(fallback_direction)
+
+                confidence = (
+                    float(options_flow.get("max_conviction", 0.0))
+                    if options_flow
+                    else float(fallback_confidence or 0.0)
+                )
+                return {
+                    "event_type": "options_flow",
+                    "direction": dynamic_direction,
+                    "confidence": confidence,
+                    "article_classifications": [],
+                    "vote_distribution": {"options_flow": 1},
+                    "top_keywords": [],
+                }
             return {
                 "event_type": "other",
                 "direction": "neutral",

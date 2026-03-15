@@ -13,6 +13,9 @@ function confidenceColor(c: number): string {
 
 export default function SignalCard({ signal, onTickerClick }: Props) {
   const isCall = signal.direction === 'call'
+  const optionsMeta = (signal.event?.metadata as { options_flow?: { direction?: string } } | null)?.options_flow
+  const hasUoa = signal.event?.event_type === 'options_flow' || Boolean(optionsMeta)
+  const smartMoneyDirection = optionsMeta?.direction
 
   return (
     <div className={`card relative overflow-hidden border-l-[3px] ${isCall ? 'border-l-accent-green' : 'border-l-accent-red'}`}>
@@ -65,6 +68,11 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             {signal.event.event_type.replace(/_/g, ' ')}
           </span>
         )}
+        {hasUoa && (
+          <span className="inline-block px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-sans font-medium uppercase tracking-wider">
+            UOA
+          </span>
+        )}
         {signal.exploratory && (
           <span className="inline-block px-2 py-0.5 rounded bg-accent-amber/20 text-accent-amber text-[10px] font-sans font-medium uppercase tracking-wider">
             Exploratory
@@ -73,6 +81,11 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
         {signal.discovery_source && (
           <span className="inline-block px-2 py-0.5 rounded bg-surface-tertiary text-txt-tertiary text-[10px] font-sans">
             {signal.discovery_source === 'both' ? 'Discovered via news + volume' : signal.discovery_source === 'news_scanner' ? 'Discovered via news' : signal.discovery_source === 'volume_screener' ? 'Discovered via volume' : 'Manual'}
+          </span>
+        )}
+        {smartMoneyDirection && (
+          <span className="inline-block px-2 py-0.5 rounded bg-surface-tertiary text-txt-tertiary text-[10px] font-sans">
+            Smart money: {smartMoneyDirection}
           </span>
         )}
       </div>

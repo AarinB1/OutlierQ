@@ -9,7 +9,7 @@ Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings
 ## How It Works
 
 1. **Ingest** — Pulls news articles from Finnhub and market data from yfinance on a schedule
-2. **Detect** — Scores articles with VADER sentiment, computes z-scores for volume spikes, and flags statistical outliers
+2. **Detect** — Scores articles with FinBERT sentiment, computes z-scores for volume spikes, detects unusual options activity (UOA), and flags statistical outliers
 3. **Classify** — Categorizes outlier events (scandal, FDA approval, earnings beat/miss, etc.) and infers bullish/bearish direction
 4. **Signal** — Maps each classified event to a call or put recommendation with suggested strike price and expiration
 5. **Track** — Evaluates past signals against actual price movement to measure accuracy and improve over time
@@ -19,7 +19,7 @@ Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings
 | Phase | Module | Description |
 |-------|--------|-------------|
 | 1 | **Ingestion** | Fetch news (Finnhub), market data (yfinance), social (Reddit) |
-| 2 | **Detection** | Z-score spike detection, sentiment scoring, cross-source confirmation |
+| 2 | **Detection** | Z-score spike detection, FinBERT sentiment scoring, unusual options flow (UOA), cross-source confirmation |
 | 3 | **Classification** | Categorize events (scandal, FDA, earnings, etc.) and assign direction |
 | 4 | **Signals** | Generate call/put recommendations with strike & expiry suggestions |
 | 5 | **Dashboard** | React frontend + feedback tracking for monitoring signals and accuracy |
@@ -107,7 +107,8 @@ python3 scripts/run_ingestion.py --signals --demo --anytime --tickers AAPL,TSLA,
 - **SQLAlchemy** — ORM and database management
 - **Pydantic** — data validation and serialization
 - **APScheduler** — job scheduling during market hours
-- **VADER** — sentiment analysis
+- **FinBERT (Transformers + PyTorch)** — financial sentiment analysis
+- **Unusual Options Activity (UOA)** — options flow detection using yfinance options chain
 - **FastAPI** — REST API backend
 - **React + TypeScript** — dashboard frontend
 - **Tailwind CSS** — dashboard styling

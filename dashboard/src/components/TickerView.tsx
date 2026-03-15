@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats } from '../api'
-import type { TickerSummary, ChartData, CompanyInfo, KeyStats } from '../types'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow } from '../api'
+import type { TickerSummary, ChartData, CompanyInfo, KeyStats, OptionsFlowResult } from '../types'
 import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
@@ -21,6 +21,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   const [info, setInfo] = useState<CompanyInfo | null>(null)
   const [stats, setStats] = useState<KeyStats | null>(null)
   const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [optionsFlow, setOptionsFlow] = useState<OptionsFlowResult | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [period, setPeriod] = useState('6mo')
 
@@ -43,6 +44,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       setInfo(null)
       setStats(null)
       setChartData(null)
+      setOptionsFlow(null)
       return
     }
     setDetailLoading(true)
@@ -51,8 +53,9 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       fetchCompanyInfo(selected),
       fetchKeyStats(selected),
       fetchChartData(selected, period),
+      fetchOptionsFlow(selected),
     ])
-      .then(([i, s, c]) => { setInfo(i); setStats(s); setChartData(c) })
+      .then(([i, s, c, o]) => { setInfo(i); setStats(s); setChartData(c); setOptionsFlow(o) })
       .catch(e => setError(e.message))
       .finally(() => setDetailLoading(false))
   }, [selected, period])
@@ -108,6 +111,90 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
         )}
 
         {stats && <StatsGrid stats={stats} />}
+
+        {optionsFlow?.unusual_activity && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-mono font-bold text-sm text-txt-primary">Options Flow</h3>
+              <span className={`pill ${
+                optionsFlow.direction === 'bullish'
+                  ? 'bg-accent-green-muted text-accent-green'
+                  : optionsFlow.direction === 'bearish'
+                    ? 'bg-accent-red-muted text-accent-red'
+                    : 'bg-surface-tertiary text-txt-secondary'
+              }`}>
+                {(optionsFlow.direction || 'neutral').toUpperCase()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-xs">
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Unusual contracts</div>
+                <div className="font-mono text-txt-primary text-base">{optionsFlow.unusual_contract_count ?? 0}</div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Put/Call ratio</div>
+                <div className="font-mono text-txt-primary text-base">{(optionsFlow.put_call_ratio ?? 0).toFixed(2)}</div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Dominant strike</div>
+                <div className="font-mono text-txt-primary text-base">
+                  {optionsFlow.dominant_strike != null ? `$${optionsFlow.dominant_strike.toFixed(2)}` : '—'}
+                </div>
+              </div>
+              <div className="bg-surface-tertiary rounded p-2">
+                <div className="text-txt-tertiary">Dominant expiry</div>
+                <div className="font-mono text-txt-primary text-base">{optionsFlow.dominant_expiry || '—'}</div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-txt-secondary text-xs">Max conviction</span>
+                <span className="font-mono text-xs text-txt-secondary">
+                  {Math.round((optionsFlow.max_conviction ?? 0) * 100)}%
+                </span>
+              </div>
+              <div className="h-1 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <div
+                  className="h-full rounded-full bg-accent-blue"
+                  style={{ width: `${(optionsFlow.max_conviction ?? 0) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-txt-tertiary border-b border-border">
+                    <th className="text-left py-2 pr-2">Type</th>
+                    <th className="text-left py-2 pr-2">Strike</th>
+                    <th className="text-left py-2 pr-2">Expiry</th>
+                    <th className="text-left py-2 pr-2">Volume</th>
+                    <th className="text-left py-2 pr-2">OI</th>
+                    <th className="text-left py-2 pr-2">Vol/OI</th>
+                    <th className="text-left py-2">Conviction</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(optionsFlow.top_contracts || []).slice(0, 5).map((c) => (
+                    <tr key={c.contract_symbol} className="border-b border-border/40">
+                      <td className={`py-2 pr-2 font-mono ${c.type === 'call' ? 'text-accent-green' : 'text-accent-red'}`}>
+                        {c.type.toUpperCase()}
+                      </td>
+                      <td className="py-2 pr-2 font-mono text-txt-primary">${c.strike.toFixed(2)}</td>
+                      <td className="py-2 pr-2 font-mono text-txt-secondary">{c.expiry}</td>
+                      <td className="py-2 pr-2 font-mono text-txt-primary">{c.volume.toLocaleString()}</td>
+                      <td className="py-2 pr-2 font-mono text-txt-secondary">{c.open_interest.toLocaleString()}</td>
+                      <td className="py-2 pr-2 font-mono text-txt-secondary">{c.volume_oi_ratio.toFixed(2)}x</td>
+                      <td className="py-2 font-mono text-accent-blue">{Math.round(c.conviction_score * 100)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {chartData && <SignalHistory signals={chartData.signals} />}
       </div>

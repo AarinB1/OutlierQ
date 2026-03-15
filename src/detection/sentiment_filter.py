@@ -141,8 +141,9 @@ class SentimentFilter:
             headlines = [article.headline for article in articles]
             scores = self.finbert.analyze_batch(headlines, batch_size=self.batch_size)
             for article, result in zip(articles, scores, strict=False):
-                article.sentiment_score = float(result["compound"])
-                article.sentiment_magnitude = float(result["confidence"])
+                compound = float(result["compound"])
+                article.sentiment_score = compound
+                article.sentiment_magnitude = abs(compound)
                 s.add(article)
             logger.info("Updated sentiment scores for %d articles", len(articles))
 

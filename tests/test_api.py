@@ -158,6 +158,33 @@ class TestScanEndpoint:
         assert resp.status_code == 400
 
 
+class TestOptionsFlowEndpoint:
+    @patch("src.api.app._options_flow")
+    def test_options_flow_no_activity(self, mock_flow):
+        mock_flow.scan_ticker.return_value = None
+        resp = client.get("/api/ticker/AAPL/options-flow")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ticker"] == "AAPL"
+        assert data["unusual_activity"] is False
+
+    @patch("src.api.app._options_flow")
+    def test_options_flow_with_activity(self, mock_flow):
+        mock_flow.scan_ticker.return_value = {
+            "ticker": "AAPL",
+            "unusual_activity": True,
+            "direction": "bullish",
+            "unusual_contract_count": 4,
+            "max_conviction": 0.8,
+            "top_contracts": [],
+        }
+        resp = client.get("/api/ticker/AAPL/options-flow")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["unusual_activity"] is True
+        assert data["direction"] == "bullish"
+
+
 class TestEvaluateEndpoint:
     def test_evaluate_runs(self):
         resp = client.post("/api/evaluate")

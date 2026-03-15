@@ -15,6 +15,7 @@ from config.settings import LOG_FORMAT
 from src.db.database import SessionLocal, init_db
 from src.db.tables import Article, Event, Signal
 from src.data.stock_data import StockDataService
+from src.detection.options_flow import OptionsFlowDetector
 from src.discovery.discovery_db import DiscoveredTicker
 from src.ingestion.market_fetcher import MarketFetcher
 from src.signals.feedback_tracker import FeedbackTracker
@@ -181,6 +182,7 @@ def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
 # ── Ticker data (per-ticker endpoints) ────────────────────────────────
 
 _stock_svc = StockDataService()
+_options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
 
 
 @app.get("/api/ticker/{ticker}/price-history")
@@ -221,6 +223,14 @@ def ticker_chart_data(
 @app.get("/api/ticker/{ticker}/summary")
 def ticker_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
     return _stock_svc.get_summary(ticker.upper(), session=db)
+
+
+@app.get("/api/ticker/{ticker}/options-flow")
+def ticker_options_flow(ticker: str) -> dict:
+    result = _options_flow.scan_ticker(ticker.upper())
+    if result is None:
+        return {"ticker": ticker.upper(), "unusual_activity": False}
+    return result
 
 
 # ── Actions ───────────────────────────────────────────────────────────

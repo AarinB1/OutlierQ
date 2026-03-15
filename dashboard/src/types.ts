@@ -221,3 +221,35 @@ export interface TickerFullSummary {
   signals: SignalOverlay[];
   events: EventOverlay[];
 }
+
+export interface OptionsFlowContract {
+  contract_symbol: string;
+  type: 'call' | 'put';
+  strike: number;
+  expiry: string;
+  volume: number;
+  open_interest: number;
+  volume_oi_ratio: number;
+  implied_volatility: number;
+  otm_pct: number;
+  days_to_expiry: number;
+  conviction_score: number;
+  flags: string[];
+}
+
+export interface OptionsFlowResult {
+  ticker: string;
+  unusual_activity: boolean;
+  direction?: 'bullish' | 'bearish' | 'neutral';
+  bullish_weight?: number;
+  bearish_weight?: number;
+  total_unusual_call_volume?: number;
+  total_unusual_put_volume?: number;
+  max_conviction?: number;
+  dominant_expiry?: string;
+  dominant_strike?: number;
+  unusual_contract_count?: number;
+  top_contracts?: OptionsFlowContract[];
+  unusual_contracts?: OptionsFlowContract[];
+  put_call_ratio?: number;
+}
