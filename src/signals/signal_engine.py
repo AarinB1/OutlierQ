@@ -110,7 +110,7 @@ DEMO_OTHER_PROFILE = {
 # Exploratory signal thresholds (for "other" events in production)
 EXPLORATORY_MIN_CONFIDENCE = 0.5
 EXPLORATORY_BULLISH_SENTIMENT = 0.15
-EXPLORATORY_BEARISH_SENTIMENT = -0.08
+EXPLORATORY_BEARISH_SENTIMENT = -0.1
 EXPLORATORY_PROFILE = {
     "expected_move_pct": 0.04,
     "strike_offset_pct": 0.02,

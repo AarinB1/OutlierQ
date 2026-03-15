@@ -304,21 +304,21 @@ class TestGenerateSignal:
         assert signal["exploratory"] is True
 
     def test_exploratory_signal_mildly_bearish(self, mock_market):
-        """Event type 'other' with mean_sentiment -0.09 should now generate a put (lowered threshold)."""
+        """Event type 'other' with mean_sentiment -0.11 should generate a put."""
         engine = SignalEngine(market_fetcher=mock_market)
         signal = engine.generate_signal({
             "ticker": "AAPL",
             "event_type": "other",
             "event_id": "evt-mild-bear",
             "confidence": 0.55,
-            "metadata": {"mean_sentiment": -0.09},
+            "metadata": {"mean_sentiment": -0.11},
         })
         assert signal is not None
         assert signal["direction"] == "put"
         assert signal["exploratory"] is True
 
     def test_exploratory_signal_neutral_skips(self, mock_market):
-        """Event type 'other' with mean_sentiment 0.05 (between -0.08 and 0.15) -> returns None."""
+        """Event type 'other' with mean_sentiment 0.05 (between -0.10 and 0.15) -> returns None."""
         engine = SignalEngine(market_fetcher=mock_market)
         signal = engine.generate_signal({
             "ticker": "AAPL",
