@@ -32,6 +32,10 @@ FALSE_POSITIVE_TICKERS = frozenset({
     "ME", "MY", "NO", "OF", "OK", "ON", "OR", "SO", "TO", "TV", "UK", "US", "WE",
     "CEO", "FDA", "SEC", "IPO", "ETF", "GDP", "NYSE", "USA", "API", "LLC", "INC",
     "CFO", "CTO", "COO", "NA", "PM", "AM", "EU", "PR", "HR", "IR", "OT", "DD",
+    "THE", "FOR", "AND", "BUT", "NOT", "ALL", "HAS", "NEW", "ARE", "CAN", "HIS",
+    "HER", "WAS", "ONE", "OUR", "OUT", "ANY", "WHO", "OIL", "OLD", "SEE", "NOW",
+    "WAY", "MAY", "SAY", "SHE", "TWO", "HOW", "ITS", "LET", "SAY", "HER", "TOP",
+    "BIG", "LOW", "RUN", "SET", "TRY", "YET", "END",
 })
 
 # S&P 500 subset — exclude these so we surface small/mid caps. Extend or fetch from API as needed.

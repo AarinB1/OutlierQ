@@ -228,7 +228,7 @@ def test_was_recently_scanned(db_session):
         "ticker": "MRNA",
         "discovery_method": "news_scanner",
         "discovery_confidence": 0.5,
-        "discovered_at": datetime.now(timezone.utc) - timedelta(minutes=30),
+        "discovered_at": datetime.now(timezone.utc) - timedelta(minutes=20),
         "scanned": True,
         "signal_generated": False,
     })
