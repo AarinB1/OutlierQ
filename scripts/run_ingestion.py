@@ -134,6 +134,16 @@ def parse_args() -> argparse.Namespace:
         help="Print trading model status and recent results",
     )
     parser.add_argument(
+        "--tune-trading",
+        action="store_true",
+        help="Run Optuna hyperparameter tuning for trading models",
+    )
+    parser.add_argument(
+        "--trading-scheduler",
+        action="store_true",
+        help="Run trading scheduler: weekly retrain, 15m signals, hourly snapshots",
+    )
+    parser.add_argument(
         "--trading-api",
         action="store_true",
         help="Start the FastAPI server with trading routes (same as --api)",
@@ -815,6 +825,88 @@ def run_trading_status() -> None:
     print()
 
 
+def run_tune_trading() -> None:
+    """Run Optuna tuning for trading models."""
+    from src.trading.training.hyperparameter_tuner import HyperparameterTuner
+
+    print(f"\n{'='*60}")
+    print("  TUNING TRADING MODEL HYPERPARAMETERS")
+    print(f"{'='*60}")
+    tuner = HyperparameterTuner(n_trials=20)
+    result = tuner.run()
+    if "error" in result:
+        print(f"\nTuning failed: {result['error']}\n")
+        return
+    print(f"\n  Best Val Sharpe (proxy): {result.get('best_val_sharpe', 0.0):.3f}")
+    print(f"  Trials:                  {result.get('n_trials', 0)}")
+    print(f"  Best Params:             {result.get('best_params', {})}\n")
+
+
+def run_trading_scheduler(tickers: list[str]) -> None:
+    """Run trading-specific APScheduler jobs."""
+    from datetime import datetime, timezone
+
+    from apscheduler.schedulers.blocking import BlockingScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from src.db.database import get_session
+    from src.trading.risk.portfolio import VirtualPortfolio
+    from src.trading.signals.trade_signal_engine import TradeSignalEngine
+    from src.trading.training.trainer import TradingTrainer
+
+    print("\n🚀 TRADING SCHEDULER MODE — weekly retrain, 15m signals, hourly snapshots.\n")
+    scheduler = BlockingScheduler()
+    engine = TradeSignalEngine()
+    portfolio = VirtualPortfolio()
+
+    def retrain_job() -> None:
+        logger.info("Trading scheduler: weekly retrain started")
+        try:
+            TradingTrainer().train_all_models(ticker="SPY", period="2y")
+        except Exception:
+            logger.exception("Trading scheduler retrain job failed")
+
+    def signals_job() -> None:
+        logger.info("Trading scheduler: signal generation for %s", tickers)
+        try:
+            with get_session() as s:
+                engine.generate_batch(tickers=tickers, session=s, timeframe="daily")
+        except Exception:
+            logger.exception("Trading scheduler signals job failed")
+
+    def snapshot_job() -> None:
+        logger.info("Trading scheduler: portfolio snapshot")
+        try:
+            with get_session() as s:
+                portfolio.snapshot(session=s, now=datetime.now(timezone.utc))
+        except Exception:
+            logger.exception("Trading scheduler snapshot job failed")
+
+    scheduler.add_job(
+        retrain_job,
+        trigger=CronTrigger(day_of_week="sun", hour=12, minute=0, timezone="UTC"),
+        id="trading_retrain_weekly",
+        name="Trading retrain weekly",
+    )
+    scheduler.add_job(
+        signals_job,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/15", timezone="US/Eastern"),
+        id="trading_signals_15m",
+        name="Trading signals every 15m",
+    )
+    scheduler.add_job(
+        snapshot_job,
+        trigger=CronTrigger(minute=0),
+        id="trading_portfolio_snapshot_hourly",
+        name="Trading portfolio snapshot hourly",
+    )
+
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown(wait=False)
+        logger.info("Trading scheduler stopped by user.")
+
+
 def main() -> None:
     args = parse_args()
 
@@ -830,6 +922,15 @@ def main() -> None:
 
     if args.train_trading:
         run_train_trading()
+        return
+
+    if args.tune_trading:
+        run_tune_trading()
+        return
+
+    if args.trading_scheduler:
+        tickers = [t.strip().upper() for t in args.tickers.split(",")]
+        run_trading_scheduler(tickers=tickers)
         return
 
     if args.backtest_trading:
