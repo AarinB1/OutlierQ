@@ -70,7 +70,7 @@ class StockDataService:
 
     # ── Company info ───────────────────────────────────────────────────
 
-    def get_company_info(self, ticker: str) -> dict:
+    def get_info(self, ticker: str) -> dict:
         """Return basic company information."""
         cache_key = f"info:{ticker}"
         cached = self._get_cached(cache_key)
@@ -96,7 +96,6 @@ class StockDataService:
             "beta": info.get("beta"),
         }
 
-        # Calculate change
         price = result["current_price"]
         prev = result["previous_close"]
         if price and prev and prev != 0:
@@ -111,7 +110,7 @@ class StockDataService:
 
     # ── Key stats ──────────────────────────────────────────────────────
 
-    def get_key_stats(self, ticker: str) -> dict:
+    def get_stats(self, ticker: str) -> dict:
         """Return computed stats: weekly/monthly/YTD returns, volatility."""
         cache_key = f"stats:{ticker}"
         cached = self._get_cached(cache_key)
@@ -136,13 +135,11 @@ class StockDataService:
                 return round((current / float(closes.iloc[-n - 1]) - 1) * 100, 2)
             return None
 
-        # YTD
         year_start = df[df.index >= f"{datetime.now().year}-01-01"]
         ytd = None
         if not year_start.empty:
             ytd = round((current / float(year_start["Close"].iloc[0]) - 1) * 100, 2)
 
-        # 30-day volatility (annualized)
         vol = None
         if len(closes) >= 30:
             returns = closes.pct_change().dropna().tail(30)
@@ -233,13 +230,13 @@ class StockDataService:
             "events": self.get_events_overlay(ticker, session=session),
         }
 
-    def get_ticker_summary(
+    def get_summary(
         self, ticker: str, session: Session | None = None
     ) -> dict:
         """Return a full summary: info + stats + recent signals."""
         return {
-            "info": self.get_company_info(ticker),
-            "stats": self.get_key_stats(ticker),
+            "info": self.get_info(ticker),
+            "stats": self.get_stats(ticker),
             "signals": self.get_signals_overlay(ticker, session=session),
             "events": self.get_events_overlay(ticker, session=session),
         }

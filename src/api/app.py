@@ -16,6 +16,7 @@ from src.db.database import SessionLocal, init_db
 from src.db.tables import Article, Event, Signal
 from src.data.stock_data import StockDataService
 from src.discovery.discovery_db import DiscoveredTicker
+from src.data.stock_data import StockDataService
 from src.ingestion.market_fetcher import MarketFetcher
 from src.signals.feedback_tracker import FeedbackTracker
 
@@ -180,6 +181,60 @@ def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
             "last_signal_date": last_sig.isoformat() if last_sig else None,
         })
     return results
+
+
+# ── Ticker data (per-ticker endpoints) ────────────────────────────────
+
+_stock_svc = StockDataService()
+
+
+@app.get("/api/ticker/{ticker}/price-history")
+def ticker_price_history(
+    ticker: str,
+    period: str = Query("3mo", description="1d, 5d, 1mo, 3mo, 6mo, 1y, 5y, max"),
+    interval: str = Query("1d", description="1m, 5m, 15m, 1h, 1d, 1wk, 1mo"),
+) -> dict:
+    data = _stock_svc.get_price_history(ticker.upper(), period=period, interval=interval)
+    return {"ticker": ticker.upper(), "period": period, "interval": interval, "data": data}
+
+
+@app.get("/api/ticker/{ticker}/intraday")
+def ticker_intraday(ticker: str) -> dict:
+    data = _stock_svc.get_intraday(ticker.upper())
+    return {"ticker": ticker.upper(), "interval": "5m", "data": data}
+
+
+@app.get("/api/ticker/{ticker}/info")
+def ticker_info(ticker: str) -> dict:
+    return _stock_svc.get_info(ticker.upper())
+
+
+@app.get("/api/ticker/{ticker}/stats")
+def ticker_stats(ticker: str) -> dict:
+    return _stock_svc.get_stats(ticker.upper())
+
+
+@app.get("/api/ticker/{ticker}/chart-data")
+def ticker_chart_data(
+    ticker: str,
+    period: str = Query("6mo"),
+    db: Session = Depends(get_db),
+) -> dict:
+    t = ticker.upper()
+    chart = _stock_svc.get_chart_data(t, period=period, session=db)
+    return {
+        "ticker": t,
+        "info": _stock_svc.get_info(t),
+        "stats": _stock_svc.get_stats(t),
+        "price_history": chart["prices"],
+        "signals": chart["signals"],
+        "events": chart["events"],
+    }
+
+
+@app.get("/api/ticker/{ticker}/summary")
+def ticker_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
+    return _stock_svc.get_summary(ticker.upper(), session=db)
 
 
 # ── Actions ───────────────────────────────────────────────────────────
