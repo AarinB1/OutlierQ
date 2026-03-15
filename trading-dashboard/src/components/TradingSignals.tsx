@@ -1,146 +1,83 @@
 import { useEffect, useState } from 'react'
-import type { TradingSignal, TradingMetrics } from '../types'
-import { api } from '../api'
+import { fetchTradingSignals, generateTradingSignals } from '../api'
+import type { TradingSignal } from '../types'
 
 export default function TradingSignals() {
   const [signals, setSignals] = useState<TradingSignal[]>([])
-  const [metrics, setMetrics] = useState<TradingMetrics | null>(null)
+  const [ticker, setTicker] = useState('AAPL')
   const [loading, setLoading] = useState(true)
-  const [sortBy, setSortBy] = useState<'confidence' | 'created_at'>('created_at')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    fetchTradingSignals()
+      .then(setSignals)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }
 
   useEffect(() => {
-    Promise.all([api.getSignals(), api.getMetrics()])
-      .then(([sigs, m]) => {
-        setSignals(sigs)
-        setMetrics(m)
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    load()
   }, [])
 
-  const sorted = [...signals].sort((a, b) =>
-    sortBy === 'confidence'
-      ? b.confidence - a.confidence
-      : (b.created_at ?? '').localeCompare(a.created_at ?? ''),
-  )
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="skeleton h-28 w-full" />
-        ))}
-      </div>
-    )
+  const onGenerate = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await generateTradingSignals({ ticker: ticker.toUpperCase(), timeframe: 'daily' })
+      load()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed generating signals')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold font-sans">Trading Signals</h2>
+      <div className="flex justify-between items-center mb-5">
+        <h2 className="font-mono font-bold text-lg">Trading Signals</h2>
         <div className="flex gap-2">
-          <button
-            className={`btn-secondary ${sortBy === 'created_at' ? '!border-accent-blue !text-accent-blue' : ''}`}
-            onClick={() => setSortBy('created_at')}
-          >
-            Recent
-          </button>
-          <button
-            className={`btn-secondary ${sortBy === 'confidence' ? '!border-accent-blue !text-accent-blue' : ''}`}
-            onClick={() => setSortBy('confidence')}
-          >
-            Confidence
+          <input
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value)}
+            className="bg-surface-secondary border border-border rounded px-3 py-2 text-sm"
+            placeholder="Ticker"
+          />
+          <button className="btn-primary" onClick={onGenerate} disabled={busy}>
+            {busy ? 'Generating...' : 'Generate Signal'}
           </button>
         </div>
       </div>
-
-      {/* Metrics row */}
-      {metrics && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <StatCard label="Total Signals" value={metrics.total_signals} />
-          <StatCard label="Active" value={metrics.active_signals} color="blue" />
-          <StatCard label="Win Rate" value={`${(metrics.win_rate * 100).toFixed(0)}%`} color="green" />
-          <StatCard label="Total P&L" value={`$${metrics.total_pnl.toFixed(0)}`} color={metrics.total_pnl >= 0 ? 'green' : 'red'} />
+      {error && <div className="card mb-3 text-accent-red text-sm">{error}</div>}
+      {loading ? (
+        <div className="card">Loading...</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {signals.map((s) => (
+            <div key={s.id} className="card">
+              <div className="flex justify-between mb-2">
+                <span className="font-mono font-bold text-xl">{s.ticker}</span>
+                <span
+                  className={`pill ${
+                    s.direction === 'BUY' ? 'bg-accent-green-muted text-accent-green' : 'bg-accent-red-muted text-accent-red'
+                  }`}
+                >
+                  {s.direction}
+                </span>
+              </div>
+              <div className="text-sm text-txt-secondary mb-1">Strategy: {s.strategy_name}</div>
+              <div className="text-sm text-txt-secondary mb-1">Confidence: {(s.confidence * 100).toFixed(0)}%</div>
+              <div className="text-sm text-txt-secondary">
+                Entry {s.entry_price?.toFixed(2)} / Target {s.target_price?.toFixed(2)} / Stop {s.stop_loss?.toFixed(2)}
+              </div>
+            </div>
+          ))}
+          {signals.length === 0 && <div className="card">No trading signals yet.</div>}
         </div>
       )}
-
-      {/* Signal cards */}
-      <div className="space-y-3">
-        {sorted.length === 0 && (
-          <div className="card text-center py-12 text-txt-secondary">
-            No trading signals yet. Generate signals from the Strategy page.
-          </div>
-        )}
-        {sorted.map((sig) => (
-          <SignalCard key={sig.id} signal={sig} />
-        ))}
-      </div>
     </div>
   )
 }
 
-function SignalCard({ signal }: { signal: TradingSignal }) {
-  const dirColor = signal.direction === 'BUY'
-    ? 'text-accent-green bg-accent-green-muted'
-    : 'text-accent-red bg-accent-red-muted'
-
-  return (
-    <div className="card flex items-center gap-6">
-      {/* Direction badge */}
-      <div className={`pill ${dirColor}`}>{signal.direction}</div>
-
-      {/* Ticker + strategy */}
-      <div className="min-w-[100px]">
-        <div className="font-mono font-bold text-lg">{signal.ticker}</div>
-        <div className="text-xs text-txt-tertiary">{signal.strategy_name}</div>
-      </div>
-
-      {/* Prices */}
-      <div className="flex gap-6 text-sm font-mono">
-        <div>
-          <span className="label block">Entry</span>
-          ${signal.entry_price?.toFixed(2) ?? '—'}
-        </div>
-        <div>
-          <span className="label block">Target</span>
-          <span className="text-accent-green">${signal.target_price?.toFixed(2) ?? '—'}</span>
-        </div>
-        <div>
-          <span className="label block">Stop</span>
-          <span className="text-accent-red">${signal.stop_loss?.toFixed(2) ?? '—'}</span>
-        </div>
-      </div>
-
-      {/* Confidence bar */}
-      <div className="flex-1 ml-4">
-        <div className="flex justify-between text-xs mb-1">
-          <span className="label">Confidence</span>
-          <span className="font-mono">{(signal.confidence * 100).toFixed(0)}%</span>
-        </div>
-        <div className="h-2 bg-surface-tertiary rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              signal.confidence > 0.7 ? 'bg-accent-green' : signal.confidence > 0.5 ? 'bg-accent-amber' : 'bg-accent-red'
-            }`}
-            style={{ width: `${signal.confidence * 100}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Timeframe */}
-      <div className="pill bg-surface-tertiary text-txt-secondary">
-        {signal.timeframe ?? 'swing'}
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
-  const colorClass = color === 'green' ? 'text-accent-green' : color === 'red' ? 'text-accent-red' : color === 'blue' ? 'text-accent-blue' : 'text-txt-primary'
-  return (
-    <div className="card">
-      <div className="label mb-2">{label}</div>
-      <div className={`stat-number ${colorClass}`}>{value}</div>
-    </div>
-  )
-}

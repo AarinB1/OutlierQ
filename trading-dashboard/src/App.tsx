@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { Page } from './types'
 import Layout from './components/Layout'
 import TradingSignals from './components/TradingSignals'
 import BacktestPanel from './components/BacktestPanel'
@@ -9,22 +8,30 @@ import RiskDashboard from './components/RiskDashboard'
 import StrategyBuilder from './components/StrategyBuilder'
 import ChartView from './components/ChartView'
 
+export type Page =
+  | 'signals'
+  | 'backtest'
+  | 'models'
+  | 'portfolio'
+  | 'risk'
+  | 'strategy'
+  | 'charts'
+
 export default function App() {
   const [page, setPage] = useState<Page>('signals')
 
-  const pageComponent = {
-    signals: <TradingSignals />,
-    backtest: <BacktestPanel />,
-    models: <ModelPerformance />,
-    portfolio: <PortfolioView />,
-    risk: <RiskDashboard />,
-    strategy: <StrategyBuilder />,
-    chart: <ChartView />,
-  }[page]
-
   return (
-    <Layout currentPage={page} onNavigate={setPage}>
-      {pageComponent}
+    <Layout page={page} setPage={setPage}>
+      <div key={page} className="animate-fade-in">
+        {page === 'signals' && <TradingSignals />}
+        {page === 'backtest' && <BacktestPanel />}
+        {page === 'models' && <ModelPerformance />}
+        {page === 'portfolio' && <PortfolioView />}
+        {page === 'risk' && <RiskDashboard />}
+        {page === 'strategy' && <StrategyBuilder />}
+        {page === 'charts' && <ChartView />}
+      </div>
     </Layout>
   )
 }
+

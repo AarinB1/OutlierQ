@@ -1,63 +1,53 @@
-import type { Page } from '../types'
+import type { ReactNode } from 'react'
+import type { Page } from '../App'
 
-const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
-  { id: 'signals', label: 'Signals', icon: '⚡' },
-  { id: 'backtest', label: 'Backtest Lab', icon: '🧪' },
-  { id: 'models', label: 'Models', icon: '🧠' },
-  { id: 'portfolio', label: 'Portfolio', icon: '💼' },
-  { id: 'risk', label: 'Risk', icon: '🛡️' },
-  { id: 'strategy', label: 'Strategy', icon: '⚙️' },
-  { id: 'chart', label: 'Chart', icon: '📈' },
-]
-
-interface LayoutProps {
-  currentPage: Page
-  onNavigate: (page: Page) => void
-  children: React.ReactNode
+interface Props {
+  page: Page
+  setPage: (page: Page) => void
+  children: ReactNode
 }
 
-export default function Layout({ currentPage, onNavigate, children }: LayoutProps) {
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <aside className="w-56 bg-surface-secondary border-r border-border flex flex-col shrink-0">
-        <div className="p-5 border-b border-border">
-          <h1 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
-            OutlierQ
-          </h1>
-          <p className="text-xs text-txt-tertiary font-mono mt-0.5">Trading AI</p>
-        </div>
+const NAV: Array<{ key: Page; label: string }> = [
+  { key: 'signals', label: 'Trading Signals' },
+  { key: 'backtest', label: 'Backtest Lab' },
+  { key: 'models', label: 'Model Performance' },
+  { key: 'portfolio', label: 'Portfolio' },
+  { key: 'risk', label: 'Risk Dashboard' },
+  { key: 'strategy', label: 'Strategy Builder' },
+  { key: 'charts', label: 'Chart View' },
+]
 
-        <nav className="flex-1 p-3 space-y-1">
-          {NAV_ITEMS.map((item) => (
+export default function Layout({ page, setPage, children }: Props) {
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <aside className="w-64 bg-surface-primary border-r border-border p-4 overflow-y-auto">
+        <h1 className="font-mono font-bold text-xl mb-4">
+          <span className="text-accent-blue">Outlier</span>Q Trading
+        </h1>
+        <div className="mb-4 card border border-accent-amber/30 bg-accent-amber-muted">
+          <p className="text-xs text-accent-amber font-medium uppercase tracking-wider mb-1">Paper Trading Only</p>
+          <p className="text-xs text-txt-secondary">
+            Research environment only. Not financial advice. No live brokerage execution.
+          </p>
+        </div>
+        <nav className="space-y-1">
+          {NAV.map((n) => (
             <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans transition-colors ${
-                currentPage === item.id
-                  ? 'bg-accent-blue-muted text-accent-blue'
-                  : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary'
+              key={n.key}
+              onClick={() => setPage(n.key)}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
+                page === n.key ? 'bg-surface-tertiary text-txt-primary' : 'text-txt-secondary hover:bg-surface-secondary'
               }`}
             >
-              <span className="text-base">{item.icon}</span>
-              {item.label}
+              {n.label}
             </button>
           ))}
         </nav>
-
-        <div className="p-4 border-t border-border">
-          <p className="text-[10px] text-txt-tertiary font-mono leading-relaxed">
-            Paper trading only.
-            <br />
-            Not financial advice.
-          </p>
-        </div>
       </aside>
-
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-content mx-auto animate-fade-in">{children}</div>
+      <main className="flex-1 bg-surface-tertiary overflow-y-auto">
+        <div className="max-w-content mx-auto p-6">{children}</div>
       </main>
     </div>
   )
 }
+

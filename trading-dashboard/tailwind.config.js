@@ -1,9 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -30,8 +27,6 @@ export default {
           'amber-muted': 'rgba(255, 171, 0, 0.12)',
           blue: '#448aff',
           'blue-muted': 'rgba(68, 138, 255, 0.12)',
-          purple: '#b388ff',
-          'purple-muted': 'rgba(179, 136, 255, 0.12)',
         },
       },
       fontFamily: {
@@ -42,7 +37,7 @@ export default {
         card: '12px',
       },
       maxWidth: {
-        content: '1400px',
+        content: '1500px',
       },
       animation: {
         'fade-in': 'fadeIn 200ms ease',
@@ -62,3 +57,4 @@ export default {
   },
   plugins: [],
 }
+
