@@ -16,7 +16,6 @@ from src.db.database import SessionLocal, init_db
 from src.db.tables import Article, Event, Signal
 from src.data.stock_data import StockDataService
 from src.discovery.discovery_db import DiscoveredTicker
-from src.data.stock_data import StockDataService
 from src.ingestion.market_fetcher import MarketFetcher
 from src.signals.feedback_tracker import FeedbackTracker
 
@@ -47,10 +46,6 @@ def get_db() -> Session:
 @app.on_event("startup")
 def startup() -> None:
     init_db()
-
-
-# Shared service instance
-_stock_service = StockDataService()
 
 
 # ── Health ────────────────────────────────────────────────────────────
@@ -220,16 +215,7 @@ def ticker_chart_data(
     period: str = Query("6mo"),
     db: Session = Depends(get_db),
 ) -> dict:
-    t = ticker.upper()
-    chart = _stock_svc.get_chart_data(t, period=period, session=db)
-    return {
-        "ticker": t,
-        "info": _stock_svc.get_info(t),
-        "stats": _stock_svc.get_stats(t),
-        "price_history": chart["prices"],
-        "signals": chart["signals"],
-        "events": chart["events"],
-    }
+    return _stock_svc.get_chart_data(ticker.upper(), period=period, session=db)
 
 
 @app.get("/api/ticker/{ticker}/summary")
@@ -494,47 +480,6 @@ def scan(body: dict, db: Session = Depends(get_db)) -> dict:
             for s in signals
         ],
     }
-
-
-# ── Ticker Data ──────────────────────────────────────────────────────
-
-
-@app.get("/api/ticker/{ticker}/price-history")
-def ticker_price_history(
-    ticker: str,
-    period: str = Query("6mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y)$"),
-    interval: str = Query("1d", pattern="^(5m|15m|1h|1d|1wk)$"),
-) -> list[dict]:
-    return _stock_service.get_price_history(ticker.upper(), period=period, interval=interval)
-
-
-@app.get("/api/ticker/{ticker}/intraday")
-def ticker_intraday(ticker: str) -> list[dict]:
-    return _stock_service.get_intraday(ticker.upper())
-
-
-@app.get("/api/ticker/{ticker}/info")
-def ticker_info(ticker: str) -> dict:
-    return _stock_service.get_company_info(ticker.upper())
-
-
-@app.get("/api/ticker/{ticker}/stats")
-def ticker_stats(ticker: str) -> dict:
-    return _stock_service.get_key_stats(ticker.upper())
-
-
-@app.get("/api/ticker/{ticker}/chart-data")
-def ticker_chart_data(
-    ticker: str,
-    period: str = Query("6mo", pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y)$"),
-    db: Session = Depends(get_db),
-) -> dict:
-    return _stock_service.get_chart_data(ticker.upper(), period=period, session=db)
-
-
-@app.get("/api/ticker/{ticker}/summary")
-def ticker_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
-    return _stock_service.get_ticker_summary(ticker.upper(), session=db)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
