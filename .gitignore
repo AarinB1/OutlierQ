@@ -21,6 +21,7 @@ htmlcov/
 .cache/huggingface/
 .cache/company_tickers.json
 .cache/ml_model.pkl
+.cache/autopilot_status.json
 
 # IDE
 .vscode/
