@@ -30,7 +30,7 @@ function formatDate(iso: string, period: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
@@ -64,7 +64,6 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
   const last = prices[prices.length - 1].close
   const isUp = last >= first
   const strokeColor = isUp ? '#00e676' : '#ff1744'
-  const fillColor = isUp ? 'rgba(0,230,118,0.08)' : 'rgba(255,23,68,0.08)'
 
   // Map signal/event dates to closest price points for overlay dots
   const signalDots = signals

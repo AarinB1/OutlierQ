@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import type { HealthStatus, AutopilotStatus } from '../types'
-import type { Page } from '../App'
+import type { Section, Page, OptionsPage, TradingPage } from '../App'
 import { fetchStatus } from '../api'
 import ScanButton from './ScanButton'
 
 interface Props {
+  section: Section
+  setSection: (s: Section) => void
   page: Page
   setPage: (p: Page) => void
   connected: boolean
@@ -13,12 +15,22 @@ interface Props {
   children: ReactNode
 }
 
-const NAV: { key: Page; icon: string; label: string }[] = [
+const OPTIONS_NAV: { key: OptionsPage; icon: string; label: string }[] = [
   { key: 'signals', icon: '\u26A1', label: 'Signals' },
   { key: 'events', icon: '\u25C9', label: 'Events' },
   { key: 'accuracy', icon: '\u25CE', label: 'Accuracy' },
   { key: 'tickers', icon: '\u2B21', label: 'Tickers' },
   { key: 'discovery', icon: '\u25C8', label: 'Discovery' },
+]
+
+const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
+  { key: 'trade-signals', icon: '\u2191\u2193', label: 'Signals' },
+  { key: 'backtest', icon: '\u25B6', label: 'Backtest Lab' },
+  { key: 'models', icon: '\u2699', label: 'Models' },
+  { key: 'portfolio', icon: '\u25A3', label: 'Portfolio' },
+  { key: 'risk', icon: '\u26A0', label: 'Risk' },
+  { key: 'strategies', icon: '\u2630', label: 'Strategies' },
+  { key: 'charts', icon: '\u2E0F', label: 'Charts' },
 ]
 
 function LayoutStatus() {
@@ -52,7 +64,8 @@ function LayoutStatus() {
   )
 }
 
-export default function Layout({ page, setPage, connected, health, children }: Props) {
+export default function Layout({ section, setSection, page, setPage, connected, health, children }: Props) {
+  void health
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -70,9 +83,57 @@ export default function Layout({ page, setPage, connected, health, children }: P
           <span className="font-mono font-bold text-xl text-accent-blue lg:hidden max-md:hidden">Q</span>
         </div>
 
+        {/* Section Switcher */}
+        <div className="px-3 pb-2 max-md:hidden">
+          <div className="flex rounded-lg bg-surface-tertiary p-0.5">
+            <button
+              onClick={() => setSection('options')}
+              className={`flex-1 text-center py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
+                section === 'options'
+                  ? 'bg-surface-primary text-txt-primary shadow-sm'
+                  : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+            >
+              Options
+            </button>
+            <button
+              onClick={() => setSection('trading')}
+              className={`flex-1 text-center py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
+                section === 'trading'
+                  ? 'bg-surface-primary text-txt-primary shadow-sm'
+                  : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+            >
+              Trading
+            </button>
+          </div>
+        </div>
+
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 space-y-1 max-md:flex max-md:items-center max-md:space-y-0 max-md:gap-1 max-md:px-2 max-md:py-0 overflow-y-auto">
-          {NAV.map(n => (
+          <div className="hidden max-md:flex items-center gap-1 pr-1 shrink-0">
+            <button
+              onClick={() => setSection('options')}
+              className={`px-2 py-1 rounded text-[10px] font-sans font-semibold transition-all duration-150 ${
+                section === 'options'
+                  ? 'bg-surface-primary text-txt-primary border border-border'
+                  : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+            >
+              OPT
+            </button>
+            <button
+              onClick={() => setSection('trading')}
+              className={`px-2 py-1 rounded text-[10px] font-sans font-semibold transition-all duration-150 ${
+                section === 'trading'
+                  ? 'bg-surface-primary text-txt-primary border border-border'
+                  : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+            >
+              TRD
+            </button>
+          </div>
+          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map(n => (
             <button
               key={n.key}
               onClick={() => setPage(n.key)}
@@ -122,7 +183,14 @@ export default function Layout({ page, setPage, connected, health, children }: P
               </div>
             </div>
           ) : (
-            children
+            <>
+              {section === 'trading' && (
+                <div className="mb-4 px-4 py-2 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-accent-amber text-xs font-sans">
+                  <span className="font-semibold">Disclaimer:</span> This is a research and paper-trading tool only. Not financial advice. Do not use for real trading decisions.
+                </div>
+              )}
+              {children}
+            </>
           )}
         </div>
       </main>

@@ -385,3 +385,81 @@ export interface MlStatus {
   readiness_check: MlReadiness;
   recent_comparison: MlComparison;
 }
+
+// ── Trading Types ────────────────────────────────────────────────
+
+export interface TradingSignal {
+  id: string
+  ticker: string
+  direction: 'BUY' | 'SELL' | 'SHORT'
+  strategy_name: string
+  model_name?: string
+  entry_price: number
+  target_price: number
+  stop_loss: number
+  confidence: number
+  timeframe: 'intraday' | 'swing'
+  created_at: string
+  status: 'pending' | 'active' | 'closed'
+  pnl?: number
+}
+
+export interface BacktestResult {
+  id: string
+  strategy_name: string
+  model_name?: string
+  start_date: string
+  end_date: string
+  initial_capital: number
+  final_capital: number
+  sharpe_ratio: number
+  sortino_ratio: number
+  max_drawdown: number
+  win_rate: number
+  total_trades: number
+  profit_factor: number
+  equity_curve?: { date: string; value: number }[]
+  trades?: TradeExecution[]
+}
+
+export interface TradeExecution {
+  id: string
+  signal_id: string
+  ticker: string
+  direction: string
+  entry_time: string
+  exit_time?: string
+  entry_price: number
+  exit_price?: number
+  quantity: number
+  pnl_dollars?: number
+  pnl_percent?: number
+  exit_reason?: string
+}
+
+export interface PortfolioState {
+  cash: number
+  total_value: number
+  positions: { ticker: string; quantity: number; entry_price: number; current_price: number; pnl: number }[]
+  daily_pnl: number
+  cumulative_pnl: number
+  max_drawdown: number
+}
+
+export interface ModelStatus {
+  model_name: string
+  model_type: string
+  is_trained: boolean
+  val_accuracy?: number
+  val_sharpe?: number
+  trained_at?: string
+  feature_count?: number
+}
+
+export interface MarketRegime {
+  regime: 'bull_trend' | 'bear_trend' | 'sideways' | 'high_vol' | 'low_vol'
+  vix_level: number
+  vix_percentile: number
+  breadth_score: number
+  confidence: number
+}

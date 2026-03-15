@@ -183,3 +183,73 @@ export async function fetchMlStatus(): Promise<MlStatus> {
 export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: string; details?: unknown }> {
   return fetchJSON('/ml/train', { method: 'POST' });
 }
+
+// ── Trading API ──────────────────────────────────────────────────
+
+const TRADING_BASE = '/api/trading';
+
+export async function fetchTradingSignals(params?: { ticker?: string; strategy?: string; limit?: number }) {
+  const query = new URLSearchParams();
+  if (params?.ticker) query.set('ticker', params.ticker);
+  if (params?.strategy) query.set('strategy', params.strategy);
+  if (params?.limit) query.set('limit', String(params.limit));
+  const res = await fetch(`${TRADING_BASE}/signals?${query}`);
+  if (!res.ok) throw new Error('Failed to fetch trading signals');
+  return res.json();
+}
+
+export async function fetchTradingSignalById(id: string) {
+  const res = await fetch(`${TRADING_BASE}/signals/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch trading signal');
+  return res.json();
+}
+
+export async function runBacktest(config: Record<string, unknown>) {
+  const res = await fetch(`${TRADING_BASE}/backtest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to run backtest');
+  return res.json();
+}
+
+export async function fetchBacktestResult(id: string) {
+  const res = await fetch(`${TRADING_BASE}/backtest/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch backtest result');
+  return res.json();
+}
+
+export async function fetchPortfolio() {
+  const res = await fetch(`${TRADING_BASE}/portfolio`);
+  if (!res.ok) throw new Error('Failed to fetch portfolio');
+  return res.json();
+}
+
+export async function fetchTradingModels() {
+  const res = await fetch(`${TRADING_BASE}/models`);
+  if (!res.ok) throw new Error('Failed to fetch models');
+  return res.json();
+}
+
+export async function fetchMarketRegime() {
+  const res = await fetch(`${TRADING_BASE}/regime`);
+  if (!res.ok) throw new Error('Failed to fetch regime');
+  return res.json();
+}
+
+export async function fetchTradingMetrics() {
+  const res = await fetch(`${TRADING_BASE}/metrics`);
+  if (!res.ok) throw new Error('Failed to fetch trading metrics');
+  return res.json();
+}
+
+export async function generateTradingSignals(tickers: string[]) {
+  const res = await fetch(`${TRADING_BASE}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tickers }),
+  });
+  if (!res.ok) throw new Error('Failed to generate trading signals');
+  return res.json();
+}
