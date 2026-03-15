@@ -9,7 +9,11 @@ const FILTERS = [
   { key: 'put', label: 'Puts' },
 ] as const
 
-export default function SignalList() {
+interface Props {
+  onTickerClick?: (ticker: string) => void
+}
+
+export default function SignalList({ onTickerClick }: Props = {}) {
   const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +93,7 @@ export default function SignalList() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {signals.map(s => (
-              <SignalCard key={s.id} signal={s} />
+              <SignalCard key={s.id} signal={s} onTickerClick={onTickerClick} />
             ))}
           </div>
 

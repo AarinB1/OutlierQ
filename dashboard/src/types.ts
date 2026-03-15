@@ -155,3 +155,69 @@ export interface DiscoverTriggerResult {
     sample_headlines: string[];
   }[];
 }
+
+export interface PricePoint {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface CompanyInfo {
+  ticker: string;
+  name: string;
+  sector: string | null;
+  industry: string | null;
+  market_cap: number | null;
+  current_price: number | null;
+  previous_close: number | null;
+  day_high: number | null;
+  day_low: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  avg_volume: number | null;
+  beta: number | null;
+  change: number | null;
+  change_percent: number | null;
+}
+
+export interface KeyStats {
+  weekly_return: number | null;
+  monthly_return: number | null;
+  ytd_return: number | null;
+  volatility_30d: number | null;
+}
+
+export interface SignalOverlay {
+  id: string;
+  date: string | null;
+  direction: string;
+  strike: number | null;
+  expiry: string | null;
+  confidence: number;
+  outcome: string | null;
+  pnl: number | null;
+}
+
+export interface EventOverlay {
+  id: string;
+  date: string | null;
+  event_type: string;
+  direction: string;
+  confidence: number;
+}
+
+export interface ChartData {
+  prices: PricePoint[];
+  signals: SignalOverlay[];
+  events: EventOverlay[];
+}
+
+export interface TickerFullSummary {
+  info: CompanyInfo;
+  stats: KeyStats;
+  signals: SignalOverlay[];
+  events: EventOverlay[];
+}

@@ -30,7 +30,11 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
-export default function EventTimeline() {
+interface Props {
+  onTickerClick?: (ticker: string) => void
+}
+
+export default function EventTimeline({ onTickerClick }: Props = {}) {
   const [events, setEvents] = useState<EventData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -95,7 +99,10 @@ export default function EventTimeline() {
 
                 <div className="card py-4 px-5 group-hover:border-border-hover">
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="font-mono font-bold text-txt-primary">{ev.ticker}</span>
+                    <span
+                      className={`font-mono font-bold ${onTickerClick ? 'text-accent-blue cursor-pointer hover:underline' : 'text-txt-primary'}`}
+                      onClick={() => onTickerClick?.(ev.ticker)}
+                    >{ev.ticker}</span>
                     <span className={`pill text-[10px] py-0.5 px-2 ${badge.bg} ${badge.text}`}>
                       {ev.event_type.replace(/_/g, ' ')}
                     </span>

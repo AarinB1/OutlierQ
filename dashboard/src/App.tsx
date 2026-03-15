@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchHealth } from './api'
 import type { HealthStatus } from './types'
 import Layout from './components/Layout'
@@ -14,6 +14,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('signals')
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [connected, setConnected] = useState(false)
+  const [focusTicker, setFocusTicker] = useState<string | null>(null)
 
   useEffect(() => {
     const check = () => {
@@ -26,13 +27,23 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
+  const navigateToTicker = useCallback((ticker: string) => {
+    setFocusTicker(ticker)
+    setPage('tickers')
+  }, [])
+
   return (
     <Layout page={page} setPage={setPage} connected={connected} health={health}>
       <div key={page} className="animate-fade-in">
-        {page === 'signals' && <SignalList />}
-        {page === 'events' && <EventTimeline />}
+        {page === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
+        {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
         {page === 'accuracy' && <AccuracyPanel />}
-        {page === 'tickers' && <TickerView />}
+        {page === 'tickers' && (
+          <TickerView
+            initialTicker={focusTicker}
+            onNavigated={() => setFocusTicker(null)}
+          />
+        )}
         {page === 'discovery' && <DiscoveryPanel />}
       </div>
     </Layout>

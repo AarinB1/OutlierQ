@@ -2,6 +2,7 @@ import type { Signal } from '../types'
 
 interface Props {
   signal: Signal
+  onTickerClick?: (ticker: string) => void
 }
 
 function confidenceColor(c: number): string {
@@ -10,14 +11,17 @@ function confidenceColor(c: number): string {
   return 'bg-accent-red'
 }
 
-export default function SignalCard({ signal }: Props) {
+export default function SignalCard({ signal, onTickerClick }: Props) {
   const isCall = signal.direction === 'call'
 
   return (
     <div className={`card relative overflow-hidden border-l-[3px] ${isCall ? 'border-l-accent-green' : 'border-l-accent-red'}`}>
       {/* Top row: ticker + direction */}
       <div className="flex items-start justify-between mb-4">
-        <span className="font-mono font-bold text-2xl text-txt-primary tracking-tight">
+        <span
+          className={`font-mono font-bold text-2xl tracking-tight ${onTickerClick ? 'text-accent-blue cursor-pointer hover:underline' : 'text-txt-primary'}`}
+          onClick={() => onTickerClick?.(signal.ticker)}
+        >
           {signal.ticker}
         </span>
         <span className={`pill ${isCall

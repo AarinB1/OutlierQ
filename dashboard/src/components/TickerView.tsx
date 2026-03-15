@@ -1,14 +1,35 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchSignals } from '../api'
-import type { TickerSummary, Signal } from '../types'
-import SignalCard from './SignalCard'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats } from '../api'
+import type { TickerSummary, ChartData, CompanyInfo, KeyStats } from '../types'
+import StockHeader from './StockHeader'
+import PriceChart from './PriceChart'
+import StatsGrid from './StatsGrid'
+import SignalHistory from './SignalHistory'
 
-export default function TickerView() {
+interface TickerViewProps {
+  initialTicker?: string | null
+  onNavigated?: () => void
+}
+
+export default function TickerView({ initialTicker, onNavigated }: TickerViewProps = {}) {
   const [tickers, setTickers] = useState<TickerSummary[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
-  const [signals, setSignals] = useState<Signal[]>([])
+  const [selected, setSelected] = useState<string | null>(initialTicker ?? null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Detail view state
+  const [info, setInfo] = useState<CompanyInfo | null>(null)
+  const [stats, setStats] = useState<KeyStats | null>(null)
+  const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [period, setPeriod] = useState('6mo')
+
+  useEffect(() => {
+    if (initialTicker) {
+      setSelected(initialTicker)
+      onNavigated?.()
+    }
+  }, [initialTicker, onNavigated])
 
   useEffect(() => {
     fetchTickers()
@@ -18,11 +39,23 @@ export default function TickerView() {
   }, [])
 
   useEffect(() => {
-    if (!selected) { setSignals([]); return }
-    fetchSignals({ ticker: selected, limit: 50 })
-      .then(setSignals)
+    if (!selected) {
+      setInfo(null)
+      setStats(null)
+      setChartData(null)
+      return
+    }
+    setDetailLoading(true)
+    setError(null)
+    Promise.all([
+      fetchCompanyInfo(selected),
+      fetchKeyStats(selected),
+      fetchChartData(selected, period),
+    ])
+      .then(([i, s, c]) => { setInfo(i); setStats(s); setChartData(c) })
       .catch(e => setError(e.message))
-  }, [selected])
+      .finally(() => setDetailLoading(false))
+  }, [selected, period])
 
   if (loading) return (
     <div>
@@ -33,12 +66,55 @@ export default function TickerView() {
     </div>
   )
 
-  if (error) return (
+  if (error && !selected) return (
     <div className="card border-accent-red/30 bg-accent-red-muted">
       <p className="text-accent-red text-sm">{error}</p>
     </div>
   )
 
+  // ── Detail view ──────────────────────────────────────────────
+  if (selected) {
+    if (detailLoading) return (
+      <div className="space-y-4">
+        <div className="skeleton h-8 w-32" />
+        <div className="skeleton h-20" />
+        <div className="skeleton h-80" />
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-24" />)}
+        </div>
+      </div>
+    )
+
+    return (
+      <div className="animate-fade-in space-y-6">
+        {info && (
+          <StockHeader info={info} onBack={() => setSelected(null)} />
+        )}
+
+        {error && (
+          <div className="card border-accent-red/30 bg-accent-red-muted">
+            <p className="text-accent-red text-sm">{error}</p>
+          </div>
+        )}
+
+        {chartData && (
+          <PriceChart
+            prices={chartData.prices}
+            signals={chartData.signals}
+            events={chartData.events}
+            period={period}
+            onPeriodChange={setPeriod}
+          />
+        )}
+
+        {stats && <StatsGrid stats={stats} />}
+
+        {chartData && <SignalHistory signals={chartData.signals} />}
+      </div>
+    )
+  }
+
+  // ── Grid view ────────────────────────────────────────────────
   return (
     <div>
       <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight mb-8">
@@ -52,58 +128,34 @@ export default function TickerView() {
           <p className="text-txt-tertiary text-xs">Run a scan to start tracking tickers.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
-          {tickers.map(t => {
-            const isActive = t.ticker === selected
-            return (
-              <button
-                key={t.ticker}
-                onClick={() => setSelected(isActive ? null : t.ticker)}
-                className={`text-left card transition-all duration-150 ${
-                  isActive
-                    ? 'border-accent-blue bg-accent-blue-muted'
-                    : 'hover:border-border-hover'
-                }`}
-              >
-                <div className="font-mono font-bold text-xl text-txt-primary mb-3">{t.ticker}</div>
-                <div className="space-y-1.5 text-xs font-sans">
-                  <div className="flex justify-between">
-                    <span className="text-txt-tertiary">Signals</span>
-                    <span className="font-mono text-txt-primary">{t.total_signals}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-txt-tertiary">Win rate</span>
-                    <span className={`font-mono ${t.win_rate >= 0.5 ? 'text-accent-green' : t.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
-                      {(t.win_rate * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-txt-tertiary">Last signal</span>
-                    <span className="font-mono text-txt-tertiary text-[11px]">
-                      {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '\u2014'}
-                    </span>
-                  </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {tickers.map(t => (
+            <button
+              key={t.ticker}
+              onClick={() => setSelected(t.ticker)}
+              className="text-left card transition-all duration-150 hover:border-border-hover"
+            >
+              <div className="font-mono font-bold text-xl text-txt-primary mb-3">{t.ticker}</div>
+              <div className="space-y-1.5 text-xs font-sans">
+                <div className="flex justify-between">
+                  <span className="text-txt-tertiary">Signals</span>
+                  <span className="font-mono text-txt-primary">{t.total_signals}</span>
                 </div>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {selected && (
-        <div className="animate-fade-in">
-          <h3 className="font-mono font-bold text-sm text-txt-secondary mb-4 tracking-tight">
-            Signals for <span className="text-txt-primary">{selected}</span>
-          </h3>
-          {signals.length === 0 ? (
-            <p className="text-txt-tertiary text-sm">No signals for this ticker.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {signals.map(s => (
-                <SignalCard key={s.id} signal={s} />
-              ))}
-            </div>
-          )}
+                <div className="flex justify-between">
+                  <span className="text-txt-tertiary">Win rate</span>
+                  <span className={`font-mono ${t.win_rate >= 0.5 ? 'text-accent-green' : t.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
+                    {(t.win_rate * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-txt-tertiary">Last signal</span>
+                  <span className="font-mono text-txt-tertiary text-[11px]">
+                    {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '\u2014'}
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
     </div>

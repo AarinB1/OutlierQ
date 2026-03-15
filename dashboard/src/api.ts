@@ -12,6 +12,11 @@ import type {
   DiscoveryRecord,
   DiscoveryStats,
   DiscoverTriggerResult,
+  PricePoint,
+  CompanyInfo,
+  KeyStats,
+  ChartData,
+  TickerFullSummary,
 } from './types';
 
 const BASE_URL = '/api';
@@ -115,4 +120,32 @@ export async function fetchDiscoveryStats(): Promise<DiscoveryStats> {
 
 export async function triggerDiscover(): Promise<DiscoverTriggerResult> {
   return fetchJSON('/discover', { method: 'POST' });
+}
+
+export async function fetchPriceHistory(
+  ticker: string,
+  period: string = '6mo',
+  interval: string = '1d'
+): Promise<PricePoint[]> {
+  return fetchJSON(`/ticker/${ticker}/price-history?period=${period}&interval=${interval}`);
+}
+
+export async function fetchIntraday(ticker: string): Promise<PricePoint[]> {
+  return fetchJSON(`/ticker/${ticker}/intraday`);
+}
+
+export async function fetchCompanyInfo(ticker: string): Promise<CompanyInfo> {
+  return fetchJSON(`/ticker/${ticker}/info`);
+}
+
+export async function fetchKeyStats(ticker: string): Promise<KeyStats> {
+  return fetchJSON(`/ticker/${ticker}/stats`);
+}
+
+export async function fetchChartData(ticker: string, period: string = '6mo'): Promise<ChartData> {
+  return fetchJSON(`/ticker/${ticker}/chart-data?period=${period}`);
+}
+
+export async function fetchTickerSummary(ticker: string): Promise<TickerFullSummary> {
+  return fetchJSON(`/ticker/${ticker}/summary`);
 }
