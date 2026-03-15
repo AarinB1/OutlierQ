@@ -30,11 +30,15 @@ app = FastAPI(title="OutlierQ API", version="1.0.0")
 # CORS for React dev servers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount trading API routes
+from src.api.trading_routes import router as trading_router
+app.include_router(trading_router)
 
 
 def get_db() -> Session:

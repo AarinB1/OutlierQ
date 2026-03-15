@@ -117,6 +117,33 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use ML-enhanced ensemble classifier during pipeline runs",
     )
+    # Trading module commands
+    parser.add_argument(
+        "--train-trading",
+        action="store_true",
+        help="Train LSTM/Transformer/Hybrid trading models",
+    )
+    parser.add_argument(
+        "--backtest-trading",
+        action="store_true",
+        help="Run backtest with a trading strategy (use --tickers and --strategy)",
+    )
+    parser.add_argument(
+        "--trading-status",
+        action="store_true",
+        help="Print trading model status and recent results",
+    )
+    parser.add_argument(
+        "--trading-api",
+        action="store_true",
+        help="Start the FastAPI server with trading routes (same as --api)",
+    )
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        default="momentum",
+        help="Trading strategy for backtesting (momentum, mean_reversion, breakout)",
+    )
     return parser.parse_args()
 
 
@@ -677,6 +704,117 @@ def run_scheduled(
         logger.info("Scheduler stopped by user.")
 
 
+def run_train_trading() -> None:
+    """Train LSTM, Transformer, and Hybrid trading models."""
+    from src.trading.training.trainer import TradingTrainer
+
+    print(f"\n{'='*60}")
+    print("  TRAINING TRADING MODELS")
+    print(f"{'='*60}")
+
+    trainer = TradingTrainer()
+    results = trainer.train_all_models(ticker="SPY", period="2y")
+
+    if "error" in results:
+        print(f"\nTraining failed: {results['error']}\n")
+        return
+
+    for model_name, result in results.items():
+        print(f"\n  {model_name.upper()}:")
+        print(f"    Val Accuracy:  {result.get('best_val_acc', 0):.3f}")
+        print(f"    Test Accuracy: {result.get('test_acc', 0):.3f}")
+        print(f"    Epochs:        {result.get('epochs_trained', 0)}")
+        print(f"    Time:          {result.get('training_time_seconds', 0):.1f}s")
+
+    print(f"\n  Models saved to .cache/trading_models/")
+    print()
+
+
+def run_backtest_trading(ticker: str, strategy_name: str) -> None:
+    """Run a trading backtest and print results."""
+    from src.trading.backtesting.backtest_engine import BacktestEngine
+    from src.trading.features.feature_pipeline import FeaturePipeline
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+
+    strategy_map = {
+        "momentum": MomentumStrategy,
+        "mean_reversion": MeanReversionStrategy,
+        "breakout": BreakoutStrategy,
+    }
+
+    StrategyClass = strategy_map.get(strategy_name)
+    if not StrategyClass:
+        print(f"Unknown strategy: {strategy_name}. Options: {', '.join(strategy_map.keys())}")
+        return
+
+    print(f"\n{'='*60}")
+    print(f"  BACKTEST: {strategy_name} on {ticker}")
+    print(f"{'='*60}")
+
+    pipeline = FeaturePipeline()
+    features_df = pipeline.build_features(ticker, period="1y", include_sentiment=False)
+    if features_df.empty:
+        print(f"No data for {ticker}\n")
+        return
+
+    strategy = StrategyClass()
+    engine = BacktestEngine()
+    result = engine.run(features_df, strategy, ticker)
+
+    m = result.metrics
+    print(f"\n  Sharpe Ratio:    {m.sharpe_ratio:.2f}")
+    print(f"  Sortino Ratio:   {m.sortino_ratio:.2f}")
+    print(f"  Total Return:    {m.total_return_pct:.1f}%")
+    print(f"  Max Drawdown:    {m.max_drawdown_pct:.1f}%")
+    print(f"  Win Rate:        {m.win_rate:.1%}")
+    print(f"  Profit Factor:   {m.profit_factor:.2f}")
+    print(f"  Total Trades:    {m.total_trades}")
+    print(f"  Avg Trade P&L:   {m.avg_trade_pnl:.2f}%")
+    print(f"  Best Trade:      {m.best_trade_pnl:.2f}%")
+    print(f"  Worst Trade:     {m.worst_trade_pnl:.2f}%")
+    print()
+
+
+def run_trading_status() -> None:
+    """Print trading model and system status."""
+    from pathlib import Path
+
+    print(f"\n{'='*60}")
+    print("  TRADING MODULE STATUS")
+    print(f"{'='*60}")
+
+    model_dir = Path(".cache/trading_models")
+    if model_dir.exists():
+        models = list(model_dir.glob("*_model.pt"))
+        print(f"\n  Saved models: {len(models)}")
+        for m in models:
+            size_mb = m.stat().st_size / (1024 * 1024)
+            print(f"    - {m.name} ({size_mb:.1f} MB)")
+    else:
+        print("\n  No trained trading models found.")
+        print("  Run: python scripts/run_ingestion.py --train-trading")
+
+    try:
+        from src.db.database import get_session
+        from src.db.trading_tables import TradeSignal, BacktestRun, ModelCheckpoint
+
+        with get_session() as s:
+            n_signals = s.query(TradeSignal).count()
+            n_backtests = s.query(BacktestRun).count()
+            n_checkpoints = s.query(ModelCheckpoint).count()
+
+        print(f"\n  Database:")
+        print(f"    Trade signals:     {n_signals}")
+        print(f"    Backtest runs:     {n_backtests}")
+        print(f"    Model checkpoints: {n_checkpoints}")
+    except Exception as e:
+        print(f"\n  Database check failed: {e}")
+
+    print()
+
+
 def main() -> None:
     args = parse_args()
 
@@ -686,8 +824,21 @@ def main() -> None:
     # Standalone modes
     init_db()
 
-    if args.api:
+    if args.api or args.trading_api:
         run_api()
+        return
+
+    if args.train_trading:
+        run_train_trading()
+        return
+
+    if args.backtest_trading:
+        tickers = [t.strip().upper() for t in args.tickers.split(",")]
+        run_backtest_trading(tickers[0], args.strategy)
+        return
+
+    if args.trading_status:
+        run_trading_status()
         return
 
     if args.ml_status:

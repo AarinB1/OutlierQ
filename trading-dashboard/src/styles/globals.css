@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-primary text-txt-primary font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0a0a0f;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface-secondary border border-border rounded-card p-6;
+    transition: border-color 150ms ease, transform 150ms ease;
+  }
+  .card:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .btn-primary {
+    @apply px-5 py-2.5 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm tracking-wide;
+    transition: box-shadow 150ms ease, transform 150ms ease;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 20px rgba(68, 138, 255, 0.3);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled {
+    @apply opacity-40 cursor-not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg bg-surface-tertiary text-txt-secondary font-mono text-sm border border-border;
+    transition: border-color 150ms ease;
+  }
+  .btn-secondary:hover {
+    @apply border-border-hover text-txt-primary;
+  }
+
+  .pill {
+    @apply inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider uppercase;
+  }
+
+  .stat-number {
+    @apply font-mono font-bold text-3xl leading-none;
+  }
+
+  .label {
+    @apply text-txt-secondary text-xs font-sans font-medium uppercase tracking-wider;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #12121a 25%, #1a1a28 50%, #12121a 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+  }
+}
