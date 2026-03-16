@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import { ToastProvider } from './components/Toast'
 import ShortcutsModal from './components/ShortcutsModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { TradingSettingsProvider } from './context/TradingSettingsContext'
 // Options pages (existing)
 import SignalList from './components/SignalList'
 import EventTimeline from './components/EventTimeline'
@@ -19,11 +20,26 @@ import PortfolioView from './components/trading/PortfolioView'
 import RiskDashboard from './components/trading/RiskDashboard'
 import StrategyBuilder from './components/trading/StrategyBuilder'
 import ChartView from './components/trading/ChartView'
+import WatchlistManager from './components/trading/WatchlistManager'
+import TradeJournal from './components/trading/TradeJournal'
+import SettingsPage from './components/trading/SettingsPage'
+import PerformanceAttribution from './components/trading/PerformanceAttribution'
 
 export type Section = 'options' | 'trading'
 
 export type OptionsPage = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery'
-export type TradingPage = 'trade-signals' | 'backtest' | 'models' | 'portfolio' | 'risk' | 'strategies' | 'charts'
+export type TradingPage =
+  | 'trade-signals'
+  | 'backtest'
+  | 'models'
+  | 'portfolio'
+  | 'performance'
+  | 'risk'
+  | 'strategies'
+  | 'charts'
+  | 'watchlists'
+  | 'journal'
+  | 'settings'
 export type Page = OptionsPage | TradingPage
 
 export default function App() {
@@ -70,37 +86,43 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <Layout
-        section={section}
-        setSection={handleSectionChange}
-        page={page}
-        setPage={setPage}
-        connected={connected}
-        health={health}
-      >
-        <div key={page} className="animate-fade-in">
-          {/* Options pages */}
-          {page === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
-          {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
-          {page === 'accuracy' && <AccuracyPanel />}
-          {page === 'tickers' && (
-            <TickerView
-              initialTicker={focusTicker}
-              onNavigated={() => setFocusTicker(null)}
-            />
-          )}
-          {page === 'discovery' && <DiscoveryPanel />}
+      <TradingSettingsProvider>
+        <Layout
+          section={section}
+          setSection={handleSectionChange}
+          page={page}
+          setPage={setPage}
+          connected={connected}
+          health={health}
+        >
+          <div key={page} className="animate-fade-in">
+            {/* Options pages */}
+            {page === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
+            {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
+            {page === 'accuracy' && <AccuracyPanel />}
+            {page === 'tickers' && (
+              <TickerView
+                initialTicker={focusTicker}
+                onNavigated={() => setFocusTicker(null)}
+              />
+            )}
+            {page === 'discovery' && <DiscoveryPanel />}
 
-          {/* Trading pages */}
-          {page === 'trade-signals' && <TradingSignals />}
-          {page === 'backtest' && <BacktestPanel />}
-          {page === 'models' && <ModelPerformance />}
-          {page === 'portfolio' && <PortfolioView />}
-          {page === 'risk' && <RiskDashboard />}
-          {page === 'strategies' && <StrategyBuilder />}
-          {page === 'charts' && <ChartView />}
-        </div>
-      </Layout>
+            {/* Trading pages */}
+            {page === 'trade-signals' && <TradingSignals />}
+            {page === 'backtest' && <BacktestPanel />}
+            {page === 'models' && <ModelPerformance />}
+            {page === 'portfolio' && <PortfolioView />}
+            {page === 'performance' && <PerformanceAttribution />}
+            {page === 'risk' && <RiskDashboard />}
+            {page === 'strategies' && <StrategyBuilder />}
+            {page === 'charts' && <ChartView />}
+            {page === 'watchlists' && <WatchlistManager />}
+            {page === 'journal' && <TradeJournal />}
+            {page === 'settings' && <SettingsPage />}
+          </div>
+        </Layout>
+      </TradingSettingsProvider>
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </ToastProvider>
   )

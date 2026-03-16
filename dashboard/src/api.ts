@@ -37,6 +37,15 @@ import type {
   ModelCheckpointEnhanced,
   ModelVersionHistoryEntry,
   ModelTrainResult,
+  StrategyDefaults,
+  StrategyConfigSaved,
+  TradingChartData,
+  DemoStatus,
+  WatchlistSaved,
+  JournalEntry,
+  JournalStats,
+  TradingSettings,
+  PerformanceAttribution,
 } from './types';
 
 const BASE_URL = '/api';
@@ -354,11 +363,23 @@ export async function fetchRiskLimits(): Promise<RiskLimitsConfig> {
   return res.json();
 }
 
-export async function generateTradingSignals(tickers: string[]) {
-  const res = await fetch(`${TRADING_BASE}/generate`, {
+export async function generateTradingSignals(
+  payload:
+    | string[]
+    | {
+        ticker?: string
+        tickers?: string[]
+        timeframe?: string
+        period?: string
+        demo?: boolean
+      },
+) {
+  const normalized = Array.isArray(payload) ? { tickers: payload } : payload
+  const demoQuery = normalized.demo ? '?demo=true' : ''
+  const res = await fetch(`${TRADING_BASE}/generate-signals${demoQuery}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tickers }),
+    body: JSON.stringify(normalized),
   });
   if (!res.ok) throw new Error('Failed to generate trading signals');
   return res.json();
@@ -406,5 +427,153 @@ export async function fetchExecutions(params?: {
   if (params?.offset) query.set('offset', String(params.offset));
   const res = await fetch(`${TRADING_BASE}/executions?${query}`);
   if (!res.ok) throw new Error('Failed to fetch executions');
+  return res.json();
+}
+
+export async function fetchStrategyDefaults(): Promise<StrategyDefaults> {
+  const res = await fetch(`${TRADING_BASE}/strategies/defaults`);
+  if (!res.ok) throw new Error('Failed to fetch strategy defaults');
+  return res.json();
+}
+
+export async function fetchStrategyConfigs(): Promise<StrategyConfigSaved[]> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs`);
+  if (!res.ok) throw new Error('Failed to fetch strategy configs');
+  return res.json();
+}
+
+export async function saveStrategyConfig(config: Record<string, unknown>): Promise<{ id: string; name: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to save strategy config');
+  return res.json();
+}
+
+export async function deleteStrategyConfig(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete strategy config');
+  return res.json();
+}
+
+export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<TradingChartData> {
+  const res = await fetch(`${TRADING_BASE}/chart-data/${encodeURIComponent(ticker)}?period=${period}`);
+  if (!res.ok) throw new Error('Failed to fetch chart data');
+  return res.json();
+}
+
+export async function fetchDemoStatus(): Promise<DemoStatus> {
+  const res = await fetch(`${TRADING_BASE}/demo-status`);
+  if (!res.ok) throw new Error('Failed to fetch demo status');
+  return res.json();
+}
+
+export async function toggleDemoStatus(demoMode?: boolean): Promise<DemoStatus> {
+  const res = await fetch(`${TRADING_BASE}/demo-toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(typeof demoMode === 'boolean' ? { demo_mode: demoMode } : {}),
+  });
+  if (!res.ok) throw new Error('Failed to toggle demo mode');
+  return res.json();
+}
+
+export async function fetchWatchlists(): Promise<WatchlistSaved[]> {
+  const res = await fetch(`${TRADING_BASE}/watchlists`);
+  if (!res.ok) throw new Error('Failed to fetch watchlists');
+  return res.json();
+}
+
+export async function createWatchlist(payload: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to create watchlist');
+  return res.json();
+}
+
+export async function updateWatchlist(id: string, payload: { name?: string; tickers?: string[] }): Promise<{ id: string; name: string; tickers: string[] }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to update watchlist');
+  return res.json();
+}
+
+export async function deleteWatchlist(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete watchlist');
+  return res.json();
+}
+
+export async function scanWatchlist(id: string): Promise<{ generated: number; signal_ids: string[] }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}/scan`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to scan watchlist');
+  return res.json();
+}
+
+export async function fetchJournalEntries(limit: number = 50): Promise<JournalEntry[]> {
+  const res = await fetch(`${TRADING_BASE}/journal?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to fetch journal entries');
+  return res.json();
+}
+
+export async function createJournalEntry(payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to create journal entry');
+  return res.json();
+}
+
+export async function updateJournalEntry(id: string, payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to update journal entry');
+  return res.json();
+}
+
+export async function deleteJournalEntry(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete journal entry');
+  return res.json();
+}
+
+export async function fetchJournalStats(): Promise<JournalStats> {
+  const res = await fetch(`${TRADING_BASE}/journal/stats`);
+  if (!res.ok) throw new Error('Failed to fetch journal stats');
+  return res.json();
+}
+
+export async function fetchTradingSettings(): Promise<TradingSettings> {
+  const res = await fetch(`${TRADING_BASE}/settings`);
+  if (!res.ok) throw new Error('Failed to fetch settings');
+  return res.json();
+}
+
+export async function updateTradingSettings(settings: Partial<TradingSettings>): Promise<{ status: string; keys: string[] }> {
+  const res = await fetch(`${TRADING_BASE}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error('Failed to save settings');
+  return res.json();
+}
+
+export async function fetchPerformanceAttribution(): Promise<PerformanceAttribution> {
+  const res = await fetch(`${TRADING_BASE}/performance`);
+  if (!res.ok) throw new Error('Failed to fetch performance data');
   return res.json();
 }

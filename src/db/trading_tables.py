@@ -135,3 +135,65 @@ class MarketRegime(Base):
 
     def __repr__(self) -> str:
         return f"<MarketRegime {self.regime} conf={self.confidence}>"
+
+
+class StrategyConfig(Base):
+    __tablename__ = "strategy_configs"
+
+    id = Column(String, primary_key=True, default=_generate_uuid)
+    name = Column(String, nullable=False, unique=True)
+    strategy_name = Column(String, nullable=False)
+    regime = Column(String, nullable=True)
+    params_json = Column(JSON, nullable=True)
+    toggles_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<StrategyConfig {self.name} strategy={self.strategy_name}>"
+
+
+class Watchlist(Base):
+    __tablename__ = "watchlists"
+
+    id = Column(String, primary_key=True, default=_generate_uuid)
+    name = Column(String, nullable=False)
+    tickers_json = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<Watchlist {self.name} tickers={len(self.tickers_json or [])}>"
+
+
+class TradeJournal(Base):
+    __tablename__ = "trade_journal"
+
+    id = Column(String, primary_key=True, default=_generate_uuid)
+    execution_id = Column(String, ForeignKey("trade_executions.id"), nullable=True)
+    ticker = Column(String, nullable=False)
+    direction = Column(String, nullable=True)
+    entry_price = Column(Float, nullable=True)
+    exit_price = Column(Float, nullable=True)
+    pnl_dollars = Column(Float, nullable=True)
+    setup_notes = Column(Text, nullable=True)
+    review_notes = Column(Text, nullable=True)
+    tags_json = Column(JSON, nullable=True, default=list)
+    rating = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<TradeJournal {self.ticker} rating={self.rating}>"
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id = Column(String, primary_key=True, default=_generate_uuid)
+    key = Column(String, nullable=False, unique=True, index=True)
+    value_json = Column(JSON, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<UserSettings {self.key}>"

@@ -4,6 +4,7 @@ import type { HealthStatus, AutopilotStatus } from '../types'
 import type { Section, Page, OptionsPage, TradingPage } from '../App'
 import { fetchStatus } from '../api'
 import ScanButton from './ScanButton'
+import { useTradingSettings } from '../context/TradingSettingsContext'
 
 interface Props {
   section: Section
@@ -28,9 +29,16 @@ const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
   { key: 'backtest', icon: '\u25B6', label: 'Backtest Lab' },
   { key: 'models', icon: '\u2699', label: 'Models' },
   { key: 'portfolio', icon: '\u25A3', label: 'Portfolio' },
+  { key: 'performance', icon: '📊', label: 'Performance' },
   { key: 'risk', icon: '\u26A0', label: 'Risk' },
   { key: 'strategies', icon: '\u2630', label: 'Strategies' },
   { key: 'charts', icon: '\u2E0F', label: 'Charts' },
+  { key: 'watchlists', icon: '☆', label: 'Watchlists' },
+  { key: 'journal', icon: '📝', label: 'Journal' },
+]
+
+const TRADING_FOOTER_NAV: { key: TradingPage; icon: string; label: string }[] = [
+  { key: 'settings', icon: '⚙', label: 'Settings' },
 ]
 
 function LayoutStatus() {
@@ -66,6 +74,7 @@ function LayoutStatus() {
 
 export default function Layout({ section, setSection, page, setPage, connected, health, children }: Props) {
   void health
+  const { demoMode, demoLoading, setDemoMode } = useTradingSettings()
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -148,12 +157,47 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               <span className="max-lg:hidden">{n.label}</span>
             </button>
           ))}
+          {section === 'trading' && (
+            <div className="pt-3 mt-3 border-t border-border/50 space-y-1">
+              {TRADING_FOOTER_NAV.map((n) => (
+                <button
+                  key={n.key}
+                  onClick={() => setPage(n.key)}
+                  className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+                    max-lg:justify-center max-lg:px-0 max-md:px-3
+                    ${page === n.key
+                      ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
+                      : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
+                    }`}
+                >
+                  <span className="text-base">{n.icon}</span>
+                  <span className="max-lg:hidden">{n.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
 
-        {/* Scan */}
-        <div className="px-3 pb-3 max-md:hidden">
-          <ScanButton />
-        </div>
+        {section === 'trading' && (
+          <div className="px-3 pb-3 max-md:hidden space-y-3">
+            <div className="card border border-accent-amber/20 bg-accent-amber/10 p-4">
+              <p className="text-xs text-accent-amber font-medium uppercase tracking-wider mb-1">Paper Trading Only</p>
+              <p className="text-xs text-txt-secondary">
+                Research environment only. Not financial advice. No live brokerage execution.
+              </p>
+              <label className="mt-3 flex items-center justify-between gap-3 text-xs text-txt-secondary">
+                <span>Demo Mode</span>
+                <input
+                  type="checkbox"
+                  checked={demoMode}
+                  disabled={demoLoading}
+                  onChange={(e) => void setDemoMode(e.target.checked)}
+                />
+              </label>
+            </div>
+            <ScanButton />
+          </div>
+        )}
 
         {/* Status / Autopilot */}
         {connected && <LayoutStatus />}
@@ -184,11 +228,6 @@ export default function Layout({ section, setSection, page, setPage, connected, 
             </div>
           ) : (
             <>
-              {section === 'trading' && (
-                <div className="mb-4 px-4 py-2 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-accent-amber text-xs font-sans">
-                  <span className="font-semibold">Disclaimer:</span> This is a research and paper-trading tool only. Not financial advice. Do not use for real trading decisions.
-                </div>
-              )}
               {children}
             </>
           )}

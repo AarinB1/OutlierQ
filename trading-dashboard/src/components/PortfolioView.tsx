@@ -3,6 +3,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { fetchExecutions, fetchPortfolio, fetchPortfolioHistory } from '../api'
 import type { ClosedTrade, PortfolioHistoryPoint, PortfolioPosition, PortfolioSnapshot } from '../types'
 import { useToast } from '../hooks/useToast'
+import EmptyState from './EmptyState'
 
 type Tab = 'open' | 'history'
 type SortDir = 'asc' | 'desc'
@@ -326,10 +327,11 @@ export default function PortfolioView() {
               ))}
             </div>
           ) : positions.length === 0 ? (
-            <div className="text-sm text-txt-tertiary">
-              No open positions. Generate signals and they will appear here when the paper trading
-              bot executes them.
-            </div>
+            <EmptyState
+              icon="◻"
+              title="No open positions"
+              subtitle="Generate signals and they will appear here when the paper trading bot executes them. Run --trading-scheduler to start the bot."
+            />
           ) : (
             <>
               <div className="overflow-x-auto mb-3 text-xs">
@@ -459,9 +461,11 @@ export default function PortfolioView() {
               ))}
             </div>
           ) : tradesSorted.length === 0 ? (
-            <div className="text-sm text-txt-tertiary">
-              No trades completed yet. Closed positions will appear here with full P&amp;L breakdown.
-            </div>
+            <EmptyState
+              icon="◻"
+              title="No trades completed yet"
+              subtitle="Closed positions will appear here with full P&L breakdown, exit reason, and strategy attribution."
+            />
           ) : (
             <div className="max-h-[500px] overflow-y-auto text-xs">
               <table className="w-full min-w-[720px] border-separate border-spacing-0">

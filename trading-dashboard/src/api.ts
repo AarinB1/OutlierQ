@@ -14,6 +14,15 @@ import type {
   RiskLimitsConfig,
   ModelVersionHistoryEntry,
   ModelTrainResult,
+  StrategyDefaults,
+  StrategyConfigSaved,
+  TradingChartData,
+  DemoStatus,
+  WatchlistSaved,
+  JournalEntry,
+  JournalStats,
+  TradingSettings,
+  PerformanceAttribution,
 } from './types'
 
 const BASE_URL = '/api/trading'
@@ -50,8 +59,11 @@ export async function generateTradingSignals(payload: {
   ticker?: string
   tickers?: string[]
   timeframe?: string
+  period?: string
+  demo?: boolean
 }): Promise<{ generated: number; signals: TradingSignal[] }> {
-  return fetchJSON('/signals/generate', {
+  const demoQuery = payload.demo ? '?demo=true' : ''
+  return fetchJSON(`/generate-signals${demoQuery}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -142,5 +154,106 @@ export async function triggerModelTrain(modelType: string, ticker: string = 'SPY
     method: 'POST',
     body: JSON.stringify({ model_type: modelType, ticker }),
   })
+}
+
+export async function fetchStrategyDefaults(): Promise<StrategyDefaults> {
+  return fetchJSON('/strategies/defaults')
+}
+
+export async function fetchStrategyConfigs(): Promise<StrategyConfigSaved[]> {
+  return fetchJSON('/strategies/configs')
+}
+
+export async function saveStrategyConfig(config: Record<string, unknown>): Promise<{ id: string; name: string; status: string }> {
+  return fetchJSON('/strategies/configs', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
+
+export async function deleteStrategyConfig(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/strategies/configs/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<TradingChartData> {
+  return fetchJSON(`/chart-data/${encodeURIComponent(ticker)}?period=${period}`)
+}
+
+export async function fetchDemoStatus(): Promise<DemoStatus> {
+  return fetchJSON('/demo-status')
+}
+
+export async function toggleDemoStatus(demoMode?: boolean): Promise<DemoStatus> {
+  return fetchJSON('/demo-toggle', {
+    method: 'POST',
+    body: JSON.stringify(typeof demoMode === 'boolean' ? { demo_mode: demoMode } : {}),
+  })
+}
+
+export async function fetchWatchlists(): Promise<WatchlistSaved[]> {
+  return fetchJSON('/watchlists')
+}
+
+export async function createWatchlist(payload: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
+  return fetchJSON('/watchlists', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateWatchlist(id: string, payload: { name?: string; tickers?: string[] }): Promise<{ id: string; name: string; tickers: string[] }> {
+  return fetchJSON(`/watchlists/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteWatchlist(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/watchlists/${id}`, { method: 'DELETE' })
+}
+
+export async function scanWatchlist(id: string): Promise<{ generated: number; signal_ids: string[] }> {
+  return fetchJSON(`/watchlists/${id}/scan`, { method: 'POST' })
+}
+
+export async function fetchJournalEntries(limit: number = 50): Promise<JournalEntry[]> {
+  return fetchJSON(`/journal?limit=${limit}`)
+}
+
+export async function createJournalEntry(payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  return fetchJSON('/journal', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateJournalEntry(id: string, payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  return fetchJSON(`/journal/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteJournalEntry(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/journal/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchJournalStats(): Promise<JournalStats> {
+  return fetchJSON('/journal/stats')
+}
+
+export async function fetchTradingSettings(): Promise<TradingSettings> {
+  return fetchJSON('/settings')
+}
+
+export async function updateTradingSettings(settings: Partial<TradingSettings>): Promise<{ status: string; keys: string[] }> {
+  return fetchJSON('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
+}
+
+export async function fetchPerformanceAttribution(): Promise<PerformanceAttribution> {
+  return fetchJSON('/performance')
 }
 

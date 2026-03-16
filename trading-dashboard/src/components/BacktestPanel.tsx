@@ -11,6 +11,7 @@ import {
 import { fetchBacktestList, runBacktest } from '../api'
 import type { BacktestFullResult, BacktestSummary, BacktestTrade } from '../types'
 import { useToast } from '../hooks/useToast'
+import EmptyState from './EmptyState'
 
 type SortDir = 'asc' | 'desc'
 
@@ -140,12 +141,12 @@ export default function BacktestPanel() {
   }
 
   const renderEmptyState = () => (
-    <div className="card flex flex-col items-center justify-center py-12 text-center">
-      <div className="mb-3 text-2xl text-txt-secondary">◇</div>
-      <div className="font-mono font-semibold mb-1">No backtest results yet</div>
-      <div className="text-sm text-txt-tertiary max-w-md">
-        Select a strategy, ticker, and capital, then click Run Backtest to see performance analysis.
-      </div>
+    <div className="card">
+      <EmptyState
+        icon="▶"
+        title="No backtest results yet"
+        subtitle="Select a strategy and click Run Backtest to see historical performance analysis with equity curves, drawdown charts, and trade logs."
+      />
     </div>
   )
 
