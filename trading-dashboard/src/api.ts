@@ -7,6 +7,8 @@ import type {
   TradingSignal,
   BacktestFullResult,
   BacktestSummary,
+  PortfolioHistoryPoint,
+  ClosedTrade,
 } from './types'
 
 const BASE_URL = '/api/trading'
@@ -80,6 +82,10 @@ export async function fetchPortfolio(): Promise<PortfolioSnapshot> {
   return fetchJSON('/portfolio')
 }
 
+export async function fetchPortfolioHistory(days: number = 30): Promise<PortfolioHistoryPoint[]> {
+  return fetchJSON(`/portfolio/history?days=${days}`)
+}
+
 export async function fetchModels(): Promise<ModelCheckpoint[]> {
   return fetchJSON('/models')
 }
@@ -93,5 +99,20 @@ export async function updateSignalStatus(id: string, status: string): Promise<Tr
     method: 'PATCH',
     body: JSON.stringify({ status }),
   })
+}
+
+export async function fetchExecutions(params?: {
+  ticker?: string
+  strategy?: string
+  limit?: number
+  offset?: number
+}): Promise<ClosedTrade[]> {
+  const sp = new URLSearchParams()
+  if (params?.ticker) sp.set('ticker', params.ticker)
+  if (params?.strategy) sp.set('strategy', params.strategy)
+  if (params?.limit) sp.set('limit', String(params.limit))
+  if (params?.offset) sp.set('offset', String(params.offset))
+  const qs = sp.toString()
+  return fetchJSON(`/executions${qs ? `?${qs}` : ''}`)
 }
 

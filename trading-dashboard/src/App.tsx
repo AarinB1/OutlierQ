@@ -7,6 +7,7 @@ import PortfolioView from './components/PortfolioView'
 import RiskDashboard from './components/RiskDashboard'
 import StrategyBuilder from './components/StrategyBuilder'
 import ChartView from './components/ChartView'
+import { ToastProvider } from './components/Toast'
 
 export type Page =
   | 'signals'
@@ -21,17 +22,19 @@ export default function App() {
   const [page, setPage] = useState<Page>('signals')
 
   return (
-    <Layout page={page} setPage={setPage}>
-      <div key={page} className="animate-fade-in">
-        {page === 'signals' && <TradingSignals />}
-        {page === 'backtest' && <BacktestPanel />}
-        {page === 'models' && <ModelPerformance />}
-        {page === 'portfolio' && <PortfolioView />}
-        {page === 'risk' && <RiskDashboard />}
-        {page === 'strategy' && <StrategyBuilder />}
-        {page === 'charts' && <ChartView />}
-      </div>
-    </Layout>
+    <ToastProvider>
+      <Layout page={page} setPage={setPage}>
+        <div key={page} className="animate-fade-in">
+          {page === 'signals' && <TradingSignals />}
+          {page === 'backtest' && <BacktestPanel />}
+          {page === 'models' && <ModelPerformance />}
+          {page === 'portfolio' && <PortfolioView />}
+          {page === 'risk' && <RiskDashboard />}
+          {page === 'strategy' && <StrategyBuilder />}
+          {page === 'charts' && <ChartView />}
+        </div>
+      </Layout>
+    </ToastProvider>
   )
 }
 

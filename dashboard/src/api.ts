@@ -28,6 +28,8 @@ import type {
   TradingSignal,
   BacktestFullResult,
   BacktestSummary,
+  PortfolioHistoryPoint,
+  ClosedTrade,
 } from './types';
 
 const BASE_URL = '/api';
@@ -271,6 +273,12 @@ export async function fetchPortfolio() {
   return res.json();
 }
 
+export async function fetchPortfolioHistory(days: number = 30): Promise<PortfolioHistoryPoint[]> {
+  const res = await fetch(`${TRADING_BASE}/portfolio/history?days=${days}`);
+  if (!res.ok) throw new Error('Failed to fetch portfolio history');
+  return res.json();
+}
+
 export async function fetchTradingModels() {
   const res = await fetch(`${TRADING_BASE}/models`);
   if (!res.ok) throw new Error('Failed to fetch models');
@@ -306,5 +314,21 @@ export async function updateSignalStatus(id: string, status: string): Promise<Tr
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error('Failed to update signal status');
+  return res.json();
+}
+
+export async function fetchExecutions(params?: {
+  ticker?: string
+  strategy?: string
+  limit?: number
+  offset?: number
+}): Promise<ClosedTrade[]> {
+  const query = new URLSearchParams();
+  if (params?.ticker) query.set('ticker', params.ticker);
+  if (params?.strategy) query.set('strategy', params.strategy);
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.offset) query.set('offset', String(params.offset));
+  const res = await fetch(`${TRADING_BASE}/executions?${query}`);
+  if (!res.ok) throw new Error('Failed to fetch executions');
   return res.json();
 }

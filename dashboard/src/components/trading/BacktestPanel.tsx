@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { fetchBacktestList, runBacktest } from '../../api'
 import type { BacktestFullResult, BacktestSummary, BacktestTrade } from '../../types'
+import { useToast } from '../../hooks/useToast'
 
 type SortDir = 'asc' | 'desc'
 
@@ -39,6 +40,7 @@ const tradePnlSorter = (dir: SortDir) => (a: BacktestTrade, b: BacktestTrade) =>
 }
 
 export default function BacktestPanel() {
+  const { addToast } = useToast()
   const [strategy, setStrategy] = useState('momentum')
   const [capital, setCapital] = useState(100000)
   const [ticker, setTicker] = useState('SPY')
@@ -52,6 +54,7 @@ export default function BacktestPanel() {
   const onRun = async () => {
     setLoading(true)
     setError(null)
+    addToast('info', 'Backtest started', `Running ${strategy} on ${ticker}...`)
     try {
       const res = await runBacktest({
         strategy,
@@ -60,9 +63,17 @@ export default function BacktestPanel() {
         period: '1y',
       })
       setResult(res)
+      addToast(
+        'trade',
+        'Backtest complete',
+        `${res.metrics.total_trades} trades • Sharpe ${res.metrics.sharpe_ratio.toFixed(
+          2,
+        )} • Return ${res.metrics.total_return_pct.toFixed(1)}%`,
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to run backtest'
       setError(msg)
+      addToast('error', 'Backtest failed', msg)
     } finally {
       setLoading(false)
     }

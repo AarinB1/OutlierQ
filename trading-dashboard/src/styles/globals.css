@@ -19,6 +19,11 @@
   }
 }
 
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 @layer components {
   .card {
     @apply bg-surface-secondary border border-border rounded-card p-5;
@@ -31,6 +36,9 @@
   }
   .btn-primary {
     @apply px-4 py-2 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm;
+  }
+  .toast-enter {
+    animation: toastSlideIn 250ms ease-out forwards;
   }
 }
 

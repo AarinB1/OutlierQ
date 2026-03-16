@@ -237,6 +237,7 @@ def get_portfolio(db: Session = Depends(get_db)) -> dict:
             "daily_pnl": 0.0,
             "cumulative_pnl": 0.0,
             "max_drawdown": 0.0,
+            "positions_count": 0,
         }
     return {
         "cash": latest.cash,
@@ -246,7 +247,73 @@ def get_portfolio(db: Session = Depends(get_db)) -> dict:
         "cumulative_pnl": latest.cumulative_pnl,
         "max_drawdown": latest.max_drawdown,
         "timestamp": latest.timestamp.isoformat() if latest.timestamp else None,
+        "positions_count": len(latest.positions_json or []),
     }
+
+
+@router.get("/portfolio/history")
+def get_portfolio_history(
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Return portfolio snapshots over the last N days for equity timeline."""
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    snapshots = (
+        db.query(PortfolioState)
+        .filter(PortfolioState.timestamp >= cutoff)
+        .order_by(PortfolioState.timestamp.asc())
+        .all()
+    )
+    return [
+        {
+            "timestamp": s.timestamp.isoformat() if s.timestamp else None,
+            "cash": s.cash,
+            "total_value": s.total_value,
+            "daily_pnl": s.daily_pnl,
+            "cumulative_pnl": s.cumulative_pnl,
+            "max_drawdown": s.max_drawdown,
+        }
+        for s in snapshots
+    ]
+
+
+@router.get("/executions")
+def list_executions(
+    ticker: Optional[str] = None,
+    strategy: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Return closed trade executions."""
+    query = db.query(TradeExecution).order_by(TradeExecution.exit_time.desc())
+    if ticker:
+        query = query.filter(TradeExecution.ticker == ticker.upper())
+    if strategy:
+        query = query.filter(TradeExecution.strategy_name == strategy)
+    executions = query.offset(offset).limit(limit).all()
+    return [
+        {
+            "id": e.id,
+            "signal_id": e.signal_id,
+            "ticker": e.ticker,
+            "direction": e.direction,
+            "entry_time": e.entry_time.isoformat() if e.entry_time else None,
+            "exit_time": e.exit_time.isoformat() if e.exit_time else None,
+            "entry_price": e.entry_price,
+            "exit_price": e.exit_price,
+            "quantity": e.quantity,
+            "pnl_dollars": e.pnl_dollars,
+            "pnl_percent": e.pnl_percent,
+            "fees": e.fees,
+            "slippage": e.slippage,
+            "exit_reason": e.exit_reason,
+            "strategy_name": e.strategy_name,
+        }
+        for e in executions
+    ]
 
 
 # ── Models ───────────────────────────────────────────────────────────

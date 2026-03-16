@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchTradingSignals, generateTradingSignals, updateSignalStatus } from '../../api'
 import type { TradingSignal } from '../../types'
+import { useToast } from '../../hooks/useToast'
 
 type DirectionFilter = 'all' | 'BUY' | 'SHORT' | 'SELL'
 type StatusFilter = 'all' | 'pending' | 'active' | 'closed'
@@ -51,6 +52,8 @@ function safePrice(v: number | null): string {
 }
 
 export default function TradingSignals() {
+  const { addToast } = useToast()
+
   const [signals, setSignals] = useState<TradingSignal[]>([])
   const [ticker, setTicker] = useState('AAPL')
   const [loading, setLoading] = useState(true)
@@ -71,9 +74,11 @@ export default function TradingSignals() {
       limit: 60,
     })
       .then(setSignals)
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : 'Failed to fetch trading signals'),
-      )
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : 'Failed to fetch trading signals'
+        setError(msg)
+        addToast('error', 'Failed to load signals', msg)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -86,10 +91,17 @@ export default function TradingSignals() {
     setBusy(true)
     setError(null)
     try {
-      await generateTradingSignals([ticker.toUpperCase()])
+      const result = await generateTradingSignals([ticker.toUpperCase()])
       load()
+      addToast(
+        'signal',
+        `Generated ${result.generated} signal(s)`,
+        `${ticker.toUpperCase()} • ${result.signals.length} opportunities found`,
+      )
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed generating signals')
+      const msg = e instanceof Error ? e.message : 'Failed generating signals'
+      setError(msg)
+      addToast('error', 'Signal generation failed', msg)
     } finally {
       setBusy(false)
     }
@@ -99,8 +111,15 @@ export default function TradingSignals() {
     try {
       const updated = await updateSignalStatus(id, newStatus)
       setSignals((prev) => prev.map((s) => (s.id === id ? updated : s)))
+      addToast(
+        'info',
+        `Signal ${newStatus}`,
+        `${updated.ticker} ${updated.direction} signal ${newStatus}`,
+      )
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to update signal status')
+      const msg = e instanceof Error ? e.message : 'Failed to update signal status'
+      setError(msg)
+      addToast('error', 'Failed to update signal status', msg)
     }
   }
 
