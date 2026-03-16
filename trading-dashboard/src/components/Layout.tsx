@@ -12,9 +12,13 @@ const NAV: Array<{ key: Page; label: string }> = [
   { key: 'backtest', label: 'Backtest Lab' },
   { key: 'models', label: 'Model Performance' },
   { key: 'portfolio', label: 'Portfolio' },
+  { key: 'performance', label: 'Performance' },
   { key: 'risk', label: 'Risk Dashboard' },
   { key: 'strategy', label: 'Strategy Builder' },
   { key: 'charts', label: 'Chart View' },
+  { key: 'watchlists', label: 'Watchlists' },
+  { key: 'journal', label: 'Journal' },
+  { key: 'settings', label: 'Settings' },
 ]
 
 export default function Layout({ page, setPage, children }: Props) {

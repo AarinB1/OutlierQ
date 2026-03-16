@@ -19,11 +19,15 @@ import PortfolioView from './components/trading/PortfolioView'
 import RiskDashboard from './components/trading/RiskDashboard'
 import StrategyBuilder from './components/trading/StrategyBuilder'
 import ChartView from './components/trading/ChartView'
+import WatchlistManager from './components/trading/WatchlistManager'
+import TradeJournal from './components/trading/TradeJournal'
+import PerformanceAttribution from './components/trading/PerformanceAttribution'
+import SettingsPage from './components/trading/SettingsPage'
 
 export type Section = 'options' | 'trading'
 
 export type OptionsPage = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery'
-export type TradingPage = 'trade-signals' | 'backtest' | 'models' | 'portfolio' | 'risk' | 'strategies' | 'charts'
+export type TradingPage = 'trade-signals' | 'backtest' | 'models' | 'portfolio' | 'performance' | 'risk' | 'strategies' | 'charts' | 'watchlists' | 'journal' | 'settings'
 export type Page = OptionsPage | TradingPage
 
 export default function App() {
@@ -99,6 +103,10 @@ export default function App() {
           {page === 'risk' && <RiskDashboard />}
           {page === 'strategies' && <StrategyBuilder />}
           {page === 'charts' && <ChartView />}
+          {page === 'watchlists' && <WatchlistManager />}
+          {page === 'journal' && <TradeJournal />}
+          {page === 'performance' && <PerformanceAttribution />}
+          {page === 'settings' && <SettingsPage />}
         </div>
       </Layout>
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

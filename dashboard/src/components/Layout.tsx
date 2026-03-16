@@ -28,9 +28,13 @@ const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
   { key: 'backtest', icon: '\u25B6', label: 'Backtest Lab' },
   { key: 'models', icon: '\u2699', label: 'Models' },
   { key: 'portfolio', icon: '\u25A3', label: 'Portfolio' },
+  { key: 'performance', icon: '\u25CE', label: 'Performance' },
   { key: 'risk', icon: '\u26A0', label: 'Risk' },
   { key: 'strategies', icon: '\u2630', label: 'Strategies' },
   { key: 'charts', icon: '\u2E0F', label: 'Charts' },
+  { key: 'watchlists', icon: '\u2606', label: 'Watchlists' },
+  { key: 'journal', icon: '\u270E', label: 'Journal' },
+  { key: 'settings', icon: '\u2699', label: 'Settings' },
 ]
 
 function LayoutStatus() {

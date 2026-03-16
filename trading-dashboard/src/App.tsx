@@ -7,6 +7,10 @@ import PortfolioView from './components/PortfolioView'
 import RiskDashboard from './components/RiskDashboard'
 import StrategyBuilder from './components/StrategyBuilder'
 import ChartView from './components/ChartView'
+import WatchlistManager from './components/WatchlistManager'
+import TradeJournal from './components/TradeJournal'
+import PerformanceAttribution from './components/PerformanceAttribution'
+import SettingsPage from './components/SettingsPage'
 import { ToastProvider } from './components/Toast'
 
 export type Page =
@@ -14,9 +18,13 @@ export type Page =
   | 'backtest'
   | 'models'
   | 'portfolio'
+  | 'performance'
   | 'risk'
   | 'strategy'
   | 'charts'
+  | 'watchlists'
+  | 'journal'
+  | 'settings'
 
 export default function App() {
   const [page, setPage] = useState<Page>('signals')
@@ -29,9 +37,13 @@ export default function App() {
           {page === 'backtest' && <BacktestPanel />}
           {page === 'models' && <ModelPerformance />}
           {page === 'portfolio' && <PortfolioView />}
+          {page === 'performance' && <PerformanceAttribution />}
           {page === 'risk' && <RiskDashboard />}
           {page === 'strategy' && <StrategyBuilder />}
           {page === 'charts' && <ChartView />}
+          {page === 'watchlists' && <WatchlistManager />}
+          {page === 'journal' && <TradeJournal />}
+          {page === 'settings' && <SettingsPage />}
         </div>
       </Layout>
     </ToastProvider>
