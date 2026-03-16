@@ -1,23 +1,62 @@
 import { useEffect } from 'react'
+import type { OptionsPage } from '../App'
 
-interface ShortcutMap {
-  [key: string]: () => void
+interface UseKeyboardShortcutsOptions {
+  onNavigate: (page: OptionsPage) => void
+  onFocusSearch: () => void
+  onToggleShortcuts: () => void
 }
 
-export function useKeyboardShortcuts(shortcuts: ShortcutMap) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
 
-      const fn = shortcuts[e.key]
-      if (fn) {
-        e.preventDefault()
-        fn()
+  const tagName = target.tagName.toLowerCase()
+  return tagName === 'input' || tagName === 'textarea' || target.isContentEditable
+}
+
+export function useKeyboardShortcuts({
+  onNavigate,
+  onFocusSearch,
+  onToggleShortcuts,
+}: UseKeyboardShortcutsOptions) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+
+      if (key === '/') {
+        event.preventDefault()
+        onFocusSearch()
+        return
+      }
+
+      if (event.key === '?') {
+        event.preventDefault()
+        onToggleShortcuts()
+        return
+      }
+
+      const pageMap: Record<string, OptionsPage> = {
+        s: 'signals',
+        e: 'events',
+        a: 'accuracy',
+        t: 'tickers',
+        d: 'discovery',
+      }
+
+      const nextPage = pageMap[key]
+      if (nextPage) {
+        event.preventDefault()
+        onNavigate(nextPage)
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [shortcuts])
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onFocusSearch, onNavigate, onToggleShortcuts])
 }

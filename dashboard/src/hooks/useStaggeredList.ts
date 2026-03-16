@@ -1,30 +1,22 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 export function useStaggeredList<T>(items: T[], delayMs = 50) {
-  const [ready, setReady] = useState(false)
-  const prevLength = useRef(0)
+  const [visibleItems, setVisibleItems] = useState<T[]>([])
 
   useEffect(() => {
-    if (items.length === 0) {
-      setReady(false)
-      prevLength.current = 0
-      return
-    }
-
-    const raf = requestAnimationFrame(() => {
-      setReady(true)
-      prevLength.current = items.length
+    let frame = 0
+    setVisibleItems([])
+    frame = requestAnimationFrame(() => {
+      setVisibleItems(items)
     })
-    return () => cancelAnimationFrame(raf)
+
+    return () => cancelAnimationFrame(frame)
   }, [items])
 
-  const getDelay = useCallback(
-    (index: number) => ({
-      animationDelay: `${index * delayMs}ms`,
-      animationFillMode: 'both' as const,
-    }),
-    [delayMs],
+  const getDelay = useMemo(
+    () => (index: number) => ({ animationDelay: `${index * delayMs}ms` }),
+    [delayMs]
   )
 
-  return { visibleItems: items, ready, getDelay }
+  return { visibleItems, getDelay }
 }

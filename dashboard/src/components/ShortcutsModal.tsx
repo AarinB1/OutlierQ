@@ -1,64 +1,103 @@
 import { useEffect, useRef } from 'react'
 
+const SHORTCUTS = [
+  { keyLabel: 'S', description: 'Go to Signals' },
+  { keyLabel: 'E', description: 'Go to Events' },
+  { keyLabel: 'A', description: 'Go to Accuracy' },
+  { keyLabel: 'T', description: 'Go to Tickers' },
+  { keyLabel: 'D', description: 'Go to Discovery' },
+  { keyLabel: '/', description: 'Focus ticker search' },
+  { keyLabel: '?', description: 'Toggle shortcuts help' },
+  { keyLabel: 'Esc', description: 'Close this dialog' },
+]
+
 interface Props {
   open: boolean
   onClose: () => void
 }
 
-const SHORTCUTS = [
-  { key: 's', description: 'Go to Signals' },
-  { key: 'e', description: 'Go to Events' },
-  { key: 'a', description: 'Go to Accuracy' },
-  { key: 't', description: 'Go to Tickers' },
-  { key: 'd', description: 'Go to Discovery' },
-  { key: '/', description: 'Focus ticker search' },
-  { key: '?', description: 'Toggle this dialog' },
-]
-
 export default function ShortcutsModal({ open, onClose }: Props) {
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const firstFocusableRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!open) return
-    firstFocusableRef.current?.focus()
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    if (!open) {
+      return
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
 
-  if (!open) return null
+    const panel = panelRef.current
+    const focusable = panel?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    const first = focusable?.[0]
+    const last = focusable?.[focusable.length - 1]
+    first?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
+      if (event.key === 'Tab' && first && last) {
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, open])
+
+  if (!open) {
+    return null
+  }
 
   return (
     <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
-      onClick={e => { if (e.target === overlayRef.current) onClose() }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Keyboard shortcuts"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-surface-primary/80 px-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
     >
-      <div className="bg-surface-secondary border border-border rounded-card p-6 w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-mono font-bold text-lg text-txt-primary">Keyboard Shortcuts</h2>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcuts-title"
+        className="w-full max-w-2xl rounded-card border border-border bg-surface-secondary p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 id="shortcuts-title" className="font-mono text-lg font-bold text-txt-primary">
+              Keyboard Shortcuts
+            </h2>
+            <p className="mt-1 text-sm text-txt-secondary">Quick navigation for the options workspace.</p>
+          </div>
           <button
-            ref={firstFocusableRef}
+            type="button"
             onClick={onClose}
-            className="text-txt-tertiary hover:text-txt-primary transition-colors text-lg"
-            aria-label="Close shortcuts dialog"
+            className="rounded-md px-2 py-1 text-sm text-txt-tertiary transition-colors hover:text-txt-primary"
           >
-            {'\u00D7'}
+            Close
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {SHORTCUTS.map(s => (
-            <div key={s.key} className="flex items-center gap-3">
-              <kbd className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-md bg-surface-tertiary border border-border text-txt-primary font-mono text-sm font-bold">
-                {s.key}
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {SHORTCUTS.map((shortcut) => (
+            <div
+              key={shortcut.keyLabel}
+              className="flex items-center justify-between rounded-lg border border-border bg-surface-tertiary px-4 py-3"
+            >
+              <span className="text-sm text-txt-secondary">{shortcut.description}</span>
+              <kbd className="rounded-md border border-border bg-surface-primary px-2 py-1 font-mono text-xs text-txt-primary">
+                {shortcut.keyLabel}
               </kbd>
-              <span className="text-txt-secondary text-sm font-sans">{s.description}</span>
             </div>
           ))}
         </div>

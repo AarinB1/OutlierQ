@@ -167,7 +167,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary main-content">
+      <main className="main-scroll-area flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary">
         <div className="max-w-content mx-auto p-8 max-md:p-4">
           {!connected ? (
             <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
