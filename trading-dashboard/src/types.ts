@@ -79,6 +79,8 @@ export interface BacktestFullResult {
     sharpe_ratio: number
     sortino_ratio: number
     calmar_ratio: number
+    alpha_vs_spy: number
+    beta: number
     max_drawdown_pct: number
     max_drawdown_duration_days: number
     win_rate: number
