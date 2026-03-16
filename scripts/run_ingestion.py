@@ -15,6 +15,7 @@ Usage:
     python scripts/run_ingestion.py --ml-status
     python scripts/run_ingestion.py --train-ml
     python scripts/run_ingestion.py --once --signals --use-ml --tickers AAPL,TSLA
+    python scripts/run_ingestion.py --trading-scheduler --tickers SPY,AAPL,TSLA  # paper trading bot
 """
 
 import argparse
@@ -843,68 +844,82 @@ def run_tune_trading() -> None:
 
 
 def run_trading_scheduler(tickers: list[str]) -> None:
-    """Run trading-specific APScheduler jobs."""
-    from datetime import datetime, timezone
-
+    """Run the paper-trading bot on a schedule."""
     from apscheduler.schedulers.blocking import BlockingScheduler
     from apscheduler.triggers.cron import CronTrigger
-    from src.db.database import get_session
-    from src.trading.risk.portfolio import VirtualPortfolio
-    from src.trading.signals.trade_signal_engine import TradeSignalEngine
+    from src.trading.paper_trading_bot import PaperTradingBot
     from src.trading.training.trainer import TradingTrainer
 
-    print("\n🚀 TRADING SCHEDULER MODE — weekly retrain, 15m signals, hourly snapshots.\n")
+    print("\n📈 PAPER TRADING BOT — signals every 15m, monitoring every 1m, EOD summary at 4:05 PM ET.\n")
+
+    bot = PaperTradingBot(tickers=tickers)
     scheduler = BlockingScheduler()
-    engine = TradeSignalEngine()
-    portfolio = VirtualPortfolio()
+
+    def signal_job() -> None:
+        try:
+            bot.run_signal_cycle()
+        except Exception:
+            logger.exception("Paper trading signal job failed")
+
+    def monitor_job() -> None:
+        try:
+            bot.run_monitor_cycle()
+        except Exception:
+            logger.exception("Paper trading monitor job failed")
+
+    def eod_job() -> None:
+        try:
+            bot.end_of_day_summary()
+            bot.export_trades("paper_trades.csv")
+        except Exception:
+            logger.exception("Paper trading EOD job failed")
 
     def retrain_job() -> None:
-        logger.info("Trading scheduler: weekly retrain started")
+        logger.info("Weekly model retrain started")
         try:
             TradingTrainer().train_all_models(ticker="SPY", period="2y")
         except Exception:
-            logger.exception("Trading scheduler retrain job failed")
+            logger.exception("Weekly retrain job failed")
 
-    def signals_job() -> None:
-        logger.info("Trading scheduler: signal generation for %s", tickers)
-        try:
-            with get_session() as s:
-                engine.generate_batch(tickers=tickers, session=s, timeframe="daily")
-        except Exception:
-            logger.exception("Trading scheduler signals job failed")
-
-    def snapshot_job() -> None:
-        logger.info("Trading scheduler: portfolio snapshot")
-        try:
-            with get_session() as s:
-                portfolio.snapshot(session=s, now=datetime.now(timezone.utc))
-        except Exception:
-            logger.exception("Trading scheduler snapshot job failed")
-
+    scheduler.add_job(
+        signal_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour="9-15", minute="*/15",
+            timezone="US/Eastern",
+        ),
+        id="paper_signal_15m",
+        name="Paper trading signals every 15m",
+    )
+    scheduler.add_job(
+        monitor_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour="9-16", minute="*",
+            timezone="US/Eastern",
+        ),
+        id="paper_monitor_1m",
+        name="Paper trading monitor every 1m",
+    )
+    scheduler.add_job(
+        eod_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri", hour=16, minute=5,
+            timezone="US/Eastern",
+        ),
+        id="paper_eod",
+        name="Paper trading EOD summary",
+    )
     scheduler.add_job(
         retrain_job,
         trigger=CronTrigger(day_of_week="sun", hour=12, minute=0, timezone="UTC"),
-        id="trading_retrain_weekly",
-        name="Trading retrain weekly",
-    )
-    scheduler.add_job(
-        signals_job,
-        trigger=CronTrigger(day_of_week="mon-fri", hour="9-15", minute="*/15", timezone="US/Eastern"),
-        id="trading_signals_15m",
-        name="Trading signals every 15m",
-    )
-    scheduler.add_job(
-        snapshot_job,
-        trigger=CronTrigger(minute=0),
-        id="trading_portfolio_snapshot_hourly",
-        name="Trading portfolio snapshot hourly",
+        id="paper_retrain_weekly",
+        name="Weekly model retrain",
     )
 
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown(wait=False)
-        logger.info("Trading scheduler stopped by user.")
+        logger.info("Paper trading bot stopped by user.")
 
 
 def main() -> None:
