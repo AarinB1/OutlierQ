@@ -89,7 +89,7 @@ def list_signals(
 ) -> list[dict]:
     SORT_COLUMNS = {
         "confidence": Signal.confidence,
-        "time": Signal.created_at,
+        "time": Signal.suggested_expiry,
         "ticker": Signal.ticker,
     }
     sort_col = SORT_COLUMNS[sort_by]

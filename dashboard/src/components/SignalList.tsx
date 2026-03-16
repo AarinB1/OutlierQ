@@ -14,7 +14,7 @@ const FILTERS = [
 ] as const
 
 const SORT_OPTIONS = [
-  { key: 'time', label: '∿ Time' },
+  { key: 'time', label: '∿ Expiry' },
   { key: 'confidence', label: '∿ Confidence' },
   { key: 'ticker', label: 'A→Z Ticker' },
 ] as const
