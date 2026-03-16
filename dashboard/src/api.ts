@@ -184,6 +184,23 @@ export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: str
   return fetchJSON('/ml/train', { method: 'POST' });
 }
 
+// ── Sparkline cache ──────────────────────────────────────────────
+
+const sparklineCache = new Map<string, { data: number[]; ts: number }>()
+const SPARKLINE_TTL = 5 * 60 * 1000
+
+export async function fetchSparkline(ticker: string): Promise<number[]> {
+  const cached = sparklineCache.get(ticker)
+  if (cached && Date.now() - cached.ts < SPARKLINE_TTL) return cached.data
+
+  const points: PricePoint[] = await fetchJSON(
+    `/ticker/${ticker}/price-history?period=1mo&interval=1d`,
+  )
+  const closes = points.map(p => p.close)
+  sparklineCache.set(ticker, { data: closes, ts: Date.now() })
+  return closes
+}
+
 // ── Trading API ──────────────────────────────────────────────────
 
 const TRADING_BASE = '/api/trading';

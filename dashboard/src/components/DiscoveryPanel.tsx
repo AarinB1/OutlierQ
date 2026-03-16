@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { fetchDiscoveries, fetchDiscoveryStats, fetchActiveTickers, triggerDiscover, triggerScan } from '../api'
 import type { DiscoveryRecord, DiscoveryStats, ActiveTickers } from '../types'
+import { useStaggeredList } from '../hooks/useStaggeredList'
 
 function methodBadges(method: string) {
   const m = method.toLowerCase()
@@ -23,6 +24,13 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(sec / 86400)}d ago`
 }
 
+function isToday(iso: string | null): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  const now = new Date()
+  return d.toDateString() === now.toDateString()
+}
+
 export default function DiscoveryPanel() {
   const [discoveries, setDiscoveries] = useState<DiscoveryRecord[]>([])
   const [stats, setStats] = useState<DiscoveryStats | null>(null)
@@ -31,6 +39,8 @@ export default function DiscoveryPanel() {
   const [discovering, setDiscovering] = useState(false)
   const [scanningTicker, setScanningTicker] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const { ready, getDelay } = useStaggeredList(discoveries)
 
   const load = () => {
     setLoading(true)
@@ -76,9 +86,17 @@ export default function DiscoveryPanel() {
         <button
           onClick={handleDiscover}
           disabled={discovering}
-          className={`btn-primary ${discovering ? 'opacity-70 cursor-wait' : ''}`}
+          className={`btn-primary flex items-center gap-2 ${discovering ? 'opacity-70 cursor-wait' : ''}`}
         >
-          {discovering ? 'Discovering...' : 'Discover Now'}
+          {discovering ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Discovering...
+            </>
+          ) : 'Discover Now'}
         </button>
       </div>
 
@@ -159,13 +177,24 @@ export default function DiscoveryPanel() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {discoveries.map(d => (
-            <div key={d.id} className="card border-l-[3px] border-l-accent-blue">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 stagger-container">
+          {discoveries.map((d, idx) => (
+            <div
+              key={d.id}
+              className={`card border-l-[3px] border-l-accent-blue ${ready ? 'stagger-item' : ''}`}
+              style={ready ? getDelay(idx) : undefined}
+            >
               <div className="flex items-start justify-between mb-3">
-                <span className="font-mono font-bold text-2xl text-txt-primary tracking-tight">
-                  {d.ticker}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-2xl text-txt-primary tracking-tight">
+                    {d.ticker}
+                  </span>
+                  {isToday(d.discovered_at) && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider uppercase bg-accent-green-muted text-accent-green animate-pulse">
+                      NEW
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1.5">
                   {methodBadges(d.discovery_method)}
                 </div>
@@ -176,7 +205,6 @@ export default function DiscoveryPanel() {
                 {d.volume_ratio != null && <span>Vol: {d.volume_ratio}x</span>}
               </div>
 
-              {/* Confidence bar */}
               <div className="mb-3">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-txt-secondary text-xs">Confidence</span>

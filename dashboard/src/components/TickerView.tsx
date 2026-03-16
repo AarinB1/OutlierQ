@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators, fetchEdgar } from '../api'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators, fetchEdgar, fetchSparkline } from '../api'
 import type {
   TickerSummary,
   ChartData,
@@ -13,10 +13,58 @@ import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
 import SignalHistory from './SignalHistory'
+import Sparkline from './Sparkline'
+import { useStaggeredList } from '../hooks/useStaggeredList'
 
 interface TickerViewProps {
   initialTicker?: string | null
   onNavigated?: () => void
+}
+
+function TickerCard({ ticker, onSelect }: { ticker: TickerSummary; onSelect: () => void }) {
+  const [sparkData, setSparkData] = useState<number[] | null>(null)
+
+  useEffect(() => {
+    fetchSparkline(ticker.ticker)
+      .then(setSparkData)
+      .catch(() => {})
+  }, [ticker.ticker])
+
+  return (
+    <button
+      onClick={onSelect}
+      className="text-left card transition-all duration-150 hover:border-border-hover"
+    >
+      <div className="font-mono font-bold text-xl text-txt-primary mb-2">{ticker.ticker}</div>
+      {sparkData && sparkData.length >= 2 && (
+        <div className="mb-2">
+          <Sparkline
+            data={sparkData}
+            height={24}
+            color={ticker.win_rate >= 0.5 ? '#00d68f' : ticker.win_rate > 0 ? '#ff3d5a' : '#55556a'}
+          />
+        </div>
+      )}
+      <div className="space-y-1.5 text-xs font-sans">
+        <div className="flex justify-between">
+          <span className="text-txt-tertiary">Signals</span>
+          <span className="font-mono text-txt-primary">{ticker.total_signals}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-txt-tertiary">Win rate</span>
+          <span className={`font-mono ${ticker.win_rate >= 0.5 ? 'text-accent-green' : ticker.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
+            {(ticker.win_rate * 100).toFixed(0)}%
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-txt-tertiary">Last signal</span>
+          <span className="font-mono text-txt-tertiary text-[11px]">
+            {ticker.last_signal_date ? new Date(ticker.last_signal_date).toLocaleDateString() : '\u2014'}
+          </span>
+        </div>
+      </div>
+    </button>
+  )
 }
 
 export default function TickerView({ initialTicker, onNavigated }: TickerViewProps = {}) {
@@ -25,7 +73,6 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Detail view state
   const [info, setInfo] = useState<CompanyInfo | null>(null)
   const [stats, setStats] = useState<KeyStats | null>(null)
   const [chartData, setChartData] = useState<ChartData | null>(null)
@@ -34,6 +81,8 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   const [edgarData, setEdgarData] = useState<EdgarResult | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [period, setPeriod] = useState('6mo')
+
+  const { ready, getDelay } = useStaggeredList(tickers)
 
   useEffect(() => {
     if (initialTicker) {
@@ -96,7 +145,6 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
     </div>
   )
 
-  // ── Detail view ──────────────────────────────────────────────
   if (selected) {
     if (detailLoading) return (
       <div className="space-y-4">
@@ -233,7 +281,7 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
               <div className="bg-surface-tertiary rounded p-2">
                 <div className="text-txt-tertiary">Most significant item</div>
                 <div className="font-mono text-base text-txt-primary">
-                  {edgarData["8k_analysis"]?.most_significant_item || '—'}
+                  {edgarData["8k_analysis"]?.most_significant_item || '\u2014'}
                 </div>
               </div>
             </div>
@@ -311,12 +359,12 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
               <div className="bg-surface-tertiary rounded p-2">
                 <div className="text-txt-tertiary">Dominant strike</div>
                 <div className="font-mono text-txt-primary text-base">
-                  {optionsFlow.dominant_strike != null ? `$${optionsFlow.dominant_strike.toFixed(2)}` : '—'}
+                  {optionsFlow.dominant_strike != null ? `$${optionsFlow.dominant_strike.toFixed(2)}` : '\u2014'}
                 </div>
               </div>
               <div className="bg-surface-tertiary rounded p-2">
                 <div className="text-txt-tertiary">Dominant expiry</div>
-                <div className="font-mono text-txt-primary text-base">{optionsFlow.dominant_expiry || '—'}</div>
+                <div className="font-mono text-txt-primary text-base">{optionsFlow.dominant_expiry || '\u2014'}</div>
               </div>
             </div>
 
@@ -373,7 +421,6 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
     )
   }
 
-  // ── Grid view ────────────────────────────────────────────────
   return (
     <div>
       <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight mb-8">
@@ -387,33 +434,11 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
           <p className="text-txt-tertiary text-xs">Run a scan to start tracking tickers.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {tickers.map(t => (
-            <button
-              key={t.ticker}
-              onClick={() => setSelected(t.ticker)}
-              className="text-left card transition-all duration-150 hover:border-border-hover"
-            >
-              <div className="font-mono font-bold text-xl text-txt-primary mb-3">{t.ticker}</div>
-              <div className="space-y-1.5 text-xs font-sans">
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Signals</span>
-                  <span className="font-mono text-txt-primary">{t.total_signals}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Win rate</span>
-                  <span className={`font-mono ${t.win_rate >= 0.5 ? 'text-accent-green' : t.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
-                    {(t.win_rate * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Last signal</span>
-                  <span className="font-mono text-txt-tertiary text-[11px]">
-                    {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '\u2014'}
-                  </span>
-                </div>
-              </div>
-            </button>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 stagger-container">
+          {tickers.map((t, idx) => (
+            <div key={t.ticker} className={ready ? 'stagger-item' : ''} style={ready ? getDelay(idx) : undefined}>
+              <TickerCard ticker={t} onSelect={() => setSelected(t.ticker)} />
+            </div>
           ))}
         </div>
       )}

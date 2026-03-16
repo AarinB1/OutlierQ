@@ -1,31 +1,65 @@
+import { useState, useEffect } from 'react'
 import type { Signal } from '../types'
+import { fetchSparkline } from '../api'
+import Sparkline from './Sparkline'
 
 interface Props {
   signal: Signal
   onTickerClick?: (ticker: string) => void
 }
 
-function confidenceColor(c: number): string {
-  if (c >= 0.7) return 'bg-accent-green'
-  if (c >= 0.4) return 'bg-accent-amber'
-  return 'bg-accent-red'
+function confidenceGradient(c: number): string {
+  if (c >= 0.7) return 'linear-gradient(90deg, #00d68f, #00d68f)'
+  if (c >= 0.4) return 'linear-gradient(90deg, #ffab00, #00d68f)'
+  return 'linear-gradient(90deg, #ff3d5a, #ffab00)'
 }
 
 export default function SignalCard({ signal, onTickerClick }: Props) {
   const isCall = signal.direction === 'call'
   const optionsMeta = signal.event?.metadata?.options_flow
   const technicalContext = signal.event?.metadata?.technical_context
+  const edgarData = signal.event?.metadata?.edgar_data
   const hasUoa = signal.event?.event_type === 'options_flow' || Boolean(optionsMeta)
   const smartMoneyDirection = optionsMeta?.direction
-  const hasSec = Boolean(signal.event?.metadata?.edgar_data)
+  const hasSec = Boolean(edgarData)
+  const highConviction = signal.confidence >= 0.7
+
+  const [expanded, setExpanded] = useState(false)
+  const [sparkData, setSparkData] = useState<number[] | null>(null)
+  const [sparkLoading, setSparkLoading] = useState(true)
+
+  useEffect(() => {
+    setSparkLoading(true)
+    fetchSparkline(signal.ticker)
+      .then(setSparkData)
+      .catch(() => setSparkData(null))
+      .finally(() => setSparkLoading(false))
+  }, [signal.ticker])
+
+  const cardClasses = [
+    'card relative overflow-hidden border-l-[3px] cursor-pointer',
+    isCall ? 'border-l-accent-green signal-card-call' : 'border-l-accent-red signal-card-put',
+    highConviction ? 'animate-pulse-border' : '',
+  ].join(' ')
+
+  const highConvictionShadow = highConviction
+    ? { boxShadow: 'inset 3px 0 12px -4px rgba(0, 214, 143, 0.3)' }
+    : undefined
 
   return (
-    <div className={`card relative overflow-hidden border-l-[3px] ${isCall ? 'border-l-accent-green' : 'border-l-accent-red'}`}>
+    <div
+      className={cardClasses}
+      style={highConvictionShadow}
+      onClick={() => setExpanded(v => !v)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(v => !v) } }}
+    >
       {/* Top row: ticker + direction */}
       <div className="flex items-start justify-between mb-4">
         <span
           className={`font-mono font-bold text-2xl tracking-tight ${onTickerClick ? 'text-accent-blue cursor-pointer hover:underline' : 'text-txt-primary'}`}
-          onClick={() => onTickerClick?.(signal.ticker)}
+          onClick={e => { if (onTickerClick) { e.stopPropagation(); onTickerClick(signal.ticker) } }}
         >
           {signal.ticker}
         </span>
@@ -47,6 +81,19 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
         </span>
       </div>
 
+      {/* Sparkline */}
+      {sparkLoading ? (
+        <div className="skeleton h-8 w-full rounded mb-4" />
+      ) : sparkData && sparkData.length >= 2 ? (
+        <div className="mb-4">
+          <Sparkline
+            data={sparkData}
+            height={32}
+            color={isCall ? '#00d68f' : '#ff3d5a'}
+          />
+        </div>
+      ) : null}
+
       {/* Confidence bar */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1.5">
@@ -55,10 +102,15 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             {(signal.confidence * 100).toFixed(0)}%
           </span>
         </div>
-        <div className="h-1 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+        <div className="h-[5px] w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
           <div
-            className={`confidence-bar h-full rounded-full ${confidenceColor(signal.confidence)}`}
-            style={{ width: `${signal.confidence * 100}%` }}
+            className="confidence-bar h-full rounded-full"
+            style={{
+              width: `${signal.confidence * 100}%`,
+              background: confidenceGradient(signal.confidence),
+              boxShadow: highConviction ? '0 0 8px rgba(0, 214, 143, 0.4)' : undefined,
+              borderRadius: '9999px',
+            }}
           />
         </div>
       </div>
@@ -125,15 +177,85 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
         )}
       </div>
 
+      {/* Expandable detail panel */}
+      <div
+        className="overflow-hidden transition-all duration-200 ease-out"
+        style={{ maxHeight: expanded ? '600px' : '0px' }}
+      >
+        <div className="border-t border-border mt-4 pt-4 space-y-3">
+          {/* Event trigger */}
+          {signal.event && (
+            <div className="text-xs">
+              <span className="text-txt-tertiary">Event: </span>
+              <span className="text-txt-secondary">{signal.event.event_type.replace(/_/g, ' ')}</span>
+              {signal.event.detected_at && (
+                <span className="text-txt-tertiary ml-2">
+                  Detected {new Date(signal.event.detected_at).toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Full technicals */}
+          {technicalContext && (
+            <div className="space-y-1.5">
+              <p className="text-txt-tertiary text-[10px] uppercase tracking-wider font-sans">Technicals</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
+                <div><span className="text-txt-tertiary">RSI: </span><span className="text-txt-secondary">{technicalContext.rsi.toFixed(1)} ({technicalContext.rsi_signal})</span></div>
+                <div><span className="text-txt-tertiary">MACD: </span><span className="text-txt-secondary">{technicalContext.macd_signal}</span></div>
+                <div><span className="text-txt-tertiary">Bollinger: </span><span className="text-txt-secondary">{technicalContext.bollinger_pct_b?.toFixed(2) ?? '\u2014'} ({technicalContext.bollinger_signal})</span></div>
+                <div><span className="text-txt-tertiary">Rel Volume: </span><span className="text-txt-secondary">{technicalContext.relative_volume.toFixed(2)}x</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* Options flow */}
+          {optionsMeta && (
+            <div className="space-y-1.5">
+              <p className="text-txt-tertiary text-[10px] uppercase tracking-wider font-sans">Options Flow</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
+                {optionsMeta.dominant_expiry && <div><span className="text-txt-tertiary">Expiry: </span><span className="text-txt-secondary">{optionsMeta.dominant_expiry}</span></div>}
+                {optionsMeta.dominant_strike != null && <div><span className="text-txt-tertiary">Strike: </span><span className="text-txt-secondary">${optionsMeta.dominant_strike}</span></div>}
+                {optionsMeta.put_call_ratio != null && <div><span className="text-txt-tertiary">P/C: </span><span className="text-txt-secondary">{optionsMeta.put_call_ratio.toFixed(2)}</span></div>}
+                {optionsMeta.max_conviction != null && <div><span className="text-txt-tertiary">Max Conv: </span><span className="text-txt-secondary">{(optionsMeta.max_conviction * 100).toFixed(0)}%</span></div>}
+              </div>
+            </div>
+          )}
+
+          {/* SEC filings */}
+          {edgarData && (
+            <div className="space-y-1.5">
+              <p className="text-txt-tertiary text-[10px] uppercase tracking-wider font-sans">SEC Filings</p>
+              <p className="text-xs text-txt-secondary">{edgarData.summary}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
+                <div><span className="text-txt-tertiary">8-K: </span><span className="text-txt-secondary">{edgarData['8k_analysis']?.recent_8k_count ?? 0} filings</span></div>
+                <div><span className="text-txt-tertiary">Insider: </span><span className="text-txt-secondary">{edgarData.insider_analysis?.activity_level ?? 'normal'}</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* News articles */}
+          {signal.event?.article_ids && signal.event.article_ids.length > 0 && (
+            <div className="text-xs text-txt-secondary">
+              {signal.event.article_ids.length} article{signal.event.article_ids.length !== 1 ? 's' : ''} detected
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Outcome + P&L */}
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-border">
         <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${
-            signal.outcome === 'profit' ? 'bg-accent-green'
-            : signal.outcome === 'loss' ? 'bg-accent-red'
-            : signal.outcome === 'expired' ? 'bg-txt-tertiary'
-            : 'bg-accent-amber'
-          }`} />
+          {signal.outcome === 'profit' ? (
+            <span className="w-2 h-2 text-accent-green animate-green-flash">{'\u2713'}</span>
+          ) : signal.outcome === 'loss' ? (
+            <span className="w-2 h-2 text-accent-red animate-red-flash">{'\u2717'}</span>
+          ) : (
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              signal.outcome === 'expired' ? 'bg-txt-tertiary'
+              : 'bg-accent-amber animate-pulse'
+            }`} />
+          )}
           <span className={`text-[11px] font-mono font-bold tracking-wider uppercase ${
             signal.outcome === 'profit' ? 'text-accent-green'
             : signal.outcome === 'loss' ? 'text-accent-red'
@@ -154,6 +276,12 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
           )}
           <span className="text-txt-tertiary text-[11px] font-sans">
             {signal.created_at ? new Date(signal.created_at).toLocaleDateString() : ''}
+          </span>
+          <span
+            className={`text-txt-tertiary text-xs transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          >
+            {'\u25BE'}
           </span>
         </div>
       </div>
