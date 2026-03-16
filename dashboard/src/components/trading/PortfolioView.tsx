@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fetchExecutions, fetchPortfolio, fetchPortfolioHistory } from '../../api'
 import type { ClosedTrade, PortfolioHistoryPoint, PortfolioPosition, PortfolioState } from '../../types'
@@ -30,7 +30,7 @@ export default function PortfolioView() {
 
   const [activeTab, setActiveTab] = useState<Tab>('open')
   const [pnlSortDir, setPnlSortDir] = useState<SortDir>('desc')
-  const [toastShown, setToastShown] = useState(false)
+  const toastShownRef = useRef(false)
 
   useEffect(() => {
     const loadSnapshot = async () => {
@@ -41,9 +41,9 @@ export default function PortfolioView() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load portfolio snapshot'
         setSnapshotError(msg)
-        if (!toastShown) {
+        if (!toastShownRef.current) {
           addToast('error', 'Portfolio data error', 'Failed to load portfolio. Retrying...')
-          setToastShown(true)
+          toastShownRef.current = true
         }
       } finally {
         setSnapshotLoading(false)
@@ -58,9 +58,9 @@ export default function PortfolioView() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load portfolio history'
         setHistoryError(msg)
-        if (!toastShown) {
+        if (!toastShownRef.current) {
           addToast('error', 'Portfolio data error', 'Failed to load portfolio. Retrying...')
-          setToastShown(true)
+          toastShownRef.current = true
         }
       } finally {
         setHistoryLoading(false)
@@ -75,9 +75,9 @@ export default function PortfolioView() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load executions'
         setExecutionsError(msg)
-        if (!toastShown) {
+        if (!toastShownRef.current) {
           addToast('error', 'Portfolio data error', 'Failed to load portfolio. Retrying...')
-          setToastShown(true)
+          toastShownRef.current = true
         }
       } finally {
         setExecutionsLoading(false)
@@ -87,7 +87,7 @@ export default function PortfolioView() {
     loadSnapshot()
     loadHistory()
     loadExecutions()
-  }, [addToast, toastShown])
+  }, [addToast])
 
   const positions: PortfolioPosition[] = useMemo(() => snapshot?.positions ?? [], [snapshot])
 
