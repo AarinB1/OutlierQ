@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,8 +25,10 @@ NEWS_API_KEY: str = os.getenv("NEWS_API_KEY", "")
 REDDIT_CLIENT_ID: str = os.getenv("REDDIT_CLIENT_ID", "")
 REDDIT_CLIENT_SECRET: str = os.getenv("REDDIT_CLIENT_SECRET", "")
 
-# Database — defaults to a local SQLite file.
-DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///outlierq.db")
+# Database — defaults to a local SQLite file in the project root.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_DB_PATH = _PROJECT_ROOT / "outlierq.db"
+DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB_PATH}")
 
 # Default tickers to track
 DEFAULT_TICKERS: list[str] = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN"]
