@@ -9,61 +9,6 @@ import type {
   TechnicalIndicators,
   EdgarResult,
 } from '../types'
-
-function TickerCard({ ticker, onClick }: { ticker: TickerSummary; onClick: () => void }) {
-  const [sparklineData, setSparklineData] = useState<number[] | null>(null)
-  const [info, setInfo] = useState<CompanyInfo | null>(null)
-  useEffect(() => {
-    fetchSparkline(ticker.ticker).then(setSparklineData).catch(() => {})
-    fetchCompanyInfo(ticker.ticker).then(setInfo).catch(() => {})
-  }, [ticker.ticker])
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left card transition-all duration-150 hover:border-border-hover"
-    >
-      <div className="flex items-start justify-between mb-2">
-        <div className="font-mono font-bold text-xl text-txt-primary">{ticker.ticker}</div>
-        {info?.current_price != null && (
-          <span className="font-mono text-sm text-txt-primary">
-            ${info.current_price.toFixed(2)}
-            {info.change_percent != null && (
-              <span className={info.change_percent >= 0 ? 'text-accent-green ml-1' : 'text-accent-red ml-1'}>
-                {info.change_percent >= 0 ? '+' : ''}{info.change_percent.toFixed(2)}%
-              </span>
-            )}
-          </span>
-        )}
-      </div>
-      <div className="h-8 mb-3">
-        {sparklineData && sparklineData.length >= 2 ? (
-          <Sparkline data={sparklineData} height={32} color="#448aff" />
-        ) : (
-          <div className="skeleton h-8 w-full rounded" />
-        )}
-      </div>
-      <div className="space-y-1.5 text-xs font-sans">
-        <div className="flex justify-between">
-          <span className="text-txt-tertiary">Signals</span>
-          <span className="font-mono text-txt-primary">{ticker.total_signals}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-txt-tertiary">Win rate</span>
-          <span className={`font-mono ${ticker.win_rate >= 0.5 ? 'text-accent-green' : ticker.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
-            {(ticker.win_rate * 100).toFixed(0)}%
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-txt-tertiary">Last signal</span>
-          <span className="font-mono text-txt-tertiary text-[11px]">
-            {ticker.last_signal_date ? new Date(ticker.last_signal_date).toLocaleDateString() : '\u2014'}
-          </span>
-        </div>
-      </div>
-    </button>
-  )
-}
 import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
@@ -445,10 +390,81 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {tickers.map(t => (
-            <TickerCard key={t.ticker} ticker={t} onClick={() => setSelected(t.ticker)} />
+            <TickerMiniCard key={t.ticker} summary={t} onSelect={() => setSelected(t.ticker)} />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+function TickerMiniCard({
+  summary,
+  onSelect,
+}: {
+  summary: TickerSummary
+  onSelect: () => void
+}) {
+  const [sparkline, setSparkline] = useState<number[] | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    fetchSparkline(summary.ticker)
+      .then((values) => {
+        if (!mounted) return
+        setSparkline(values)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setSparkline(null)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [summary.ticker])
+
+  const last = sparkline && sparkline.length > 0 ? sparkline[sparkline.length - 1] : null
+  const prev = sparkline && sparkline.length > 1 ? sparkline[sparkline.length - 2] : null
+  const change = last != null && prev != null ? ((last - prev) / prev) * 100 : null
+
+  return (
+    <button
+      onClick={onSelect}
+      className="text-left card p-4 transition-all duration-150 hover:border-border-hover"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-mono font-bold text-lg text-txt-primary">{summary.ticker}</div>
+        {last != null ? (
+          <div className="text-right">
+            <div className="text-sm font-mono text-txt-primary">${last.toFixed(2)}</div>
+            {change != null && (
+              <div className={`text-[11px] font-mono ${change >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                {change >= 0 ? '+' : ''}
+                {change.toFixed(2)}%
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="skeleton h-8 w-16 rounded" />
+        )}
+      </div>
+
+      <div className="mb-3 h-8">
+        {sparkline ? (
+          <Sparkline data={sparkline} color={change != null && change < 0 ? '#ff3d5a' : '#00d68f'} />
+        ) : (
+          <div className="skeleton h-8 w-full rounded" />
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-sans">
+        <span className="text-txt-tertiary">Signals</span>
+        <span className="font-mono text-right text-txt-primary">{summary.total_signals}</span>
+        <span className="text-txt-tertiary">Win rate</span>
+        <span className={`font-mono text-right ${summary.win_rate >= 0.5 ? 'text-accent-green' : summary.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
+          {(summary.win_rate * 100).toFixed(0)}%
+        </span>
+      </div>
+    </button>
   )
 }

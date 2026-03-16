@@ -1,74 +1,62 @@
-import { useEffect, useCallback } from 'react'
-import type { OptionsPage, Section } from '../App'
+import { useEffect } from 'react'
+import type { Page } from '../App'
 
-interface ShortcutHandlers {
-  section: Section
-  setSection: (s: Section) => void
-  setPage: (p: OptionsPage) => void
-  focusTickerSearch: () => void
-  toggleShortcutsModal: () => void
+interface KeyboardShortcutsOptions {
+  enabled: boolean
+  onNavigate: (page: Page) => void
+  onToggleShortcuts: () => void
 }
 
 function isInputFocused(): boolean {
-  const el = document.activeElement
-  if (!el) return false
-  const tag = el.tagName.toLowerCase()
-  const role = el.getAttribute('role')
-  const htmlEl = el as HTMLElement
+  const active = document.activeElement
+  if (!active) return false
+  const tag = active.tagName.toLowerCase()
   return (
     tag === 'input' ||
     tag === 'textarea' ||
-    tag === 'select' ||
-    role === 'textbox' ||
-    (typeof htmlEl.isContentEditable === 'boolean' && htmlEl.isContentEditable)
+    (active as HTMLElement).isContentEditable
   )
 }
 
-export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
-  const { section, setSection, setPage, focusTickerSearch, toggleShortcutsModal } = handlers
+function focusTickerSearch() {
+  const node = document.querySelector<HTMLInputElement>('[data-ticker-search="true"]')
+  node?.focus()
+  node?.select()
+}
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+export function useKeyboardShortcuts({
+  enabled,
+  onNavigate,
+  onToggleShortcuts,
+}: KeyboardShortcutsOptions) {
+  useEffect(() => {
+    if (!enabled) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      const isQuestion = event.key === '?' || (event.shiftKey && event.key === '/')
       if (isInputFocused()) return
 
-      switch (e.key.toLowerCase()) {
-        case 's':
-          setSection('options')
-          setPage('signals')
-          break
-        case 'e':
-          setSection('options')
-          setPage('events')
-          break
-        case 'a':
-          setSection('options')
-          setPage('accuracy')
-          break
-        case 't':
-          setSection('options')
-          setPage('tickers')
-          break
-        case 'd':
-          setSection('options')
-          setPage('discovery')
-          break
-        case '/':
-          e.preventDefault()
-          focusTickerSearch()
-          break
-        case '?':
-          e.preventDefault()
-          toggleShortcutsModal()
-          break
-        default:
-          break
+      if (event.key === '/') {
+        event.preventDefault()
+        focusTickerSearch()
+        return
       }
-    },
-    [section, setSection, setPage, focusTickerSearch, toggleShortcutsModal]
-  )
 
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleKeyDown])
+      if (isQuestion) {
+        event.preventDefault()
+        onToggleShortcuts()
+        return
+      }
+
+      if (key === 's') onNavigate('signals')
+      if (key === 'e') onNavigate('events')
+      if (key === 'a') onNavigate('accuracy')
+      if (key === 't') onNavigate('tickers')
+      if (key === 'd') onNavigate('discovery')
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [enabled, onNavigate, onToggleShortcuts])
 }

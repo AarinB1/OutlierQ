@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchHealth } from './api'
 import type { HealthStatus } from './types'
 import Layout from './components/Layout'
@@ -29,19 +29,12 @@ export type Page = OptionsPage | TradingPage
 export default function App() {
   const [section, setSection] = useState<Section>('options')
   const [page, setPage] = useState<Page>('signals')
+  const [renderedPage, setRenderedPage] = useState<Page>('signals')
+  const [isExiting, setIsExiting] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [focusTicker, setFocusTicker] = useState<string | null>(null)
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const tickerSearchRef = useRef<HTMLInputElement>(null)
-
-  useKeyboardShortcuts({
-    section,
-    setSection,
-    setPage: (p) => setPage(p),
-    focusTickerSearch: () => tickerSearchRef.current?.focus(),
-    toggleShortcutsModal: () => setShortcutsOpen(prev => !prev),
-  })
 
   // When section changes, switch to the first page of that section
   const handleSectionChange = useCallback((s: Section) => {
@@ -66,40 +59,64 @@ export default function App() {
     setSection('options')
   }, [])
 
+  const navigateFromShortcut = useCallback((target: Page) => {
+    setSection('options')
+    setPage(target)
+  }, [])
+
+  useKeyboardShortcuts({
+    enabled: true,
+    onNavigate: navigateFromShortcut,
+    onToggleShortcuts: () => setShortcutsOpen((prev) => !prev),
+  })
+
+  useEffect(() => {
+    if (page === renderedPage) return
+    setIsExiting(true)
+    const timeout = window.setTimeout(() => {
+      setRenderedPage(page)
+      setIsExiting(false)
+    }, 120)
+    return () => window.clearTimeout(timeout)
+  }, [page, renderedPage])
+
   return (
     <ToastProvider>
-    <Layout
-      section={section}
-      setSection={handleSectionChange}
-      page={page}
-      setPage={setPage}
-      connected={connected}
-      health={health}
-    >
-      <div key={page} className="animate-fade-in">
-        {/* Options pages */}
-        {page === 'signals' && <SignalList onTickerClick={navigateToTicker} tickerSearchRef={tickerSearchRef} />}
-        {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} tickerSearchRef={tickerSearchRef} />}
-        {page === 'accuracy' && <AccuracyPanel />}
-        {page === 'tickers' && (
-          <TickerView
-            initialTicker={focusTicker}
-            onNavigated={() => setFocusTicker(null)}
-          />
-        )}
-        {page === 'discovery' && <DiscoveryPanel />}
+      <Layout
+        section={section}
+        setSection={handleSectionChange}
+        page={page}
+        setPage={setPage}
+        connected={connected}
+        health={health}
+      >
+        <div
+          key={renderedPage}
+          className={`transition-opacity duration-150 ${isExiting ? 'opacity-0' : 'opacity-100 animate-fade-in'}`}
+        >
+          {/* Options pages */}
+          {renderedPage === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
+          {renderedPage === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
+          {renderedPage === 'accuracy' && <AccuracyPanel />}
+          {renderedPage === 'tickers' && (
+            <TickerView
+              initialTicker={focusTicker}
+              onNavigated={() => setFocusTicker(null)}
+            />
+          )}
+          {renderedPage === 'discovery' && <DiscoveryPanel />}
 
-        {/* Trading pages */}
-        {page === 'trade-signals' && <TradingSignals />}
-        {page === 'backtest' && <BacktestPanel />}
-        {page === 'models' && <ModelPerformance />}
-        {page === 'portfolio' && <PortfolioView />}
-        {page === 'risk' && <RiskDashboard />}
-        {page === 'strategies' && <StrategyBuilder />}
-        {page === 'charts' && <ChartView />}
-      </div>
-    </Layout>
-    {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+          {/* Trading pages */}
+          {renderedPage === 'trade-signals' && <TradingSignals />}
+          {renderedPage === 'backtest' && <BacktestPanel />}
+          {renderedPage === 'models' && <ModelPerformance />}
+          {renderedPage === 'portfolio' && <PortfolioView />}
+          {renderedPage === 'risk' && <RiskDashboard />}
+          {renderedPage === 'strategies' && <StrategyBuilder />}
+          {renderedPage === 'charts' && <ChartView />}
+        </div>
+      </Layout>
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </ToastProvider>
   )
 }

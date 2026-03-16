@@ -1,34 +1,29 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 
-/**
- * useState that persists to localStorage.
- * Returns [value, setValue] matching useState API.
- */
-export function usePersistedState<T>(key: string, defaultValue: T): [T, (value: T | ((prev: T) => T)) => void] {
-  const [value, setValueState] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key)
-      if (stored == null) return defaultValue
-      return JSON.parse(stored) as T
-    } catch {
-      return defaultValue
-    }
-  })
+function readStorage<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined') return defaultValue
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return defaultValue
+    return JSON.parse(raw) as T
+  } catch {
+    return defaultValue
+  }
+}
+
+export function usePersistedState<T>(
+  key: string,
+  defaultValue: T
+): [T, Dispatch<SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => readStorage(key, defaultValue))
 
   useEffect(() => {
     try {
-      localStorage.setItem(key, JSON.stringify(value))
+      window.localStorage.setItem(key, JSON.stringify(value))
     } catch {
-      // Ignore quota/parse errors
+      // Ignore storage write failures.
     }
   }, [key, value])
-
-  const setValue = useCallback((next: T | ((prev: T) => T)) => {
-    setValueState(prev => {
-      const resolved = typeof next === 'function' ? (next as (p: T) => T)(prev) : next
-      return resolved
-    })
-  }, [])
 
   return [value, setValue]
 }

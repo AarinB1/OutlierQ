@@ -2,9 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadePulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes lineDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @layer base {
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 
   /* Scrollbar */
@@ -21,9 +62,6 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
   }
-  .overflow-y-auto {
-    scrollbar-gutter: stable;
-  }
 }
 
 @layer components {
@@ -35,12 +73,6 @@
     border-color: rgba(255, 255, 255, 0.15);
     transform: translateY(-1px);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  }
-  .card.border-l-accent-green:hover {
-    box-shadow: 0 4px 20px rgba(0, 214, 143, 0.08);
-  }
-  .card.border-l-accent-red:hover {
-    box-shadow: 0 4px 20px rgba(255, 61, 90, 0.08);
   }
 
   .confidence-bar {
@@ -64,13 +96,6 @@
     transform: none;
   }
 
-  .pill {
-    transition: all 150ms ease;
-  }
-  .pill:hover {
-    transform: translateY(-1px);
-  }
-
   .skeleton {
     background: linear-gradient(90deg, #12121a 25%, #1a1a28 50%, #12121a 75%);
     background-size: 200% 100%;
@@ -80,6 +105,11 @@
 
   .pill {
     @apply inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider uppercase;
+    transition: all 150ms ease;
+  }
+  button .pill:hover,
+  .pill:hover {
+    transform: translateY(-1px);
   }
 
   .stat-number {
@@ -95,45 +125,46 @@
     animation: fadeIn 600ms ease;
   }
 
-  /* Staggered entrance animations */
-  .stagger-container {
-    display: contents;
-  }
-  .stagger-item {
-    animation: staggerFadeIn 300ms ease-out forwards;
-    opacity: 0;
-  }
-}
-
-@keyframes staggerFadeIn {
-  from {
+  .stagger-container .stagger-item {
     opacity: 0;
     transform: translateY(8px);
+    will-change: transform, opacity;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .stagger-container.is-ready .stagger-item {
+    animation: staggerFadeIn 300ms ease-out forwards;
   }
-}
 
-@keyframes checkPop {
-  0% { transform: scale(0); opacity: 0; }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); opacity: 1; }
-}
+  .sparkline-path {
+    stroke-dasharray: var(--sparkline-length, 120);
+    stroke-dashoffset: var(--sparkline-length, 120);
+    animation: lineDraw 300ms ease-out forwards;
+  }
 
-@keyframes xPop {
-  0% { transform: scale(0); opacity: 0; }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); opacity: 1; }
-}
+  .toast-enter {
+    animation: toastSlideIn 250ms ease-out forwards;
+  }
 
-@keyframes dotPulse {
-  0% { transform: scale(0.5); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
-}
+  .timeline-gradient-line {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.04)
+    );
+    background-size: 100% 200%;
+    animation: fadePulse 900ms ease-out 1;
+  }
 
-@keyframes expandHeight {
-  from { max-height: 0; opacity: 0; }
-  to { max-height: 200px; opacity: 1; }
+  .main-scroll-area {
+    scrollbar-gutter: stable;
+  }
+
+  .scan-icon {
+    transition: filter 150ms ease;
+  }
+
+  .scan-button:hover .scan-icon {
+    filter: brightness(1.25);
+  }
 }

@@ -26,6 +26,8 @@ import type {
 } from './types';
 
 const BASE_URL = '/api';
+const SPARKLINE_TTL_MS = 5 * 60 * 1000;
+const sparklineCache = new Map<string, { timestamp: number; values: number[] }>();
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
@@ -136,18 +138,19 @@ export async function fetchPriceHistory(
   return fetchJSON(`/ticker/${ticker}/price-history?period=${period}&interval=${interval}`);
 }
 
-const sparklineCache = new Map<string, { data: number[]; ts: number }>();
-const SPARKLINE_CACHE_MS = 5 * 60 * 1000;
-
 export async function fetchSparkline(ticker: string): Promise<number[]> {
-  const cached = sparklineCache.get(ticker);
-  if (cached && Date.now() - cached.ts < SPARKLINE_CACHE_MS) return cached.data;
+  const cacheKey = ticker.toUpperCase();
+  const cached = sparklineCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SPARKLINE_TTL_MS) {
+    return cached.values;
+  }
+
   const points = await fetchJSON<PricePoint[]>(
-    `/ticker/${ticker}/price-history?period=1mo&interval=1d`
+    `/ticker/${cacheKey}/price-history?period=1mo&interval=1d`
   );
-  const closes = points.map((p) => p.close);
-  sparklineCache.set(ticker, { data: closes, ts: Date.now() });
-  return closes;
+  const values = points.map((point) => point.close);
+  sparklineCache.set(cacheKey, { timestamp: Date.now(), values });
+  return values;
 }
 
 export async function fetchIntraday(ticker: string): Promise<PricePoint[]> {

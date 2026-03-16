@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchEvents } from '../api'
 import type { EventData } from '../types'
-import { useToast } from '../components/Toast'
-import { useStaggeredList } from '../hooks/useStaggeredList'
-import { usePersistedState } from '../hooks/usePersistedState'
 import { SkeletonEventCard } from './SkeletonCard'
+import { useStaggeredList } from '../hooks/useStaggeredList'
+import { useToast } from '../hooks/useToast'
+import { usePersistedState } from '../hooks/usePersistedState'
 
 const EVENT_BADGE: Record<string, { bg: string; text: string }> = {
   scandal:        { bg: 'bg-accent-red-muted', text: 'text-accent-red' },
@@ -34,58 +34,55 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
-function isRecent(iso: string, withinMins = 30): boolean {
-  return Date.now() - new Date(iso).getTime() < withinMins * 60 * 1000
-}
-
-function sentimentBarColor(c: number): string {
-  if (c >= 0.7) return '#00d68f'
-  if (c >= 0.4) return '#ffab00'
-  return '#ff3d5a'
-}
-
 interface Props {
   onTickerClick?: (ticker: string) => void
-  tickerSearchRef?: React.RefObject<HTMLInputElement>
 }
 
-export default function EventTimeline({ onTickerClick, tickerSearchRef }: Props = {}) {
+export default function EventTimeline({ onTickerClick }: Props = {}) {
   const [events, setEvents] = useState<EventData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ticker, setTicker] = usePersistedState('event-timeline-ticker', '')
+  const [ticker, setTicker] = usePersistedState('options-events-ticker', '')
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null)
-  const [expandedArticles, setExpandedArticles] = useState<Set<string>>(new Set())
-  const prevIdsRef = useRef<Set<string>>(new Set())
+  const [expandedArticles, setExpandedArticles] = useState<Record<string, boolean>>({})
+  const lastEventIdsRef = useRef<Set<string>>(new Set())
   const { addToast } = useToast()
-  const filteredEvents = keywordFilter
-    ? events.filter(ev => {
-        const meta = ev.metadata as Record<string, unknown> | null
-        const themes = (meta?.common_themes as string[]) ?? []
-        return themes.some(t => t.toLowerCase().includes(keywordFilter.toLowerCase()))
-      })
-    : events
-  const { visibleItems, getDelay } = useStaggeredList(filteredEvents, 50)
 
   useEffect(() => {
     setLoading(true)
+    setError(null)
     fetchEvents({ ticker: ticker || undefined, limit: 50 })
-      .then(newEvents => {
-        const prevIds = prevIdsRef.current
-        const newIds = new Set(newEvents.map(e => e.id))
-        if (prevIds.size > 0) {
-          newEvents.forEach(ev => {
-            if (!prevIds.has(ev.id)) {
-              addToast('event', `New Event: ${ev.ticker}`, `${ev.event_type.replace(/_/g, ' ')} · ${(ev.confidence * 100).toFixed(0)}%`)
-            }
+      .then((nextEvents) => {
+        setEvents(nextEvents)
+        if (lastEventIdsRef.current.size > 0) {
+          const newEvents = nextEvents.filter((event) => !lastEventIdsRef.current.has(event.id))
+          newEvents.forEach((event) => {
+            addToast(
+              'event',
+              `New Event: ${event.ticker} ${event.event_type.replace(/_/g, ' ')}`,
+              `${Math.round(event.confidence * 100)}% confidence`
+            )
           })
         }
-        prevIdsRef.current = newIds
-        setEvents(newEvents)
+        lastEventIdsRef.current = new Set(nextEvents.map((event) => event.id))
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [ticker, addToast])
+
+  const filteredEvents = events.filter((event) => {
+    if (!keywordFilter) return true
+    const meta = event.metadata as Record<string, unknown> | null
+    const themes = ((meta?.common_themes as string[] | undefined) ?? []).map((theme) =>
+      theme.toLowerCase()
+    )
+    return themes.includes(keywordFilter.toLowerCase())
+  })
+  const { visibleItems, getDelay, ready } = useStaggeredList(filteredEvents)
+
+  const toggleArticles = (eventId: string) => {
+    setExpandedArticles((prev) => ({ ...prev, [eventId]: !prev[eventId] }))
+  }
 
   return (
     <div>
@@ -93,30 +90,26 @@ export default function EventTimeline({ onTickerClick, tickerSearchRef }: Props 
         <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
           {'\u25C9'} Events
         </h2>
-        <div className="flex items-center gap-3">
-          {keywordFilter && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-tertiary text-txt-secondary text-xs font-sans">
-              Filtered by: <span className="font-mono text-txt-primary">{keywordFilter}</span>
-              <button
-                type="button"
-                onClick={() => setKeywordFilter(null)}
-                className="text-txt-tertiary hover:text-txt-primary transition-colors"
-                aria-label="Clear filter"
-              >
-                {'\u2715'}
-              </button>
-            </span>
-          )}
-          <input
-          ref={tickerSearchRef}
+        <input
           type="text"
           placeholder="Ticker..."
           value={ticker}
           onChange={e => setTicker(e.target.value.toUpperCase())}
+          data-ticker-search="true"
           className="w-28 bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm font-mono text-txt-primary placeholder-txt-tertiary focus:border-accent-blue focus:outline-none transition-colors duration-150"
         />
-        </div>
       </div>
+
+      {keywordFilter && (
+        <div className="mb-4">
+          <button
+            onClick={() => setKeywordFilter(null)}
+            className="pill bg-surface-secondary text-txt-secondary hover:text-txt-primary"
+          >
+            Filtered by: {keywordFilter} <span className="ml-1">✕</span>
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="card border-accent-red/30 bg-accent-red-muted mb-6">
@@ -127,10 +120,12 @@ export default function EventTimeline({ onTickerClick, tickerSearchRef }: Props 
       {loading ? (
         <div className="space-y-4 ml-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonEventCard key={i} />
+            <div key={i} className="ml-6">
+              <SkeletonEventCard />
+            </div>
           ))}
         </div>
-      ) : events.length === 0 ? (
+      ) : filteredEvents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="text-txt-tertiary text-4xl mb-4">{'\u25C7'}</div>
           <p className="text-txt-secondary text-sm mb-1">No events detected.</p>
@@ -138,32 +133,35 @@ export default function EventTimeline({ onTickerClick, tickerSearchRef }: Props 
         </div>
       ) : (
         <div className="relative ml-3">
-          {/* Vertical line - fade in */}
-          <div
-            className="absolute left-[3px] top-2 bottom-2 w-[2px] timeline-line"
-            style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0.12), rgba(255,255,255,0.06))' }}
-          />
+          {/* Vertical line */}
+          <div className="timeline-gradient-line absolute left-[3px] top-2 bottom-2 w-[2px]" />
 
-          {visibleItems.map((ev, i) => {
+          <div className={`stagger-container ${ready ? 'is-ready' : ''}`}>
+          {visibleItems.map((ev, index) => {
             const meta = ev.metadata as Record<string, unknown> | null
             const themes = (meta?.common_themes as string[]) ?? []
             const articleCount = ev.article_ids?.length ?? 0
             const badge = EVENT_BADGE[ev.event_type] ?? { bg: 'bg-surface-tertiary', text: 'text-txt-secondary' }
-            const dotColor = DOT_COLOR[ev.direction] ?? 'bg-txt-tertiary'
-            const recent = ev.detected_at ? isRecent(ev.detected_at) : false
-            const articlesExpanded = expandedArticles.has(ev.id)
+            const isRecent = Boolean(ev.detected_at) && (Date.now() - new Date(ev.detected_at ?? '').getTime() < 30 * 60 * 1000)
+            const confidencePct = Math.round(ev.confidence * 100)
+            const isArticlesOpen = Boolean(expandedArticles[ev.id])
+            const articleThemes = themes.length > 0
+              ? themes
+              : articleCount > 0
+                ? ['Articles detected']
+                : []
+            let sentimentGradient = 'linear-gradient(90deg, #ff3d5a, #ffab00)'
+            if (ev.confidence >= 0.7) sentimentGradient = 'linear-gradient(90deg, #00d68f, #00d68f)'
+            else if (ev.confidence >= 0.4) sentimentGradient = 'linear-gradient(90deg, #ffab00, #00d68f)'
 
             return (
               <div
                 key={ev.id}
-                className="relative pl-8 pb-6 group stagger-item"
-                style={{ animationDelay: `${getDelay(i)}ms` }}
+                className="stagger-item relative pl-8 pb-6 group"
+                style={{ animationDelay: getDelay(index) }}
               >
-                {/* Timeline dot - pulse on mount, persistent for recent */}
-                <div
-                  className={`absolute left-0 top-3 w-2 h-2 rounded-full ring-[3px] ring-surface-tertiary ${dotColor} ${recent ? 'animate-pulse' : ''}`}
-                  style={{ animation: recent ? undefined : 'dotPulse 600ms ease-out 1' }}
-                />
+                {/* Timeline dot */}
+                <div className={`absolute left-0 top-3 w-2 h-2 rounded-full ring-[3px] ring-surface-tertiary ${DOT_COLOR[ev.direction] ?? 'bg-txt-tertiary'} ${isRecent ? 'animate-pulse' : ''}`} />
 
                 <div className="card py-4 px-5 group-hover:border-border-hover">
                   <div className="flex items-center gap-3 mb-2">
@@ -177,83 +175,59 @@ export default function EventTimeline({ onTickerClick, tickerSearchRef }: Props 
                     <span className={`text-xs font-sans font-medium ${ev.direction === 'bullish' ? 'text-accent-green' : 'text-accent-red'}`}>
                       {ev.direction}
                     </span>
-                    <div className="flex items-center gap-2 ml-auto">
-                      <div
-                        className="w-10 h-1 rounded-full overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.04)' }}
-                        title={`Confidence: ${(ev.confidence * 100).toFixed(0)}% — This event's sentiment certainty score`}
-                      >
-                        <div
-                          className="h-full rounded-full transition-all duration-300"
-                          style={{
-                            width: `${ev.confidence * 100}%`,
-                            backgroundColor: sentimentBarColor(ev.confidence),
-                          }}
-                        />
+                    <div className="ml-auto flex items-center gap-2" title={`Confidence: ${confidencePct}% — This event's sentiment certainty score`}>
+                      <span className="font-mono text-xs text-txt-tertiary">{confidencePct}%</span>
+                      <div className="h-1 w-10 rounded-full bg-white/5 overflow-hidden">
+                        <div className="h-full rounded-full confidence-bar" style={{ width: `${confidencePct}%`, background: sentimentGradient }} />
                       </div>
-                      <span className="font-mono text-xs text-txt-tertiary w-8">
-                        {(ev.confidence * 100).toFixed(0)}%
-                      </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3 text-txt-tertiary text-[11px] font-sans">
                     {ev.detected_at && <span>{relativeTime(ev.detected_at)}</span>}
-                    {articleCount > 0 ? (
+                    {articleCount > 0 && (
                       <button
-                        type="button"
-                        onClick={() => setExpandedArticles(prev => {
-                          const next = new Set(prev)
-                          if (next.has(ev.id)) next.delete(ev.id)
-                          else next.add(ev.id)
-                          return next
-                        })}
+                        onClick={() => toggleArticles(ev.id)}
                         className="cursor-pointer hover:text-accent-blue transition-colors"
                       >
                         {articleCount} article{articleCount > 1 ? 's' : ''}
                       </button>
-                    ) : null}
+                    )}
                   </div>
-
-                  {/* Expandable article previews */}
-                  {articleCount > 0 && articlesExpanded && (
-                    <div className="mt-2 pl-0 overflow-hidden animate-[expandHeight_200ms_ease-out]">
-                      <div className="border-t border-border pt-2 mt-2 space-y-1">
-                        {themes.length > 0 ? (
-                          themes.map((theme, ti) => (
-                            <div key={ti} className="flex items-start gap-1.5 text-xs font-sans text-txt-secondary">
-                              <span className="text-txt-tertiary mt-0.5">{'\u2022'}</span>
-                              <span>{theme}</span>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-txt-tertiary text-xs">Articles detected</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                   {themes.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2.5">
-                      {themes.slice(0, 5).map((t, ti) => (
+                      {themes.slice(0, 5).map((t, i) => (
                         <button
-                          key={ti}
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation()
-                            setKeywordFilter(prev => prev === t ? null : t)
-                          }}
-                          className="px-2 py-0.5 rounded bg-surface-tertiary text-txt-tertiary text-[11px] font-sans hover:bg-surface-primary hover:text-txt-secondary transition-all duration-150 cursor-pointer"
+                          key={`${ev.id}-${t}-${i}`}
+                          onClick={() => setKeywordFilter(t)}
+                          className="px-2 py-0.5 rounded bg-surface-tertiary hover:bg-surface-primary text-txt-tertiary text-[11px] font-sans cursor-pointer transition-all"
                         >
                           {t}
+                          {keywordFilter?.toLowerCase() === t.toLowerCase() && <span className="ml-1">×</span>}
                         </button>
                       ))}
                     </div>
                   )}
+
+                  <div
+                    className="overflow-hidden transition-all duration-200 ease-out"
+                    style={{ maxHeight: isArticlesOpen ? '140px' : '0px' }}
+                  >
+                    <div className="mt-3 border-t border-border pt-3 space-y-1.5">
+                      {articleThemes.map((theme, idx) => (
+                        <div key={`${ev.id}-theme-${idx}`} className="text-xs text-txt-secondary flex items-start gap-2">
+                          <span className="text-txt-tertiary">•</span>
+                          <span>{theme}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )
           })}
+          </div>
         </div>
       )}
     </div>

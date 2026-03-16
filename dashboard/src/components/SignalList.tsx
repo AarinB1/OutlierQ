@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { fetchSignals } from '../api'
 import type { Signal } from '../types'
 import SignalCard from './SignalCard'
-import { useToast } from '../components/Toast'
-import { useStaggeredList } from '../hooks/useStaggeredList'
-import { usePersistedState } from '../hooks/usePersistedState'
 import { SkeletonSignalCard } from './SkeletonCard'
+import { useStaggeredList } from '../hooks/useStaggeredList'
+import { useToast } from '../hooks/useToast'
+import { usePersistedState } from '../hooks/usePersistedState'
 
 const FILTERS = [
   { key: '', label: 'All' },
@@ -15,20 +15,19 @@ const FILTERS = [
 
 interface Props {
   onTickerClick?: (ticker: string) => void
-  tickerSearchRef?: React.RefObject<HTMLInputElement>
 }
 
-export default function SignalList({ onTickerClick, tickerSearchRef }: Props = {}) {
+export default function SignalList({ onTickerClick }: Props = {}) {
   const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ticker, setTicker] = useState('')
-  const [direction, setDirection] = usePersistedState('signal-list-direction', '')
+  const [ticker, setTicker] = usePersistedState('options-signals-ticker', '')
+  const [direction, setDirection] = usePersistedState('options-signals-direction', '')
   const [page, setPage] = useState(0)
-  const limit = 20
-  const prevIdsRef = useRef<Set<string>>(new Set())
   const { addToast } = useToast()
-  const { visibleItems, getDelay } = useStaggeredList(signals, 50)
+  const lastSignalIdsRef = useRef<Set<string>>(new Set())
+  const limit = 20
+  const { visibleItems, getDelay, ready } = useStaggeredList(signals)
 
   useEffect(() => {
     setLoading(true)
@@ -39,18 +38,19 @@ export default function SignalList({ onTickerClick, tickerSearchRef }: Props = {
       limit,
       offset: page * limit,
     })
-      .then(newSignals => {
-        const prevIds = prevIdsRef.current
-        const newIds = new Set(newSignals.map(s => s.id))
-        if (prevIds.size > 0) {
-          newSignals.forEach(s => {
-            if (!prevIds.has(s.id)) {
-              addToast('signal', `New Signal: ${s.ticker} ${s.direction.toUpperCase()}`, `${(s.confidence * 100).toFixed(0)}% confidence · $${s.suggested_strike?.toFixed(0) ?? '—'} strike`)
-            }
+      .then((nextSignals) => {
+        setSignals(nextSignals)
+        if (lastSignalIdsRef.current.size > 0) {
+          const newSignals = nextSignals.filter((signal) => !lastSignalIdsRef.current.has(signal.id))
+          newSignals.forEach((signal) => {
+            addToast(
+              'signal',
+              `New Signal: ${signal.ticker} ${signal.direction.toUpperCase()}`,
+              `${Math.round(signal.confidence * 100)}% confidence · ${signal.suggested_strike != null ? `$${signal.suggested_strike.toFixed(2)} strike` : 'No strike'}`
+            )
           })
         }
-        prevIdsRef.current = newIds
-        setSignals(newSignals)
+        lastSignalIdsRef.current = new Set(nextSignals.map((signal) => signal.id))
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -82,11 +82,11 @@ export default function SignalList({ onTickerClick, tickerSearchRef }: Props = {
           </div>
           {/* Ticker input */}
           <input
-            ref={tickerSearchRef}
             type="text"
             placeholder="Ticker..."
             value={ticker}
             onChange={e => { setTicker(e.target.value.toUpperCase()); setPage(0) }}
+            data-ticker-search="true"
             className="w-28 bg-surface-secondary border border-border rounded-lg px-3 py-2 text-sm font-mono text-txt-primary placeholder-txt-tertiary focus:border-accent-blue focus:outline-none transition-colors duration-150"
           />
         </div>
@@ -112,12 +112,12 @@ export default function SignalList({ onTickerClick, tickerSearchRef }: Props = {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 stagger-container">
-            {visibleItems.map((s, i) => (
+          <div className={`stagger-container grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 ${ready ? 'is-ready' : ''}`}>
+            {visibleItems.map((s, index) => (
               <div
                 key={s.id}
                 className="stagger-item"
-                style={{ animationDelay: `${getDelay(i)}ms` }}
+                style={{ animationDelay: getDelay(index) }}
               >
                 <SignalCard signal={s} onTickerClick={onTickerClick} />
               </div>
