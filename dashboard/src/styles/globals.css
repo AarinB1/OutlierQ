@@ -7,11 +7,6 @@
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
   }
 
-  button,
-  [role='button'] {
-    -webkit-tap-highlight-color: transparent;
-  }
-
   /* Scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
@@ -26,6 +21,9 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
   }
+  .overflow-y-auto {
+    scrollbar-gutter: stable;
+  }
 }
 
 @layer components {
@@ -38,12 +36,10 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   }
-
-  .card.card-signal-call:hover {
+  .card.border-l-accent-green:hover {
     box-shadow: 0 4px 20px rgba(0, 214, 143, 0.08);
   }
-
-  .card.card-signal-put:hover {
+  .card.border-l-accent-red:hover {
     box-shadow: 0 4px 20px rgba(255, 61, 90, 0.08);
   }
 
@@ -68,6 +64,13 @@
     transform: none;
   }
 
+  .pill {
+    transition: all 150ms ease;
+  }
+  .pill:hover {
+    transform: translateY(-1px);
+  }
+
   .skeleton {
     background: linear-gradient(90deg, #12121a 25%, #1a1a28 50%, #12121a 75%);
     background-size: 200% 100%;
@@ -77,15 +80,6 @@
 
   .pill {
     @apply inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider uppercase;
-  }
-
-  .interactive-pill {
-    transition: all 150ms ease;
-  }
-
-  .interactive-pill:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.08);
   }
 
   .stat-number {
@@ -101,178 +95,45 @@
     animation: fadeIn 600ms ease;
   }
 
+  /* Staggered entrance animations */
   .stagger-container {
-    will-change: transform, opacity;
+    display: contents;
   }
-
   .stagger-item {
-    opacity: 0;
     animation: staggerFadeIn 300ms ease-out forwards;
-    will-change: transform, opacity;
-  }
-
-  .timeline-line-animate {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.02) 0%,
-      rgba(255, 255, 255, 0.12) 50%,
-      rgba(255, 255, 255, 0.04) 100%
-    );
-    background-size: 100% 200%;
-    animation: timelineLineReveal 500ms ease-out both;
-  }
-
-  .timeline-dot-intro {
-    animation: timelineDotIntro 350ms ease-out both;
-  }
-
-  .toast-enter {
-    animation: toastIn 220ms ease-out both;
-  }
-
-  .toast-exit {
-    animation: toastOut 180ms ease-in forwards;
-  }
-
-  .sparkline-path {
-    animation: sparklineDraw 300ms ease-out forwards;
-  }
-
-  .status-flash-profit {
-    animation: statusFlashProfit 500ms ease-out;
-  }
-
-  .status-flash-loss {
-    animation: statusFlashLoss 500ms ease-out;
-  }
-
-  .main-scroll-area {
-    scrollbar-gutter: stable;
-  }
-
-  .scan-now-button:hover .scan-now-icon {
-    filter: brightness(1.25);
-    transform: translateY(-1px);
-  }
-
-  .scan-now-icon {
-    transition: filter 150ms ease, transform 150ms ease;
-  }
-}
-
-@keyframes fadeIn {
-  0% {
     opacity: 0;
-    transform: translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
   }
 }
 
 @keyframes staggerFadeIn {
-  0% {
+  from {
     opacity: 0;
     transform: translateY(8px);
   }
-  100% {
+  to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes toastIn {
-  0% {
-    opacity: 0;
-    transform: translateX(16px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
+@keyframes checkPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes toastOut {
-  0% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(16px);
-  }
+@keyframes xPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes sparklineDraw {
-  0% {
-    stroke-dashoffset: var(--path-length, 100);
-  }
-  100% {
-    stroke-dashoffset: 0;
-  }
+@keyframes dotPulse {
+  0% { transform: scale(0.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes timelineLineReveal {
-  0% {
-    opacity: 0;
-    background-position: 0 100%;
-  }
-  100% {
-    opacity: 1;
-    background-position: 0 0;
-  }
-}
-
-@keyframes timelineDotIntro {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.3);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes statusFlashProfit {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes statusFlashLoss {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+@keyframes expandHeight {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 200px; opacity: 1; }
 }

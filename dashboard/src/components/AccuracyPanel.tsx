@@ -1,16 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { useState, useEffect, useRef } from 'react'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer } from 'recharts'
 import { fetchStats, fetchConfusion, triggerEvaluate, fetchMlReadiness, fetchMlStatus, triggerMlTrain } from '../api'
 import type { AccuracyStats, ConfusionMatrix, MlReadiness, MlStatus } from '../types'
 import { SkeletonStatCard } from './SkeletonCard'
-import { useStaggeredList } from '../hooks/useStaggeredList'
 
 function useCountUp(target: number, duration = 600): number {
   const [value, setValue] = useState(0)
@@ -80,40 +72,14 @@ export default function AccuracyPanel() {
   const avgPnl = useCountUp(stats?.avg_pnl ?? 0)
   const totalEval = useCountUp(stats?.total_evaluated ?? 0)
   const totalPending = useCountUp(stats?.total_pending ?? 0)
-  const statCards = useMemo(
-    () => [
-      {
-        label: 'Win Rate',
-        value: `${(winRate * 100).toFixed(1)}%`,
-        color: (stats?.win_rate ?? 0) >= 0.5 ? 'text-accent-green' : 'text-accent-red',
-      },
-      {
-        label: 'Avg P&L',
-        value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`,
-        color: (stats?.avg_pnl ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red',
-      },
-      {
-        label: 'Evaluated',
-        value: Math.round(totalEval).toString(),
-        color: 'text-txt-primary',
-      },
-      {
-        label: 'Pending',
-        value: Math.round(totalPending).toString(),
-        color: 'text-accent-amber',
-      },
-    ],
-    [avgPnl, stats?.avg_pnl, stats?.win_rate, totalEval, totalPending, winRate]
-  )
-  const { visibleItems: visibleStatCards, getDelay } = useStaggeredList(statCards, 50)
 
   if (loading) return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {Array.from({ length: 4 }).map((_, i) => <SkeletonStatCard key={i} />)}
       </div>
-      <div className="skeleton h-48" />
-      <div className="skeleton h-64" />
+      <div className="skeleton h-48 rounded-card" />
+      <div className="skeleton h-64 rounded-card" />
     </div>
   )
 
@@ -131,19 +97,6 @@ export default function AccuracyPanel() {
   const isTrained = mlStatus?.is_trained ?? false
   const topFeatures = mlStatus?.feature_importances ?? []
   const recentMlComparison = mlStatus?.recent_comparison
-  const pnlSeries = stats.recent_signals
-    .filter((signal) => signal.pnl != null)
-    .slice()
-    .reverse()
-    .reduce<{ date: string; cumulative: number }[]>((acc, signal) => {
-      const previous = acc[acc.length - 1]?.cumulative ?? 0
-      acc.push({
-        date: signal.created_at ? new Date(signal.created_at).toLocaleDateString() : `#${acc.length + 1}`,
-        cumulative: previous + (signal.pnl ?? 0),
-      })
-      return acc
-    }, [])
-  const cumulativeIsPositive = (pnlSeries[pnlSeries.length - 1]?.cumulative ?? 0) >= 0
 
   return (
     <div className="space-y-6">
@@ -253,90 +206,90 @@ export default function AccuracyPanel() {
         )}
       </div>
 
+      {/* Cumulative P&L chart */}
       <div className="card">
         <h3 className="label mb-4">Cumulative P&L</h3>
-        {pnlSeries.length > 0 ? (
-          <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={pnlSeries}>
-                <defs>
-                  <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="0%"
-                      stopColor={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
-                      stopOpacity={0.18}
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" tick={{ fill: '#8888a0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#8888a0', fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
-                <Tooltip
-                  contentStyle={{
-                    background: '#12121a',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: '12px',
-                    color: '#e8e8ed',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="cumulative"
-                  stroke={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
-                  strokeWidth={1.5}
-                  fill="url(#pnlGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-border bg-surface-tertiary px-4 py-8 text-center text-sm text-txt-tertiary">
-            Cumulative P&L chart will appear once signals have outcomes.
-          </div>
-        )}
+        {(() => {
+          const withPnl = (stats.recent_signals ?? [])
+            .filter(s => s.pnl != null)
+            .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime())
+          let cum = 0
+          const chartData = withPnl.map(s => {
+            cum += s.pnl ?? 0
+            return { date: s.created_at ?? '', cumulative: cum }
+          })
+          if (chartData.length === 0) {
+            return (
+              <p className="text-txt-tertiary text-xs py-8 text-center">
+                Cumulative P&L chart will appear once signals have outcomes
+              </p>
+            )
+          }
+          const lastCum = chartData[chartData.length - 1]?.cumulative ?? 0
+          const strokeColor = lastCum >= 0 ? '#00d68f' : '#ff3d5a'
+          return (
+            <div className="h-40">
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={strokeColor} stopOpacity={0.15} />
+                      <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#55556a' }} tickFormatter={d => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''} />
+                  <YAxis tick={{ fontSize: 9, fill: '#55556a' }} tickFormatter={v => `${v >= 0 ? '+' : ''}${v}%`} width={45} />
+                  <Area type="monotone" dataKey="cumulative" stroke={strokeColor} strokeWidth={1.5} fill="url(#pnlGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        })()}
       </div>
 
+      {/* Top stats / Empty state */}
       {stats.total_evaluated === 0 ? (
         <div className="card">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="mb-2 text-3xl text-accent-blue">▁▃▅▇</div>
-              <h3 className="text-lg font-semibold text-txt-primary">Building Your Track Record</h3>
-              <p className="mt-1 text-sm text-txt-secondary">
-                Signals are being collected. Accuracy metrics will appear once signals expire and are evaluated.
-              </p>
+          <h3 className="label mb-2">Building Your Track Record</h3>
+          <p className="text-txt-secondary text-sm mb-4">
+            Signals are being collected. Accuracy metrics will appear once signals expire and are evaluated.
+          </p>
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-txt-tertiary mb-1">
+              <span>{stats.total_pending} signals pending evaluation</span>
+              <span>Need outcomes to calculate accuracy</span>
             </div>
+            <div className="h-2 w-full rounded-full bg-surface-secondary">
+              <div className="h-full rounded-full bg-accent-amber confidence-bar" style={{ width: `${Math.min(100, (stats.total_pending / 10) * 100)}%` }} />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-4xl text-txt-tertiary" aria-hidden>{'\u2197'}</div>
             <button onClick={handleEvaluate} disabled={evaluating} className="btn-primary">
               {evaluating ? 'EVALUATING...' : 'EVALUATE PENDING'}
             </button>
           </div>
-          <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between text-xs text-txt-secondary">
-              <span>{stats.total_pending} signals pending evaluation</span>
-              <span>Need outcomes to calculate accuracy</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-surface-tertiary">
-              <div
-                className="confidence-bar h-full rounded-full bg-accent-amber"
-                style={{ width: `${Math.min(100, stats.total_pending * 5)}%` }}
-              />
-            </div>
-          </div>
         </div>
       ) : (
         <>
-          <div className="stagger-container grid grid-cols-2 gap-6 lg:grid-cols-4">
-            {visibleStatCards.map((card, index) => (
-              <div key={card.label} className="stagger-item" style={getDelay(index)}>
-                <StatCard label={card.label} value={card.value} color={card.color} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 stagger-container">
+            {[
+              { label: 'Win Rate', value: `${(winRate * 100).toFixed(1)}%`, color: (stats.win_rate) >= 0.5 ? 'text-accent-green' : 'text-accent-red' },
+              { label: 'Avg P&L', value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`, color: (stats.avg_pnl) >= 0 ? 'text-accent-green' : 'text-accent-red' },
+              { label: 'Evaluated', value: Math.round(totalEval).toString(), color: 'text-txt-primary' },
+              { label: 'Pending', value: Math.round(totalPending).toString(), color: 'text-accent-amber' },
+            ].map((item, i) => (
+              <div
+                key={item.label}
+                className="stagger-item"
+                style={{ animationDelay: `${i * 50}ms` }}
+              >
+                <StatCard label={item.label} value={item.value} color={item.color} />
               </div>
             ))}
           </div>
 
+          {/* W / L / E */}
           <div className="grid grid-cols-3 gap-6">
             <div className="card text-center">
               <div className="stat-number text-accent-green mb-1">{stats.wins}</div>
@@ -352,34 +305,34 @@ export default function AccuracyPanel() {
             </div>
           </div>
 
-          <div className="card">
-            <h3 className="label mb-4">Recent Signal Outcomes</h3>
-            <div className="flex flex-wrap gap-2">
-              {stats.recent_signals.slice(0, 20).map((signal) => {
-                const tooltip = `${signal.ticker} ${signal.direction.toUpperCase()} — ${
-                  signal.pnl != null ? `${signal.pnl >= 0 ? '+' : ''}${signal.pnl.toFixed(1)}%` : 'Pending'
-                } ${signal.outcome ?? ''}`.trim()
-                const className =
-                  signal.outcome === 'profit'
-                    ? 'bg-accent-green'
-                    : signal.outcome === 'loss'
-                      ? 'bg-accent-red'
-                      : signal.outcome === 'expired'
-                        ? 'bg-txt-tertiary'
-                        : 'h-6 border border-accent-amber text-accent-amber'
-
-                return (
-                  <div
-                    key={signal.id}
-                    title={tooltip}
-                    className={`w-3 rounded-sm ${className}`}
-                    style={{ height: signal.outcome ? '2rem' : '1.5rem', marginTop: signal.outcome ? 0 : 4 }}
-                  />
-                )
-              })}
+          {/* Win/Loss streak visualization */}
+          {stats.recent_signals.length > 0 && (
+            <div className="card">
+              <h3 className="label mb-3">Recent Signal Outcomes</h3>
+              <div className="flex flex-wrap gap-1">
+                {stats.recent_signals.slice(0, 20).map((s) => {
+                  const isPending = !s.outcome
+                  const blockColor = s.outcome === 'profit' ? 'bg-accent-green'
+                    : s.outcome === 'loss' ? 'bg-accent-red'
+                    : s.outcome === 'expired' ? 'bg-txt-tertiary'
+                    : 'bg-transparent border border-accent-amber'
+                  const tooltip = s.outcome
+                    ? `${s.ticker} ${s.direction?.toUpperCase()} — ${s.pnl != null ? (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(1) + '% ' : ''}${s.outcome}`
+                    : `${s.ticker} ${s.direction?.toUpperCase()} — pending`
+                  return (
+                    <div
+                      key={s.id}
+                      className={`rounded-sm transition-opacity hover:opacity-100 ${blockColor} ${isPending ? 'w-2 h-6' : 'w-3 h-8'}`}
+                      style={{ opacity: 0.9 }}
+                      title={tooltip}
+                    />
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
+          {/* Confusion Matrix */}
           <div className="card">
             <h3 className="label mb-4">Confusion Matrix</h3>
             <div className="grid grid-cols-[auto_1fr_1fr] gap-2 max-w-md">
@@ -389,15 +342,17 @@ export default function AccuracyPanel() {
 
               <div className="text-txt-secondary text-xs font-sans pr-3 flex items-center">Predicted Call</div>
               <div
+                className="bg-accent-green-muted rounded-lg p-4 text-center transition-opacity hover:opacity-100 cursor-help"
+                style={{ opacity: 0.9 }}
                 title="Predicted Call, market went up — correct prediction"
-                className="rounded-lg bg-accent-green-muted p-4 text-center transition-all hover:border hover:border-accent-green/30 hover:opacity-100"
               >
                 <div className="font-mono font-bold text-2xl text-accent-green">{confusion.true_bullish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Call {'\u2713'}</div>
               </div>
               <div
+                className="bg-accent-red-muted rounded-lg p-4 text-center transition-opacity hover:opacity-100 cursor-help"
+                style={{ opacity: 0.9 }}
                 title="Predicted Call, market went down — incorrect prediction"
-                className="rounded-lg bg-accent-red-muted p-4 text-center transition-all hover:border hover:border-accent-red/30 hover:opacity-100"
               >
                 <div className="font-mono font-bold text-2xl text-accent-red">{confusion.false_bullish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Call {'\u2717'}</div>
@@ -405,15 +360,17 @@ export default function AccuracyPanel() {
 
               <div className="text-txt-secondary text-xs font-sans pr-3 flex items-center">Predicted Put</div>
               <div
+                className="bg-accent-red-muted rounded-lg p-4 text-center transition-opacity hover:opacity-100 cursor-help"
+                style={{ opacity: 0.9 }}
                 title="Predicted Put, market went up — incorrect prediction"
-                className="rounded-lg bg-accent-red-muted p-4 text-center transition-all hover:border hover:border-accent-red/30 hover:opacity-100"
               >
                 <div className="font-mono font-bold text-2xl text-accent-red">{confusion.false_bearish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Put {'\u2717'}</div>
               </div>
               <div
+                className="bg-accent-green-muted rounded-lg p-4 text-center transition-opacity hover:opacity-100 cursor-help"
+                style={{ opacity: 0.9 }}
                 title="Predicted Put, market went down — correct prediction"
-                className="rounded-lg bg-accent-green-muted p-4 text-center transition-all hover:border hover:border-accent-green/30 hover:opacity-100"
               >
                 <div className="font-mono font-bold text-2xl text-accent-green">{confusion.true_bearish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Put {'\u2713'}</div>

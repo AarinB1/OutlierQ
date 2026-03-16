@@ -26,8 +26,6 @@ import type {
 } from './types';
 
 const BASE_URL = '/api';
-const SPARKLINE_TTL_MS = 5 * 60 * 1000;
-const sparklineCache = new Map<string, { data: number[]; expiresAt: number }>();
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
@@ -138,23 +136,17 @@ export async function fetchPriceHistory(
   return fetchJSON(`/ticker/${ticker}/price-history?period=${period}&interval=${interval}`);
 }
 
+const sparklineCache = new Map<string, { data: number[]; ts: number }>();
+const SPARKLINE_CACHE_MS = 5 * 60 * 1000;
+
 export async function fetchSparkline(ticker: string): Promise<number[]> {
-  const cacheKey = ticker.toUpperCase();
-  const cached = sparklineCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  const history = await fetchJSON<PricePoint[]>(
-    `/ticker/${cacheKey}/price-history?period=1mo&interval=1d`
+  const cached = sparklineCache.get(ticker);
+  if (cached && Date.now() - cached.ts < SPARKLINE_CACHE_MS) return cached.data;
+  const points = await fetchJSON<PricePoint[]>(
+    `/ticker/${ticker}/price-history?period=1mo&interval=1d`
   );
-  const closes = history.map((point) => point.close);
-
-  sparklineCache.set(cacheKey, {
-    data: closes,
-    expiresAt: Date.now() + SPARKLINE_TTL_MS,
-  });
-
+  const closes = points.map((p) => p.close);
+  sparklineCache.set(ticker, { data: closes, ts: Date.now() });
   return closes;
 }
 
@@ -204,23 +196,6 @@ export async function fetchMlStatus(): Promise<MlStatus> {
 
 export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: string; details?: unknown }> {
   return fetchJSON('/ml/train', { method: 'POST' });
-}
-
-// ── Sparkline cache ──────────────────────────────────────────────
-
-const sparklineCache = new Map<string, { data: number[]; ts: number }>()
-const SPARKLINE_TTL = 5 * 60 * 1000
-
-export async function fetchSparkline(ticker: string): Promise<number[]> {
-  const cached = sparklineCache.get(ticker)
-  if (cached && Date.now() - cached.ts < SPARKLINE_TTL) return cached.data
-
-  const points: PricePoint[] = await fetchJSON(
-    `/ticker/${ticker}/price-history?period=1mo&interval=1d`,
-  )
-  const closes = points.map(p => p.close)
-  sparklineCache.set(ticker, { data: closes, ts: Date.now() })
-  return closes
 }
 
 // ── Trading API ──────────────────────────────────────────────────
