@@ -47,6 +47,8 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
   const [expandedArticles, setExpandedArticles] = useState<Record<string, boolean>>({})
   const lastEventIdsRef = useRef<Set<string>>(new Set())
   const { addToast } = useToast()
+  const addToastRef = useRef(addToast)
+  addToastRef.current = addToast
 
   useEffect(() => {
     setLoading(true)
@@ -57,7 +59,7 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
         if (lastEventIdsRef.current.size > 0) {
           const newEvents = nextEvents.filter((event) => !lastEventIdsRef.current.has(event.id))
           newEvents.forEach((event) => {
-            addToast(
+            addToastRef.current(
               'event',
               `New Event: ${event.ticker} ${event.event_type.replace(/_/g, ' ')}`,
               `${Math.round(event.confidence * 100)}% confidence`
@@ -68,7 +70,7 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [ticker, addToast])
+  }, [ticker])
 
   const filteredEvents = events.filter((event) => {
     if (!keywordFilter) return true

@@ -25,6 +25,8 @@ export default function SignalList({ onTickerClick }: Props = {}) {
   const [direction, setDirection] = usePersistedState('options-signals-direction', '')
   const [page, setPage] = useState(0)
   const { addToast } = useToast()
+  const addToastRef = useRef(addToast)
+  addToastRef.current = addToast
   const lastSignalIdsRef = useRef<Set<string>>(new Set())
   const limit = 20
   const { visibleItems, getDelay, ready } = useStaggeredList(signals)
@@ -43,7 +45,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
         if (lastSignalIdsRef.current.size > 0) {
           const newSignals = nextSignals.filter((signal) => !lastSignalIdsRef.current.has(signal.id))
           newSignals.forEach((signal) => {
-            addToast(
+            addToastRef.current(
               'signal',
               `New Signal: ${signal.ticker} ${signal.direction.toUpperCase()}`,
               `${Math.round(signal.confidence * 100)}% confidence · ${signal.suggested_strike != null ? `$${signal.suggested_strike.toFixed(2)} strike` : 'No strike'}`
@@ -54,7 +56,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [ticker, direction, page, addToast])
+  }, [ticker, direction, page])
 
   return (
     <div>

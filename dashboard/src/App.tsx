@@ -29,8 +29,6 @@ export type Page = OptionsPage | TradingPage
 export default function App() {
   const [section, setSection] = useState<Section>('options')
   const [page, setPage] = useState<Page>('signals')
-  const [renderedPage, setRenderedPage] = useState<Page>('signals')
-  const [isExiting, setIsExiting] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [connected, setConnected] = useState(false)
@@ -70,16 +68,6 @@ export default function App() {
     onToggleShortcuts: () => setShortcutsOpen((prev) => !prev),
   })
 
-  useEffect(() => {
-    if (page === renderedPage) return
-    setIsExiting(true)
-    const timeout = window.setTimeout(() => {
-      setRenderedPage(page)
-      setIsExiting(false)
-    }, 120)
-    return () => window.clearTimeout(timeout)
-  }, [page, renderedPage])
-
   return (
     <ToastProvider>
       <Layout
@@ -90,30 +78,27 @@ export default function App() {
         connected={connected}
         health={health}
       >
-        <div
-          key={renderedPage}
-          className={`transition-opacity duration-150 ${isExiting ? 'opacity-0' : 'opacity-100 animate-fade-in'}`}
-        >
+        <div key={page} className="animate-fade-in">
           {/* Options pages */}
-          {renderedPage === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
-          {renderedPage === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
-          {renderedPage === 'accuracy' && <AccuracyPanel />}
-          {renderedPage === 'tickers' && (
+          {page === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
+          {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
+          {page === 'accuracy' && <AccuracyPanel />}
+          {page === 'tickers' && (
             <TickerView
               initialTicker={focusTicker}
               onNavigated={() => setFocusTicker(null)}
             />
           )}
-          {renderedPage === 'discovery' && <DiscoveryPanel />}
+          {page === 'discovery' && <DiscoveryPanel />}
 
           {/* Trading pages */}
-          {renderedPage === 'trade-signals' && <TradingSignals />}
-          {renderedPage === 'backtest' && <BacktestPanel />}
-          {renderedPage === 'models' && <ModelPerformance />}
-          {renderedPage === 'portfolio' && <PortfolioView />}
-          {renderedPage === 'risk' && <RiskDashboard />}
-          {renderedPage === 'strategies' && <StrategyBuilder />}
-          {renderedPage === 'charts' && <ChartView />}
+          {page === 'trade-signals' && <TradingSignals />}
+          {page === 'backtest' && <BacktestPanel />}
+          {page === 'models' && <ModelPerformance />}
+          {page === 'portfolio' && <PortfolioView />}
+          {page === 'risk' && <RiskDashboard />}
+          {page === 'strategies' && <StrategyBuilder />}
+          {page === 'charts' && <ChartView />}
         </div>
       </Layout>
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 
 interface StaggeredResult<T> {
   visibleItems: T[]
@@ -17,9 +17,11 @@ export function useStaggeredList<T>(items: T[], delayMs = 50): StaggeredResult<T
 
   const visibleItems = useMemo(() => items, [items])
 
+  const getDelay = useCallback((index: number) => `${index * delayMs}ms`, [delayMs])
+
   return {
     visibleItems,
-    getDelay: (index: number) => `${index * delayMs}ms`,
+    getDelay,
     ready,
   }
 }
