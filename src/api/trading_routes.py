@@ -441,15 +441,14 @@ def get_current_regime(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/regime/history")
 def get_regime_history(
-    days: int = 90, db: Session = Depends(get_db)
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
 ) -> list[dict]:
-    """Return historical market regimes for the last N days."""
-    if days <= 0:
-        days = 30
-    from datetime import datetime, timedelta
+    """Return regime history for the last N days."""
+    from datetime import timedelta
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    rows = (
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    records = (
         db.query(MarketRegime)
         .filter(MarketRegime.timestamp >= cutoff)
         .order_by(MarketRegime.timestamp.asc())
@@ -463,7 +462,7 @@ def get_regime_history(
             "vix_level": r.vix_level,
             "vix_percentile": r.vix_percentile,
         }
-        for r in rows
+        for r in records
     ]
 
 
@@ -494,54 +493,123 @@ def get_trading_metrics(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/risk/summary")
 def get_risk_summary(db: Session = Depends(get_db)) -> dict:
-    """Return aggregate risk summary computed from current portfolio and executions."""
-    # Use latest portfolio snapshot to derive exposures
-    latest_state = (
+    """Compute and return a comprehensive risk summary."""
+    # Get latest portfolio state
+    latest_portfolio = (
         db.query(PortfolioState)
         .order_by(PortfolioState.timestamp.desc())
         .first()
     )
 
+    cash = latest_portfolio.cash if latest_portfolio else 100000.0
+    total_value = latest_portfolio.total_value if latest_portfolio else 100000.0
+    positions = (latest_portfolio.positions_json or []) if latest_portfolio else []
+    max_drawdown = latest_portfolio.max_drawdown if latest_portfolio else 0.0
+    daily_pnl = latest_portfolio.daily_pnl if latest_portfolio else 0.0
+    cumulative_pnl = latest_portfolio.cumulative_pnl if latest_portfolio else 0.0
+
+    # Position concentration
+    concentration = []
+    for pos in positions:
+        ticker = pos.get("ticker", "UNKNOWN")
+        qty = pos.get("quantity", 0)
+        price = pos.get("current_price", pos.get("entry_price", 0))
+        pos_value = qty * price
+        weight = (pos_value / total_value * 100) if total_value > 0 else 0
+        concentration.append(
+            {
+                "ticker": ticker,
+                "direction": pos.get("direction", "BUY"),
+                "value": pos_value,
+                "weight_pct": round(weight, 2),
+            }
+        )
+    concentration.sort(key=lambda x: x["weight_pct"], reverse=True)
+
+    # Sector exposure (use SECTOR_MAP from risk_manager)
+    from src.trading.risk.risk_manager import SECTOR_MAP
+
     sector_exposure: dict[str, float] = {}
-    ticker_exposure: dict[str, float] = {}
-    total_gross = 0.0
+    for pos in positions:
+        ticker = pos.get("ticker", "").upper()
+        sector = SECTOR_MAP.get(ticker, "other")
+        qty = pos.get("quantity", 0)
+        price = pos.get("current_price", pos.get("entry_price", 0))
+        sector_exposure[sector] = sector_exposure.get(sector, 0) + qty * price
+    sector_pcts = {
+        sector: round(val / total_value * 100, 2) if total_value > 0 else 0
+        for sector, val in sector_exposure.items()
+    }
 
-    if latest_state and latest_state.positions_json:
-        for pos in latest_state.positions_json:
-            ticker = pos.get("ticker") or "UNKNOWN"
-            sector = pos.get("sector") or "Unknown"
-            quantity = pos.get("quantity") or 0
-            mark_price = pos.get("mark_price") or pos.get("entry_price") or 0
-            value = float(quantity) * float(mark_price)
-            total_gross += abs(value)
-            sector_exposure[sector] = sector_exposure.get(sector, 0.0) + value
-            ticker_exposure[ticker] = ticker_exposure.get(ticker, 0.0) + value
+    # Cash percentage
+    cash_pct = round(cash / total_value * 100, 2) if total_value > 0 else 100.0
 
-    max_ticker = max((abs(v) for v in ticker_exposure.values()), default=0.0)
-    max_ticker_pct = (max_ticker / total_gross) if total_gross > 0 else 0.0
+    # Active signals count
+    active_signals = db.query(TradeSignal).filter(TradeSignal.status == "active").count()
+    pending_signals = db.query(TradeSignal).filter(TradeSignal.status == "pending").count()
 
-    # Realized PnL from executions
+    # Win rate from executions
     executions = db.query(TradeExecution).all()
-    realized_pnl = sum(e.pnl_dollars or 0 for e in executions)
+    total_exec = len(executions)
+    winning = sum(1 for e in executions if (e.pnl_dollars or 0) > 0)
+    losing = sum(1 for e in executions if (e.pnl_dollars or 0) < 0)
+    win_rate = winning / total_exec if total_exec > 0 else 0.0
+
+    # Total exposure (sum of all position values / total portfolio)
+    total_exposure_value = sum(
+        pos.get("quantity", 0) * pos.get("current_price", pos.get("entry_price", 0))
+        for pos in positions
+    )
+    exposure_pct = (
+        round(total_exposure_value / total_value * 100, 2) if total_value > 0 else 0.0
+    )
+
+    # Risk limits status
+    risk_limits = {
+        "max_positions": 5,
+        "current_positions": len(positions),
+        "max_drawdown_limit_pct": 10.0,
+        "current_drawdown_pct": round(max_drawdown * 100, 2) if max_drawdown else 0.0,
+        "daily_loss_limit_pct": 2.0,
+        "current_daily_loss_pct": (
+            round(abs(daily_pnl) / total_value * 100, 2)
+            if total_value > 0 and daily_pnl < 0
+            else 0.0
+        ),
+        "max_sector_positions": 3,
+    }
 
     return {
-        "total_gross_exposure": total_gross,
-        "max_single_name_exposure_pct": max_ticker_pct,
-        "realized_pnl": realized_pnl,
-        "sector_exposure": sector_exposure,
-        "ticker_exposure": ticker_exposure,
+        "total_value": total_value,
+        "cash": cash,
+        "cash_pct": cash_pct,
+        "daily_pnl": daily_pnl,
+        "cumulative_pnl": cumulative_pnl,
+        "max_drawdown_pct": round(max_drawdown * 100, 2) if max_drawdown else 0.0,
+        "exposure_pct": exposure_pct,
+        "position_count": len(positions),
+        "active_signals": active_signals,
+        "pending_signals": pending_signals,
+        "win_rate": round(win_rate * 100, 2),
+        "total_trades": total_exec,
+        "winning_trades": winning,
+        "losing_trades": losing,
+        "concentration": concentration,
+        "sector_exposure": sector_pcts,
+        "risk_limits": risk_limits,
     }
 
 
 @router.get("/risk/limits")
 def get_risk_limits() -> dict:
-    """Return static risk limits configuration."""
+    """Return current risk limit configuration."""
     return {
-        "max_gross_exposure": 2.0,  # 200% of equity
-        "max_single_name_pct": 0.10,  # 10% per name
-        "max_sector_pct": 0.30,  # 30% per sector
-        "max_drawdown_pct": 0.20,  # 20% peak-to-trough
-        "max_leverage": 2.0,
+        "max_positions": 5,
+        "max_same_sector": 3,
+        "max_drawdown_pct": 10.0,
+        "min_reward_risk_ratio": 1.5,
+        "daily_loss_limit_pct": 2.0,
+        "no_entry_minutes_before_close": 15,
     }
 
 

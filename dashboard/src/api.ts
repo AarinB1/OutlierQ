@@ -304,7 +304,7 @@ export async function fetchMarketRegime(): Promise<MarketRegime> {
   return res.json();
 }
 
-export async function fetchRegimeHistory(days: number = 90): Promise<RegimeHistoryPoint[]> {
+export async function fetchRegimeHistory(days: number = 30): Promise<RegimeHistoryPoint[]> {
   const res = await fetch(`${TRADING_BASE}/regime/history?days=${days}`);
   if (!res.ok) throw new Error('Failed to fetch regime history');
   return res.json();
@@ -344,15 +344,14 @@ export async function fetchModelHistory(modelName: string): Promise<ModelVersion
   return res.json();
 }
 
-export async function triggerModelTrain(payload: {
-  model_type?: string;
-  ticker?: string;
-  period?: string;
-}): Promise<ModelTrainResult> {
+export async function triggerModelTrain(
+  modelType: string,
+  ticker: string = 'SPY',
+): Promise<ModelTrainResult> {
   const res = await fetch(`${TRADING_BASE}/models/train`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ model_type: modelType, ticker }),
   });
   if (!res.ok) throw new Error('Failed to trigger model training');
   return res.json();

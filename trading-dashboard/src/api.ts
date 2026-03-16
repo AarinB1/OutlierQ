@@ -137,14 +137,10 @@ export async function fetchModelHistory(modelName: string): Promise<ModelVersion
   return fetchJSON(`/models/${encodeURIComponent(modelName)}/history`)
 }
 
-export async function triggerModelTrain(payload: {
-  model_type?: string
-  ticker?: string
-  period?: string
-}): Promise<ModelTrainResult> {
+export async function triggerModelTrain(modelType: string, ticker: string = 'SPY'): Promise<ModelTrainResult> {
   return fetchJSON('/models/train', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ model_type: modelType, ticker }),
   })
 }
 

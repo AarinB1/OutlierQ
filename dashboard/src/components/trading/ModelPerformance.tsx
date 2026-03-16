@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  fetchTradingModelsEnhanced,
-  fetchModelHistory,
-  triggerModelTrain,
-} from '../../api'
+import { fetchTradingModelsEnhanced, fetchModelHistory, triggerModelTrain } from '../../api'
 import type {
   ModelCheckpointEnhanced,
   ModelTrainResult,
@@ -11,278 +7,324 @@ import type {
 } from '../../types'
 import { useToast } from '../../hooks/useToast'
 
-type TrainStatus = 'idle' | 'running'
+type CardTrainState = 'idle' | 'running'
+
+const formatAcc = (acc: number | null | undefined): { text: string; color: string } => {
+  if (acc == null) return { text: '—', color: 'text-txt-secondary' }
+  const raw = acc ?? 0
+  const pct = raw > 1 ? raw : raw * 100
+  let color = 'text-accent-red'
+  if (pct > 60) color = 'text-accent-green'
+  else if (pct >= 40) color = 'text-accent-amber'
+  return { text: `${pct.toFixed(1)}%`, color }
+}
+
+const formatSharpe = (s: number | null | undefined): { text: string; color: string } => {
+  if (s == null) return { text: '—', color: 'text-txt-secondary' }
+  let color = 'text-accent-red'
+  if (s > 1) color = 'text-accent-green'
+  else if (s >= 0) color = 'text-accent-amber'
+  return { text: s.toFixed(2), color }
+}
+
+const isStale = (trainedAt: string | null): boolean => {
+  if (!trainedAt) return false
+  const t = new Date(trainedAt).getTime()
+  if (!Number.isFinite(t)) return false
+  const days = (Date.now() - t) / (1000 * 60 * 60 * 24)
+  return days > 7
+}
+
+const trainingLabel = (trainedAt: string | null) => {
+  if (!trainedAt) return 'Trained: No'
+  const t = new Date(trainedAt)
+  const diffDays = (Date.now() - t.getTime()) / (1000 * 60 * 60 * 24)
+  if (diffDays < 1) return 'Trained today'
+  if (diffDays < 7) return `Trained ${Math.round(diffDays)} days ago`
+  return `Trained on ${t.toLocaleDateString()}`
+}
 
 export default function ModelPerformance() {
   const { addToast } = useToast()
 
   const [models, setModels] = useState<ModelCheckpointEnhanced[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
-  const [history, setHistory] = useState<ModelVersionHistoryEntry[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [trainStatus, setTrainStatus] = useState<TrainStatus>('idle')
-  const [trainResult, setTrainResult] = useState<ModelTrainResult | null>(null)
-  const [trainModelType, setTrainModelType] = useState<string>('all')
-  const [trainTicker, setTrainTicker] = useState<string>('SPY')
-  const [trainPeriod, setTrainPeriod] = useState<string>('2y')
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [history, setHistory] = useState<Record<string, ModelVersionHistoryEntry[]>>({})
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({})
+  const [trainState, setTrainState] = useState<Record<string, CardTrainState>>({})
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const res = await fetchTradingModelsEnhanced()
-        setModels(res)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load models'
-        addToast('error', 'Models error', msg)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [addToast])
-
-  const onSelectModel = async (modelName: string) => {
-    setSelectedModel(modelName)
-    setHistory([])
-    setHistoryLoading(true)
+  const loadModels = async () => {
+    setLoading(true)
     try {
-      const res = await fetchModelHistory(modelName)
-      setHistory(res)
+      const res = await fetchTradingModelsEnhanced()
+      setModels(res)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to load model history'
-      addToast('error', 'Model history error', msg)
+      const msg = e instanceof Error ? e.message : 'Failed to load models'
+      addToast('error', 'Models error', msg)
     } finally {
-      setHistoryLoading(false)
+      setLoading(false)
     }
   }
 
-  const onTrain = async () => {
-    if (trainStatus === 'running') return
-    setTrainStatus('running')
-    setTrainResult(null)
-    addToast('info', 'Training started', `Training ${trainModelType} on ${trainTicker} (${trainPeriod})`)
+  useEffect(() => {
+    void loadModels()
+  }, [])
+
+  const sortedModels = useMemo(
+    () =>
+      [...models].sort((a, b) => a.model_name.localeCompare(b.model_name)),
+    [models],
+  )
+
+  const handleToggleDetails = async (model: ModelCheckpointEnhanced) => {
+    const key = model.model_name
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+    if (!history[key] && !historyLoading[key]) {
+      setHistoryLoading((prev) => ({ ...prev, [key]: true }))
+      try {
+        const h = await fetchModelHistory(model.model_name)
+        setHistory((prev) => ({ ...prev, [key]: h }))
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to fetch model history'
+        addToast('error', 'Model history error', msg)
+      } finally {
+        setHistoryLoading((prev) => ({ ...prev, [key]: false }))
+      }
+    }
+  }
+
+  const handleTrain = async (model: ModelCheckpointEnhanced) => {
+    const key = model.id
+    if (trainState[key] === 'running') return
+    setTrainState((prev) => ({ ...prev, [key]: 'running' }))
     try {
-      const res = await triggerModelTrain({
-        model_type: trainModelType,
-        ticker: trainTicker.toUpperCase(),
-        period: trainPeriod,
-      })
-      setTrainResult(res)
+      const res: ModelTrainResult = await triggerModelTrain(model.model_type, 'SPY')
       if (res.status === 'completed') {
-        addToast('trade', 'Training complete', `Model training (${res.model_type}) finished`)
-        // refresh models list
-        const updated = await fetchTradingModelsEnhanced()
-        setModels(updated)
+        addToast(
+          'trade',
+          'Training complete',
+          `${model.model_name} v${model.version} trained successfully`,
+        )
+        await loadModels()
       } else {
         addToast('error', 'Training failed', res.error ?? 'Model training failed')
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to trigger training'
+      const msg = e instanceof Error ? e.message : 'Failed to trigger model training'
       addToast('error', 'Training error', msg)
     } finally {
-      setTrainStatus('idle')
+      setTrainState((prev) => ({ ...prev, [key]: 'idle' }))
     }
   }
 
-  const sortedModels = useMemo(
-    () =>
-      [...models].sort((a, b) => {
-        const aName = a.model_name.toLowerCase()
-        const bName = b.model_name.toLowerCase()
-        if (aName === bName) return 0
-        return aName < bName ? -1 : 1
-      }),
-    [models],
-  )
+  const renderStatus = (model: ModelCheckpointEnhanced) => {
+    const trained = model.is_trained
+    const stale = isStale(model.trained_at || null) && trained
+    if (!trained) {
+      return (
+        <div className="flex items-center gap-1 text-xs text-accent-red">
+          <span className="w-2.5 h-2.5 rounded-full bg-accent-red" />
+          <span>Untrained</span>
+        </div>
+      )
+    }
+    if (stale) {
+      return (
+        <div className="flex items-center gap-1 text-xs text-accent-amber">
+          <span className="w-2.5 h-2.5 rounded-full bg-accent-amber" />
+          <span>Stale</span>
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center gap-1 text-xs text-accent-green">
+        <span className="w-2.5 h-2.5 rounded-full bg-accent-green" />
+        <span>Trained</span>
+      </div>
+    )
+  }
+
+  const renderTrainButton = (model: ModelCheckpointEnhanced) => {
+    const key = model.id
+    const running = trainState[key] === 'running'
+    const stale = isStale(model.trained_at || null) && model.is_trained
+    const label = !model.is_trained || stale ? 'Train Model' : 'Retrain'
+    const baseClasses =
+      !model.is_trained || stale
+        ? 'btn-primary w-full text-xs'
+        : 'w-full text-xs border border-border rounded px-3 py-1.5 text-txt-secondary hover:text-txt-primary bg-transparent'
+
+    return (
+      <button
+        type="button"
+        onClick={() => void handleTrain(model)}
+        disabled={running}
+        className={baseClasses}
+      >
+        {running ? 'Training…' : label}
+      </button>
+    )
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-mono font-bold text-lg">Model Performance</h2>
-        {models.length > 0 && (
-          <span className="text-xs text-txt-secondary">{models.length} models</span>
+        {sortedModels.length > 0 && (
+          <span className="pill bg-surface-tertiary text-[11px] text-txt-secondary">
+            {sortedModels.length} models
+          </span>
         )}
       </div>
 
-      {/* Training controls */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="label mb-1">Train Models</div>
-            <div className="text-xs text-txt-secondary">
-              Launch background training jobs for your trading models.
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="card space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-3 w-12" />
+              </div>
+              <div className="skeleton h-4 w-20" />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="skeleton h-10 w-full" />
+                <div className="skeleton h-10 w-full" />
+              </div>
+              <div className="skeleton h-3 w-28" />
+              <div className="skeleton h-8 w-full" />
             </div>
+          ))}
+        </div>
+      ) : sortedModels.length === 0 ? (
+        <div className="card flex flex-col items-center justify-center text-center py-10">
+          <div className="text-sm text-txt-secondary mb-2">
+            No model checkpoints registered.
+          </div>
+          <div className="text-xs text-txt-tertiary">
+            Models are created when the training pipeline runs. Use{' '}
+            <span className="font-mono text-[11px]">--train-trading</span> to train models.
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-          <div className="space-y-1">
-            <label className="label text-[11px]">Model type</label>
-            <select
-              value={trainModelType}
-              onChange={(e) => setTrainModelType(e.target.value)}
-              className="w-full bg-bg-base border border-border rounded px-2 py-1 text-xs"
-            >
-              <option value="all">All</option>
-              <option value="lstm">LSTM</option>
-              <option value="transformer">Transformer</option>
-              <option value="hybrid">Hybrid</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="label text-[11px]">Ticker</label>
-            <input
-              value={trainTicker}
-              onChange={(e) => setTrainTicker(e.target.value.toUpperCase())}
-              className="w-full bg-bg-base border border-border rounded px-2 py-1 text-xs font-mono"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="label text-[11px]">Lookback</label>
-            <select
-              value={trainPeriod}
-              onChange={(e) => setTrainPeriod(e.target.value)}
-              className="w-full bg-bg-base border border-border rounded px-2 py-1 text-xs"
-            >
-              <option value="1y">1 year</option>
-              <option value="2y">2 years</option>
-              <option value="3y">3 years</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={onTrain}
-              disabled={trainStatus === 'running'}
-              className="btn-primary w-full text-xs"
-            >
-              {trainStatus === 'running' ? 'Training…' : 'Start training'}
-            </button>
-          </div>
-        </div>
-        {trainResult && (
-          <div className="mt-3 text-[11px] text-txt-secondary">
-            Last run: status <span className="font-mono">{trainResult.status}</span> (
-            <span className="font-mono">{trainResult.model_type}</span>)
-          </div>
-        )}
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sortedModels.map((m) => {
+            const acc = formatAcc(m.val_accuracy)
+            const sharpe = formatSharpe(m.val_sharpe)
+            const key = m.model_name
+            const showDetails = expanded[key]
+            const cardTrainState = trainState[m.id] ?? 'idle'
 
-      {/* Model cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card lg:col-span-2">
-          {loading ? (
-            <div className="text-sm text-txt-secondary">Loading models…</div>
-          ) : sortedModels.length === 0 ? (
-            <div className="text-sm text-txt-secondary">No model checkpoints yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {sortedModels.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onSelectModel(m.model_name)}
-                  className={`w-full text-left border rounded p-3 transition-colors ${
-                    selectedModel === m.model_name
-                      ? 'border-accent-blue bg-bg-subtle'
-                      : 'border-border hover:border-accent-blue/60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="font-mono text-sm truncate">
-                      {m.model_name} <span className="text-xs text-txt-secondary">({m.model_type})</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px]">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full ${
-                          m.is_trained ? 'bg-accent-green/10 text-accent-green' : 'bg-border text-txt-secondary'
-                        }`}
-                      >
-                        {m.is_trained ? 'Trained' : 'Untrained'}
-                      </span>
-                      <span className="text-txt-secondary">
-                        v{m.version} ·{' '}
-                        {m.trained_at ? new Date(m.trained_at).toLocaleDateString() : 'never'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-txt-secondary mb-2">
+            return (
+              <div key={m.id} className="card flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      Val Acc:{' '}
-                      <span className="font-mono">
-                        {m.val_accuracy != null ? (m.val_accuracy * 100).toFixed(1) + '%' : '—'}
-                      </span>
+                      <div className="font-mono font-bold text-lg truncate">
+                        {m.model_name}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="pill bg-surface-tertiary text-[10px] text-txt-tertiary uppercase">
+                          {m.model_type}
+                        </span>
+                        <span className="text-[10px] text-txt-tertiary font-mono">
+                          v{m.version}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      Val Sharpe:{' '}
-                      <span className="font-mono">
-                        {m.val_sharpe != null ? m.val_sharpe.toFixed(2) : '—'}
-                      </span>
-                    </div>
+                    {renderStatus(m)}
                   </div>
-                  {m.feature_names && m.feature_names.length > 0 && (
-                    <div className="text-[11px] text-txt-secondary truncate">
-                      Features:{' '}
-                      <span className="font-mono">
-                        {m.feature_names.slice(0, 6).join(', ')}
-                        {m.feature_names.length > 6 ? '…' : ''}
-                      </span>
+
+                  {m.val_accuracy != null || m.val_sharpe != null ? (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="rounded-md bg-surface-tertiary px-2 py-1.5">
+                        <div className="text-[10px] text-txt-tertiary">Val Accuracy</div>
+                        <div className={`font-mono text-sm ${acc.color}`}>{acc.text}</div>
+                      </div>
+                      <div className="rounded-md bg-surface-tertiary px-2 py-1.5">
+                        <div className="text-[10px] text-txt-tertiary">Val Sharpe</div>
+                        <div className={`font-mono text-sm ${sharpe.color}`}>
+                          {sharpe.text}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-txt-tertiary italic">
+                      No metrics yet — train this model to see performance.
                     </div>
                   )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Version history */}
-        <div className="card lg:col-span-1">
-          <div className="flex items-center justify-between mb-2">
-            <div className="label">Version History</div>
-            <span className="text-[10px] text-txt-secondary">
-              {selectedModel ? selectedModel : 'Select a model'}
-            </span>
-          </div>
-          {historyLoading ? (
-            <div className="text-xs text-txt-secondary">Loading history…</div>
-          ) : !selectedModel ? (
-            <div className="text-xs text-txt-secondary">Select a model to view history.</div>
-          ) : history.length === 0 ? (
-            <div className="text-xs text-txt-secondary">No history for this model yet.</div>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-auto pr-1">
-              {history.map((h) => (
-                <div
-                  key={h.id}
-                  className="border border-border/60 rounded px-2 py-1.5 text-[11px] space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono">v{h.version}</span>
-                    <span className="text-txt-secondary">
-                      {h.trained_at ? new Date(h.trained_at).toLocaleDateString() : '—'}
-                    </span>
+                  <div className="text-[11px] text-txt-tertiary">
+                    {trainingLabel(m.trained_at ?? null)}
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-txt-secondary">
-                    <span>
-                      Acc:{' '}
-                      <span className="font-mono">
-                        {h.val_accuracy != null ? (h.val_accuracy * 100).toFixed(1) + '%' : '—'}
-                      </span>
-                    </span>
-                    <span>
-                      Sharpe:{' '}
-                      <span className="font-mono">
-                        {h.val_sharpe != null ? h.val_sharpe.toFixed(2) : '—'}
-                      </span>
-                    </span>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleToggleDetails(m)}
+                    className="mt-1 text-[11px] text-accent-blue hover:underline"
+                  >
+                    {showDetails ? 'Hide details' : 'Details'}
+                  </button>
+
+                  {showDetails && (
+                    <div className="mt-2 space-y-2 border-t border-border/50 pt-2">
+                      <div className="text-[11px] text-txt-secondary">
+                        <span className="font-semibold">Hyperparameters:</span>{' '}
+                        {m.hyperparameters
+                          ? Object.entries(m.hyperparameters).length > 0
+                            ? (
+                                Object.entries(m.hyperparameters) as [string, unknown][]
+                              ).map(([k, v]) => `${k}: ${String(v)}`).join(', ')
+                            : 'Default hyperparameters'
+                          : 'Default hyperparameters'}
+                      </div>
+                      <div className="text-[11px] text-txt-secondary">
+                        {m.feature_names && m.feature_names.length > 0
+                          ? `${m.feature_names.length} features`
+                          : 'Feature metadata unavailable'}
+                      </div>
+                      {historyLoading[key] ? (
+                        <div className="text-[11px] text-txt-secondary">Loading history…</div>
+                      ) : history[key] && history[key].length > 0 ? (
+                        <div className="space-y-1 text-[10px] text-txt-secondary">
+                          {history[key].slice(0, 3).map((h) => {
+                            const hAcc = formatAcc(h.val_accuracy)
+                            const hSharpe = formatSharpe(h.val_sharpe)
+                            return (
+                              <div
+                                key={h.id}
+                                className="flex items-center justify-between gap-3"
+                              >
+                                <span className="font-mono">v{h.version}</span>
+                                <span className={hAcc.color}>{hAcc.text}</span>
+                                <span className={hSharpe.color}>{hSharpe.text}</span>
+                                <span>
+                                  {h.trained_at
+                                    ? new Date(h.trained_at).toLocaleDateString()
+                                    : '—'}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className="mt-4">
+                  {renderTrainButton(m)}
+                  {cardTrainState === 'running' && (
+                    <div className="mt-1 text-[10px] text-txt-secondary">
+                      Training in progress…
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -502,28 +502,58 @@ export interface MarketRegime {
   confidence: number
 }
 
+// ── Risk Dashboard Types ─────────────────────────────────────────
+
 export interface RegimeHistoryPoint {
   timestamp: string
-  regime: MarketRegime['regime']
+  regime: string
   confidence: number
   vix_level: number | null
   vix_percentile: number | null
 }
 
+export interface PositionConcentration {
+  ticker: string
+  direction: string
+  value: number
+  weight_pct: number
+}
+
 export interface RiskSummary {
-  total_gross_exposure: number
-  max_single_name_exposure_pct: number
-  realized_pnl: number
+  total_value: number
+  cash: number
+  cash_pct: number
+  daily_pnl: number
+  cumulative_pnl: number
+  max_drawdown_pct: number
+  exposure_pct: number
+  position_count: number
+  active_signals: number
+  pending_signals: number
+  win_rate: number
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  concentration: PositionConcentration[]
   sector_exposure: Record<string, number>
-  ticker_exposure: Record<string, number>
+  risk_limits: {
+    max_positions: number
+    current_positions: number
+    max_drawdown_limit_pct: number
+    current_drawdown_pct: number
+    daily_loss_limit_pct: number
+    current_daily_loss_pct: number
+    max_sector_positions: number
+  }
 }
 
 export interface RiskLimitsConfig {
-  max_gross_exposure: number
-  max_single_name_pct: number
-  max_sector_pct: number
+  max_positions: number
+  max_same_sector: number
   max_drawdown_pct: number
-  max_leverage: number
+  min_reward_risk_ratio: number
+  daily_loss_limit_pct: number
+  no_entry_minutes_before_close: number
 }
 
 export interface ModelCheckpointEnhanced {
