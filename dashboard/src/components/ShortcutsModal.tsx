@@ -11,6 +11,7 @@ const SHORTCUTS = [
   { key: 'A', description: 'Go to Accuracy' },
   { key: 'T', description: 'Go to Tickers' },
   { key: 'D', description: 'Go to Discovery' },
+  { key: 'S', description: 'Cycle signal sort options' },
   { key: '/', description: 'Focus ticker search' },
   { key: '?', description: 'Toggle this shortcuts modal' },
   { key: 'Esc', description: 'Close modal' },

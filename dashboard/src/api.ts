@@ -55,12 +55,16 @@ export async function fetchActiveTickers(): Promise<ActiveTickers> {
 export async function fetchSignals(params?: {
   ticker?: string;
   direction?: string;
+  sort_by?: 'confidence' | 'time' | 'ticker';
+  sort_order?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
 }): Promise<Signal[]> {
   const sp = new URLSearchParams();
   if (params?.ticker) sp.set('ticker', params.ticker);
   if (params?.direction) sp.set('direction', params.direction);
+  if (params?.sort_by) sp.set('sort_by', params.sort_by);
+  if (params?.sort_order) sp.set('sort_order', params.sort_order);
   if (params?.limit) sp.set('limit', String(params.limit));
   if (params?.offset) sp.set('offset', String(params.offset));
   const qs = sp.toString();

@@ -13,6 +13,12 @@ const FILTERS = [
   { key: 'put', label: 'Puts' },
 ] as const
 
+const SORT_OPTIONS = [
+  { key: 'time', label: '∿ Time' },
+  { key: 'confidence', label: '∿ Confidence' },
+  { key: 'ticker', label: 'A→Z Ticker' },
+] as const
+
 interface Props {
   onTickerClick?: (ticker: string) => void
 }
@@ -23,6 +29,14 @@ export default function SignalList({ onTickerClick }: Props = {}) {
   const [error, setError] = useState<string | null>(null)
   const [ticker, setTicker] = usePersistedState('options-signals-ticker', '')
   const [direction, setDirection] = usePersistedState('options-signals-direction', '')
+  const [sortBy, setSortBy] = usePersistedState<'time' | 'confidence' | 'ticker'>(
+    'options-signals-sort',
+    'time',
+  )
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(
+    'options-signals-order',
+    'desc',
+  )
   const [page, setPage] = useState(0)
   const { addToast } = useToast()
   const addToastRef = useRef(addToast)
@@ -37,6 +51,8 @@ export default function SignalList({ onTickerClick }: Props = {}) {
     fetchSignals({
       ticker: ticker || undefined,
       direction: direction || undefined,
+      sort_by: sortBy || undefined,
+      sort_order: sortOrder || undefined,
       limit,
       offset: page * limit,
     })
@@ -56,7 +72,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [ticker, direction, page])
+  }, [ticker, direction, sortBy, sortOrder, page])
 
   return (
     <div>
@@ -66,21 +82,48 @@ export default function SignalList({ onTickerClick }: Props = {}) {
           {'\u26A1'} Signals
         </h2>
         <div className="flex items-center gap-3">
-          {/* Direction pills */}
-          <div className="flex gap-1 bg-surface-secondary rounded-lg p-1 border border-border">
-            {FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => { setDirection(f.key); setPage(0) }}
-                className={`px-3 py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
-                  direction === f.key
-                    ? 'bg-surface-tertiary text-txt-primary'
-                    : 'text-txt-secondary hover:text-txt-primary'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            {/* Direction pills */}
+            <div className="flex gap-1 bg-surface-secondary rounded-lg p-1 border border-border">
+              {FILTERS.map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => { setDirection(f.key); setPage(0) }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
+                    direction === f.key
+                      ? 'bg-surface-tertiary text-txt-primary'
+                      : 'text-txt-secondary hover:text-txt-primary'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Sort pills */}
+            <div className="flex gap-1 bg-surface-secondary rounded-lg p-1 border border-border">
+              {SORT_OPTIONS.map(s => (
+                <button
+                  key={s.key}
+                  onClick={() => {
+                    if (sortBy === s.key) {
+                      setSortOrder(o => (o === 'desc' ? 'asc' : 'desc'))
+                    } else {
+                      setSortBy(s.key)
+                      setSortOrder(s.key === 'ticker' ? 'asc' : 'desc')
+                    }
+                    setPage(0)
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-sans font-medium transition-all duration-150 ${
+                    sortBy === s.key
+                      ? 'bg-surface-tertiary text-txt-primary'
+                      : 'text-txt-secondary hover:text-txt-primary'
+                  }`}
+                >
+                  {s.label}{' '}
+                  {sortBy === s.key && (sortOrder === 'desc' ? '↓' : '↑')}
+                </button>
+              ))}
+            </div>
           </div>
           {/* Ticker input */}
           <input

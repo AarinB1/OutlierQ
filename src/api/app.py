@@ -81,11 +81,21 @@ def health(db: Session = Depends(get_db)) -> dict:
 def list_signals(
     ticker: Optional[str] = None,
     direction: Optional[str] = None,
+    sort_by: str = Query("time", regex="^(confidence|time|ticker)$"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    query = db.query(Signal).order_by(Signal.created_at.desc())
+    SORT_COLUMNS = {
+        "confidence": Signal.confidence,
+        "time": Signal.created_at,
+        "ticker": Signal.ticker,
+    }
+    sort_col = SORT_COLUMNS[sort_by]
+    order = sort_col.asc() if sort_order == "asc" else sort_col.desc()
+
+    query = db.query(Signal).order_by(order)
     if ticker:
         query = query.filter(Signal.ticker == ticker.upper())
     if direction:
