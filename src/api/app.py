@@ -4,11 +4,14 @@ Serves signal, event, and accuracy data to the React frontend.
 """
 
 import logging
-from datetime import datetime, timezone
+import asyncio
+import json
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from config.settings import LOG_FORMAT
@@ -133,6 +136,45 @@ def get_signal(signal_id: str, db: Session = Depends(get_db)) -> dict:
             for a in articles
         ]
     return result
+
+
+@app.get("/api/stream")
+async def stream_signals() -> StreamingResponse:
+    """SSE stream of newly created signals for realtime dashboard updates."""
+
+    async def _event_generator():
+        last_seen = datetime.now(timezone.utc) - timedelta(seconds=5)
+        while True:
+            try:
+                with SessionLocal() as db:
+                    rows = (
+                        db.query(Signal)
+                        .filter(Signal.created_at >= last_seen)
+                        .order_by(Signal.created_at.asc())
+                        .all()
+                    )
+                    for sig in rows:
+                        event = db.query(Event).filter(Event.id == sig.event_id).first()
+                        payload = _signal_to_dict(sig, event)
+                        yield f"event: signal\ndata: {json.dumps(payload)}\n\n"
+                        if sig.created_at:
+                            last_seen = max(last_seen, sig.created_at + timedelta(microseconds=1))
+                yield ": keepalive\n\n"
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("SSE stream loop failed")
+                await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 # ── Events ────────────────────────────────────────────────────────────

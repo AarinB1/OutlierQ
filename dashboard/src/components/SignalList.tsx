@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchSignals } from '../api'
+import { fetchSignals, subscribeSignalStream } from '../api'
 import type { Signal } from '../types'
 import SignalCard from './SignalCard'
 import { SkeletonSignalCard } from './SkeletonCard'
@@ -44,6 +44,16 @@ export default function SignalList({ onTickerClick }: Props = {}) {
   const lastSignalIdsRef = useRef<Set<string>>(new Set())
   const limit = 20
   const { visibleItems, getDelay, ready } = useStaggeredList(signals)
+  const pageRef = useRef(page)
+  pageRef.current = page
+  const sortByRef = useRef(sortBy)
+  sortByRef.current = sortBy
+  const sortOrderRef = useRef(sortOrder)
+  sortOrderRef.current = sortOrder
+  const tickerRef = useRef(ticker)
+  tickerRef.current = ticker
+  const directionRef = useRef(direction)
+  directionRef.current = direction
 
   useEffect(() => {
     setLoading(true)
@@ -73,6 +83,44 @@ export default function SignalList({ onTickerClick }: Props = {}) {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [ticker, direction, sortBy, sortOrder, page])
+
+  useEffect(() => {
+    const unsubscribe = subscribeSignalStream((signal) => {
+      if (lastSignalIdsRef.current.has(signal.id)) {
+        return
+      }
+
+      lastSignalIdsRef.current.add(signal.id)
+      addToastRef.current(
+        'signal',
+        `Realtime Signal: ${signal.ticker} ${signal.direction.toUpperCase()}`,
+        `${Math.round(signal.confidence * 100)}% confidence · ${signal.suggested_strike != null ? `$${signal.suggested_strike.toFixed(2)} strike` : 'No strike'}`
+      )
+
+      const tickerFilter = tickerRef.current.trim().toUpperCase()
+      const directionFilter = directionRef.current.trim().toLowerCase()
+      const matchesTicker = !tickerFilter || signal.ticker.toUpperCase().includes(tickerFilter)
+      const matchesDirection = !directionFilter || signal.direction.toLowerCase() === directionFilter
+
+      const shouldPrepend =
+        pageRef.current === 0 &&
+        sortByRef.current === 'time' &&
+        sortOrderRef.current === 'desc' &&
+        matchesTicker &&
+        matchesDirection
+
+      if (!shouldPrepend) {
+        return
+      }
+
+      setSignals((prev) => {
+        const deduped = prev.filter((item) => item.id !== signal.id)
+        return [signal, ...deduped].slice(0, limit)
+      })
+    })
+
+    return () => unsubscribe()
+  }, [])
 
   return (
     <div>

@@ -89,6 +89,32 @@ export async function fetchSignal(id: string): Promise<Signal> {
   return fetchJSON(`/signals/${id}`);
 }
 
+export function subscribeSignalStream(
+  onSignal: (signal: Signal) => void,
+  onError?: (error: Event) => void
+): () => void {
+  const eventSource = new EventSource('/api/stream');
+
+  const handleSignal = (event: MessageEvent<string>) => {
+    try {
+      const parsed = JSON.parse(event.data) as Signal;
+      onSignal(parsed);
+    } catch {
+      // Ignore malformed payloads and keep stream alive.
+    }
+  };
+
+  eventSource.addEventListener('signal', handleSignal as EventListener);
+  eventSource.onerror = (event) => {
+    if (onError) onError(event);
+  };
+
+  return () => {
+    eventSource.removeEventListener('signal', handleSignal as EventListener);
+    eventSource.close();
+  };
+}
+
 export async function fetchEvents(params?: {
   ticker?: string;
   event_type?: string;

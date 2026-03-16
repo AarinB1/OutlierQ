@@ -12,6 +12,7 @@ Usage:
     python scripts/run_ingestion.py --once --discover
     python scripts/run_ingestion.py --discover-only
     python scripts/run_ingestion.py --autopilot --demo --anytime   # fully autonomous
+    python scripts/run_ingestion.py --autopilot --realtime --demo --anytime
     python scripts/run_ingestion.py --ml-status
     python scripts/run_ingestion.py --train-ml
     python scripts/run_ingestion.py --once --signals --use-ml --tickers AAPL,TSLA
@@ -67,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         "--anytime",
         action="store_true",
         help="Run the scheduler regardless of market hours (for testing evenings/weekends)",
+    )
+    parser.add_argument(
+        "--realtime",
+        action="store_true",
+        help="Run Finnhub websocket ingestion for realtime news/trades alongside polling",
     )
     parser.add_argument(
         "--evaluate",
@@ -498,7 +504,12 @@ def _invalidate_active_tickers_cache() -> None:
     _active_tickers_ts = 0
 
 
-def run_autopilot(demo: bool = False, anytime: bool = False, use_ml: bool = False) -> None:
+def run_autopilot(
+    demo: bool = False,
+    anytime: bool = False,
+    use_ml: bool = False,
+    realtime: bool = False,
+) -> None:
     """Run fully autonomous: discovery, ingestion, pipeline on schedule; status every hour."""
     from datetime import datetime, timedelta, timezone
     from apscheduler.schedulers.blocking import BlockingScheduler
@@ -509,6 +520,16 @@ def run_autopilot(demo: bool = False, anytime: bool = False, use_ml: bool = Fals
 
     print("\n🚀 AUTOPILOT MODE — OutlierQ is running autonomously. Discovering and monitoring all stocks.\n")
     orch = _discovery_orchestrator(demo=demo, use_ml=use_ml)
+    realtime_manager = None
+    if realtime:
+        from src.ingestion.realtime import RealtimeIngestionManager
+
+        realtime_manager = RealtimeIngestionManager(
+            active_ticker_provider=lambda: _get_active_tickers_cached(orch) or DEFAULT_TICKERS,
+            demo=demo,
+            use_ml=use_ml,
+        )
+        realtime_manager.start()
 
     # Heartbeat for API /api/status
     _cache_dir = Path(__file__).resolve().parent.parent / ".cache"
@@ -584,27 +605,30 @@ def run_autopilot(demo: bool = False, anytime: bool = False, use_ml: bool = Fals
         except Exception:
             logger.exception("Autopilot status job failed")
 
-    scheduler.add_job(discovery_job, trigger=IntervalTrigger(minutes=30), id="autopilot_discovery", name="Discovery")
-    scheduler.add_job(ingestion_job, trigger=IntervalTrigger(minutes=15), id="autopilot_ingestion", name="News ingestion")
-    run_date_5min = datetime.now(timezone.utc) + timedelta(minutes=5)
+    scheduler.add_job(discovery_job, trigger=IntervalTrigger(minutes=15), id="autopilot_discovery", name="Discovery")
+    scheduler.add_job(ingestion_job, trigger=IntervalTrigger(minutes=5), id="autopilot_ingestion", name="News ingestion")
+    run_date_1min = datetime.now(timezone.utc) + timedelta(minutes=1)
     scheduler.add_job(
         pipeline_job,
-        trigger=IntervalTrigger(minutes=15),
+        trigger=IntervalTrigger(minutes=5),
         id="autopilot_pipeline",
         name="Full pipeline",
-        next_run_time=run_date_5min,
+        next_run_time=run_date_1min,
     )
     scheduler.add_job(feedback_job, trigger=IntervalTrigger(hours=6), id="autopilot_feedback", name="Feedback evaluation")
     scheduler.add_job(status_job, trigger=IntervalTrigger(hours=1), id="autopilot_status", name="Status")
 
     logger.info(
-        "Autopilot scheduler: discovery every 30 min, ingestion every 15 min, pipeline every 15 min (offset 5), feedback every 6 h, status every 1 h"
+        "Autopilot scheduler: discovery every 15 min, ingestion every 5 min, pipeline every 5 min (offset 1), feedback every 6 h, status every 1 h"
     )
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown(wait=False)
         logger.info("Autopilot stopped by user.")
+    finally:
+        if realtime_manager is not None:
+            realtime_manager.stop()
 
 
 def run_scheduled(
@@ -615,11 +639,28 @@ def run_scheduled(
     anytime: bool = False,
     discover: bool = False,
     use_ml: bool = False,
+    realtime: bool = False,
 ) -> None:
     """Start the APScheduler-based ingestion loop."""
     from src.ingestion.scheduler import IngestionScheduler
 
     scheduler = IngestionScheduler(tickers=tickers, anytime=anytime)
+    realtime_manager = None
+    if realtime:
+        from src.ingestion.realtime import RealtimeIngestionManager
+
+        if discover:
+            orch = _discovery_orchestrator(demo=demo, use_ml=use_ml)
+            ticker_provider = lambda: _get_active_tickers_cached(orch) or tickers
+        else:
+            ticker_provider = lambda: tickers
+
+        realtime_manager = RealtimeIngestionManager(
+            active_ticker_provider=ticker_provider,
+            demo=demo,
+            use_ml=use_ml,
+        )
+        realtime_manager.start()
 
     if signals or detect:
         job_fn = (
@@ -641,11 +682,11 @@ def run_scheduled(
 
             scheduler.scheduler.add_job(
                 _job,
-                trigger=IntervalTrigger(minutes=15),
+                trigger=IntervalTrigger(minutes=5),
                 id="pipeline_job",
                 name=f"{job_name} (anytime)",
             )
-            logger.info("%s job added (every 15 min, anytime mode)", job_name)
+            logger.info("%s job added (every 5 min, anytime mode)", job_name)
         else:
             from apscheduler.triggers.cron import CronTrigger
 
@@ -655,26 +696,26 @@ def run_scheduled(
                     trigger=CronTrigger(
                         day_of_week="mon-fri",
                         hour="9-15",
-                        minute="0,30",
+                        minute="*/5",
                         timezone="US/Eastern",
                     ),
                     id="pipeline_job",
                     name=job_name,
                 )
-                logger.info("%s job added (at :00 and :30 during market hours, staggered with discovery)", job_name)
+                logger.info("%s job added (every 5 min during market hours)", job_name)
             else:
                 scheduler.scheduler.add_job(
                     _job,
                     trigger=CronTrigger(
                         day_of_week="mon-fri",
                         hour="9-15",
-                        minute="*/15",
+                        minute="*/5",
                         timezone="US/Eastern",
                     ),
                     id="pipeline_job",
                     name=job_name,
                 )
-                logger.info("%s job added (every 15 min during market hours)", job_name)
+                logger.info("%s job added (every 5 min during market hours)", job_name)
 
     if discover:
         def _discover_job() -> None:
@@ -688,11 +729,11 @@ def run_scheduled(
             from apscheduler.triggers.interval import IntervalTrigger
             scheduler.scheduler.add_job(
                 _discover_job,
-                trigger=IntervalTrigger(minutes=30),
+                trigger=IntervalTrigger(minutes=15),
                 id="discovery_job",
                 name="Discovery (anytime)",
             )
-            logger.info("Discovery job added (every 30 min, anytime mode)")
+            logger.info("Discovery job added (every 15 min, anytime mode)")
         else:
             from apscheduler.triggers.cron import CronTrigger
             scheduler.scheduler.add_job(
@@ -700,19 +741,22 @@ def run_scheduled(
                 trigger=CronTrigger(
                     day_of_week="mon-fri",
                     hour="9-15",
-                    minute="15,45",  # :15 and :45 — stagger with ingestion :00, pipeline :30
+                    minute="*/15",
                     timezone="US/Eastern",
                 ),
                 id="discovery_job",
                 name="Discovery",
             )
-            logger.info("Discovery job added (at :15 and :45 during market hours)")
+            logger.info("Discovery job added (every 15 min during market hours)")
 
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         scheduler.stop()
         logger.info("Scheduler stopped by user.")
+    finally:
+        if realtime_manager is not None:
+            realtime_manager.stop()
 
 
 def run_train_trading() -> None:
@@ -987,7 +1031,12 @@ def main() -> None:
             print("\n\u26a0\ufe0f  DEMO MODE \u2014 Detection thresholds lowered.\n")
         if args.anytime:
             print("\U0001f550 ANYTIME MODE \u2014 Scheduler running regardless of market hours.\n")
-        run_autopilot(demo=args.demo, anytime=args.anytime, use_ml=args.use_ml)
+        run_autopilot(
+            demo=args.demo,
+            anytime=args.anytime,
+            use_ml=args.use_ml,
+            realtime=args.realtime,
+        )
         return
 
     logger.info("OutlierQ ingestion — tickers: %s", tickers)
@@ -1024,6 +1073,7 @@ def main() -> None:
             anytime=args.anytime,
             discover=args.discover,
             use_ml=args.use_ml,
+            realtime=args.realtime,
         )
 
 

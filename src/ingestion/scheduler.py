@@ -1,7 +1,7 @@
 """APScheduler job orchestration for periodic data ingestion.
 
 Runs two jobs during US market hours (9:30 AM – 4:00 PM ET, Mon–Fri):
-  - News ingestion every 15 minutes
+  - News ingestion every 5 minutes
   - Market data refresh every 5 minutes
 
 With anytime=True, jobs run on simple intervals regardless of day/time.
@@ -40,10 +40,10 @@ class IngestionScheduler:
             logger.info(
                 "Scheduler running in ANYTIME mode — jobs fire regardless of market hours"
             )
-            # News ingestion — every 15 minutes
+            # News ingestion — every 5 minutes
             self.scheduler.add_job(
                 self._run_news_job,
-                trigger=IntervalTrigger(minutes=15),
+                trigger=IntervalTrigger(minutes=5),
                 id="news_ingestion",
                 name="News Ingestion (anytime)",
             )
@@ -58,13 +58,13 @@ class IngestionScheduler:
             logger.info(
                 "Scheduler running in MARKET HOURS mode — Mon-Fri 9:30 AM - 4:00 PM ET"
             )
-            # News ingestion — every 15 minutes during market hours (ET)
+            # News ingestion — every 5 minutes during market hours (ET)
             self.scheduler.add_job(
                 self._run_news_job,
                 trigger=CronTrigger(
                     day_of_week="mon-fri",
                     hour="9-15",
-                    minute="*/15",
+                    minute="*/5",
                     timezone="US/Eastern",
                 ),
                 id="news_ingestion",
