@@ -37,13 +37,12 @@ export default function Sparkline({
   height = 32,
   color = '#00d68f',
 }: SparklineProps) {
+  // Guard: need at least 2 points to draw a line
+  if (!data || data.length < 2) return null
+
   const svgWidth = 100
 
   const { points, line, area, id, length } = useMemo(() => {
-    if (data.length < 2) {
-      return { points: [], line: '', area: '', id: '', length: 0 }
-    }
-
     const pts = normalizePoints(data, svgWidth, height)
     const linePath = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
     const areaPath = `${linePath} L ${svgWidth},${height} L 0,${height} Z`

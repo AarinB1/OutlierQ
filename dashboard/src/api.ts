@@ -145,12 +145,17 @@ export async function fetchSparkline(ticker: string): Promise<number[]> {
     return cached.values;
   }
 
-  const points = await fetchJSON<PricePoint[]>(
-    `/ticker/${cacheKey}/price-history?period=1mo&interval=1d`
-  );
-  const values = points.map((point) => point.close);
-  sparklineCache.set(cacheKey, { timestamp: Date.now(), values });
-  return values;
+  try {
+    const response = await fetchJSON<{ data: PricePoint[] } | PricePoint[]>(
+      `/ticker/${cacheKey}/price-history?period=1mo&interval=1d`
+    );
+    const points = Array.isArray(response) ? response : (response.data ?? []);
+    const values = points.map((point) => point.close);
+    sparklineCache.set(cacheKey, { timestamp: Date.now(), values });
+    return values;
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchIntraday(ticker: string): Promise<PricePoint[]> {

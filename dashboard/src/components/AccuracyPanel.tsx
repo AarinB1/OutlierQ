@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchStats, fetchConfusion, triggerEvaluate, fetchMlReadiness, fetchMlStatus, triggerMlTrain } from '../api'
 import type { AccuracyStats, ConfusionMatrix, MlReadiness, MlStatus } from '../types'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
@@ -75,11 +75,40 @@ export default function AccuracyPanel() {
       .finally(() => setTrainingMl(false))
   }
 
-  // Animated stat values
+  // Animated stat values — always called (before any early returns)
   const winRate = useCountUp(stats?.win_rate ?? 0)
   const avgPnl = useCountUp(stats?.avg_pnl ?? 0)
   const totalEval = useCountUp(stats?.total_evaluated ?? 0)
   const totalPending = useCountUp(stats?.total_pending ?? 0)
+
+  // Build stagger data and hook — always called (before any early returns)
+  const staggerData = useMemo(
+    () => [
+      {
+        label: 'Win Rate',
+        value: `${(winRate * 100).toFixed(1)}%`,
+        color: (stats?.win_rate ?? 0) >= 0.5 ? 'text-accent-green' : 'text-accent-red',
+      },
+      {
+        label: 'Avg P&L',
+        value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`,
+        color: (stats?.avg_pnl ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red',
+      },
+      {
+        label: 'Evaluated',
+        value: Math.round(totalEval).toString(),
+        color: 'text-txt-primary',
+      },
+      {
+        label: 'Pending',
+        value: Math.round(totalPending).toString(),
+        color: 'text-accent-amber',
+      },
+    ],
+    [winRate, avgPnl, totalEval, totalPending, stats?.win_rate, stats?.avg_pnl]
+  )
+
+  const { visibleItems: staggeredStats, getDelay, ready } = useStaggeredList(staggerData)
 
   if (loading) return (
     <div className="space-y-6">
@@ -116,12 +145,6 @@ export default function AccuracyPanel() {
   })
   const cumulativeLast = cumulativePnl.length > 0 ? cumulativePnl[cumulativePnl.length - 1].cumulative : 0
   const cumulativePositive = cumulativeLast >= 0
-  const { visibleItems: staggeredStats, getDelay, ready } = useStaggeredList([
-    { label: 'Win Rate', value: `${(winRate * 100).toFixed(1)}%`, color: (stats.win_rate) >= 0.5 ? 'text-accent-green' : 'text-accent-red' },
-    { label: 'Avg P&L', value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`, color: (stats.avg_pnl) >= 0 ? 'text-accent-green' : 'text-accent-red' },
-    { label: 'Evaluated', value: Math.round(totalEval).toString(), color: 'text-txt-primary' },
-    { label: 'Pending', value: Math.round(totalPending).toString(), color: 'text-accent-amber' },
-  ])
 
   return (
     <div className="space-y-6">
