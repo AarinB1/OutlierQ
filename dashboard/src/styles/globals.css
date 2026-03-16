@@ -2,9 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadePulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes lineDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 @layer base {
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 
   /* Scrollbar */
@@ -19,18 +60,19 @@
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
 @layer components {
   .card {
     @apply bg-surface-secondary border border-border rounded-card p-6;
-    transition: border-color 150ms ease, transform 150ms ease;
+    transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
   }
   .card:hover {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.15);
     transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   }
 
   .confidence-bar {
@@ -44,6 +86,9 @@
   .btn-primary:hover {
     box-shadow: 0 0 20px rgba(68, 138, 255, 0.3);
     transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: scale(0.98);
   }
   .btn-primary:disabled {
     @apply opacity-40 cursor-not-allowed;
@@ -60,6 +105,11 @@
 
   .pill {
     @apply inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold tracking-wider uppercase;
+    transition: all 150ms ease;
+  }
+  button .pill:hover,
+  .pill:hover {
+    transform: translateY(-1px);
   }
 
   .stat-number {
@@ -73,5 +123,48 @@
   /* Count-up animation helper */
   .count-up {
     animation: fadeIn 600ms ease;
+  }
+
+  .stagger-container .stagger-item {
+    opacity: 0;
+    transform: translateY(8px);
+    will-change: transform, opacity;
+  }
+
+  .stagger-container.is-ready .stagger-item {
+    animation: staggerFadeIn 300ms ease-out forwards;
+  }
+
+  .sparkline-path {
+    stroke-dasharray: var(--sparkline-length, 120);
+    stroke-dashoffset: var(--sparkline-length, 120);
+    animation: lineDraw 300ms ease-out forwards;
+  }
+
+  .toast-enter {
+    animation: toastSlideIn 250ms ease-out forwards;
+  }
+
+  .timeline-gradient-line {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.04)
+    );
+    background-size: 100% 200%;
+    animation: fadePulse 900ms ease-out 1;
+  }
+
+  .main-scroll-area {
+    scrollbar-gutter: stable;
+  }
+
+  .scan-icon {
+    transition: filter 150ms ease;
+  }
+
+  .scan-button:hover .scan-icon {
+    filter: brightness(1.25);
   }
 }
