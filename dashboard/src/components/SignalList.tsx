@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { fetchSignals } from '../api'
 import type { Signal } from '../types'
 import SignalCard from './SignalCard'
+import { useToast } from '../components/Toast'
+import { useStaggeredList } from '../hooks/useStaggeredList'
+import { usePersistedState } from '../hooks/usePersistedState'
+import { SkeletonSignalCard } from './SkeletonCard'
 
 const FILTERS = [
   { key: '', label: 'All' },
@@ -11,16 +15,20 @@ const FILTERS = [
 
 interface Props {
   onTickerClick?: (ticker: string) => void
+  tickerSearchRef?: React.RefObject<HTMLInputElement>
 }
 
-export default function SignalList({ onTickerClick }: Props = {}) {
+export default function SignalList({ onTickerClick, tickerSearchRef }: Props = {}) {
   const [signals, setSignals] = useState<Signal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ticker, setTicker] = useState('')
-  const [direction, setDirection] = useState('')
+  const [direction, setDirection] = usePersistedState('signal-list-direction', '')
   const [page, setPage] = useState(0)
   const limit = 20
+  const prevIdsRef = useRef<Set<string>>(new Set())
+  const { addToast } = useToast()
+  const { visibleItems, getDelay } = useStaggeredList(signals, 50)
 
   useEffect(() => {
     setLoading(true)
@@ -31,10 +39,22 @@ export default function SignalList({ onTickerClick }: Props = {}) {
       limit,
       offset: page * limit,
     })
-      .then(setSignals)
+      .then(newSignals => {
+        const prevIds = prevIdsRef.current
+        const newIds = new Set(newSignals.map(s => s.id))
+        if (prevIds.size > 0) {
+          newSignals.forEach(s => {
+            if (!prevIds.has(s.id)) {
+              addToast('signal', `New Signal: ${s.ticker} ${s.direction.toUpperCase()}`, `${(s.confidence * 100).toFixed(0)}% confidence · $${s.suggested_strike?.toFixed(0) ?? '—'} strike`)
+            }
+          })
+        }
+        prevIdsRef.current = newIds
+        setSignals(newSignals)
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [ticker, direction, page])
+  }, [ticker, direction, page, addToast])
 
   return (
     <div>
@@ -62,6 +82,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
           </div>
           {/* Ticker input */}
           <input
+            ref={tickerSearchRef}
             type="text"
             placeholder="Ticker..."
             value={ticker}
@@ -80,7 +101,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="skeleton h-52" />
+            <SkeletonSignalCard key={i} />
           ))}
         </div>
       ) : signals.length === 0 ? (
@@ -91,9 +112,15 @@ export default function SignalList({ onTickerClick }: Props = {}) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {signals.map(s => (
-              <SignalCard key={s.id} signal={s} onTickerClick={onTickerClick} />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 stagger-container">
+            {visibleItems.map((s, i) => (
+              <div
+                key={s.id}
+                className="stagger-item"
+                style={{ animationDelay: `${getDelay(i)}ms` }}
+              >
+                <SignalCard signal={s} onTickerClick={onTickerClick} />
+              </div>
             ))}
           </div>
 

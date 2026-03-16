@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchHealth } from './api'
 import type { HealthStatus } from './types'
 import Layout from './components/Layout'
+import { ToastProvider } from './components/Toast'
+import ShortcutsModal from './components/ShortcutsModal'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 // Options pages (existing)
 import SignalList from './components/SignalList'
 import EventTimeline from './components/EventTimeline'
@@ -29,6 +32,16 @@ export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null)
   const [connected, setConnected] = useState(false)
   const [focusTicker, setFocusTicker] = useState<string | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const tickerSearchRef = useRef<HTMLInputElement>(null)
+
+  useKeyboardShortcuts({
+    section,
+    setSection,
+    setPage: (p) => setPage(p),
+    focusTickerSearch: () => tickerSearchRef.current?.focus(),
+    toggleShortcutsModal: () => setShortcutsOpen(prev => !prev),
+  })
 
   // When section changes, switch to the first page of that section
   const handleSectionChange = useCallback((s: Section) => {
@@ -54,6 +67,7 @@ export default function App() {
   }, [])
 
   return (
+    <ToastProvider>
     <Layout
       section={section}
       setSection={handleSectionChange}
@@ -64,8 +78,8 @@ export default function App() {
     >
       <div key={page} className="animate-fade-in">
         {/* Options pages */}
-        {page === 'signals' && <SignalList onTickerClick={navigateToTicker} />}
-        {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} />}
+        {page === 'signals' && <SignalList onTickerClick={navigateToTicker} tickerSearchRef={tickerSearchRef} />}
+        {page === 'events' && <EventTimeline onTickerClick={navigateToTicker} tickerSearchRef={tickerSearchRef} />}
         {page === 'accuracy' && <AccuracyPanel />}
         {page === 'tickers' && (
           <TickerView
@@ -85,5 +99,7 @@ export default function App() {
         {page === 'charts' && <ChartView />}
       </div>
     </Layout>
+    {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+    </ToastProvider>
   )
 }

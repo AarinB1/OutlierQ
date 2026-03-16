@@ -19,18 +19,28 @@
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .overflow-y-auto {
+    scrollbar-gutter: stable;
   }
 }
 
 @layer components {
   .card {
     @apply bg-surface-secondary border border-border rounded-card p-6;
-    transition: border-color 150ms ease, transform 150ms ease;
+    transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
   }
   .card:hover {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.15);
     transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  .card.border-l-accent-green:hover {
+    box-shadow: 0 4px 20px rgba(0, 214, 143, 0.08);
+  }
+  .card.border-l-accent-red:hover {
+    box-shadow: 0 4px 20px rgba(255, 61, 90, 0.08);
   }
 
   .confidence-bar {
@@ -45,10 +55,20 @@
     box-shadow: 0 0 20px rgba(68, 138, 255, 0.3);
     transform: translateY(-1px);
   }
+  .btn-primary:active {
+    transform: scale(0.98);
+  }
   .btn-primary:disabled {
     @apply opacity-40 cursor-not-allowed;
     box-shadow: none;
     transform: none;
+  }
+
+  .pill {
+    transition: all 150ms ease;
+  }
+  .pill:hover {
+    transform: translateY(-1px);
   }
 
   .skeleton {
@@ -74,4 +94,46 @@
   .count-up {
     animation: fadeIn 600ms ease;
   }
+
+  /* Staggered entrance animations */
+  .stagger-container {
+    display: contents;
+  }
+  .stagger-item {
+    animation: staggerFadeIn 300ms ease-out forwards;
+    opacity: 0;
+  }
+}
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes xPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes dotPulse {
+  0% { transform: scale(0.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes expandHeight {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 200px; opacity: 1; }
 }

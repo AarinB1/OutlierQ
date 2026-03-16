@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { fetchDiscoveries, fetchDiscoveryStats, fetchActiveTickers, triggerDiscover, triggerScan } from '../api'
 import type { DiscoveryRecord, DiscoveryStats, ActiveTickers } from '../types'
+import { useStaggeredList } from '../hooks/useStaggeredList'
 
 function methodBadges(method: string) {
   const m = method.toLowerCase()
@@ -21,6 +22,13 @@ function timeAgo(iso: string | null): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
   if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
   return `${Math.floor(sec / 86400)}d ago`
+}
+
+function isDiscoveredToday(iso: string | null): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  const today = new Date()
+  return d.toDateString() === today.toDateString()
 }
 
 export default function DiscoveryPanel() {
@@ -58,6 +66,8 @@ export default function DiscoveryPanel() {
       .finally(() => setDiscovering(false))
   }
 
+  const { visibleItems, getDelay } = useStaggeredList(discoveries, 50)
+
   const handleScanTicker = (ticker: string) => {
     setScanningTicker(ticker)
     setError(null)
@@ -76,9 +86,16 @@ export default function DiscoveryPanel() {
         <button
           onClick={handleDiscover}
           disabled={discovering}
-          className={`btn-primary ${discovering ? 'opacity-70 cursor-wait' : ''}`}
+          className={`btn-primary flex items-center gap-2 ${discovering ? 'opacity-70 cursor-wait' : ''}`}
         >
-          {discovering ? 'Discovering...' : 'Discover Now'}
+          {discovering ? (
+            <>
+              <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Discovering...
+            </>
+          ) : (
+            'Discover Now'
+          )}
         </button>
       </div>
 
@@ -159,9 +176,18 @@ export default function DiscoveryPanel() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {discoveries.map(d => (
-            <div key={d.id} className="card border-l-[3px] border-l-accent-blue">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 stagger-container">
+          {visibleItems.map((d, i) => (
+            <div
+              key={d.id}
+              className="card border-l-[3px] border-l-accent-blue stagger-item relative"
+              style={{ animationDelay: `${getDelay(i)}ms` }}
+            >
+              {isDiscoveredToday(d.discovered_at) && (
+                <span className="absolute top-3 right-3 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-accent-green-muted text-accent-green animate-pulse">
+                  NEW
+                </span>
+              )}
               <div className="flex items-start justify-between mb-3">
                 <span className="font-mono font-bold text-2xl text-txt-primary tracking-tight">
                   {d.ticker}
