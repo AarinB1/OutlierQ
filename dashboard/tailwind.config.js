@@ -22,10 +22,10 @@ export default {
           tertiary: '#55556a',
         },
         accent: {
-          green: '#00e676',
-          'green-muted': 'rgba(0, 230, 118, 0.12)',
-          red: '#ff1744',
-          'red-muted': 'rgba(255, 23, 68, 0.12)',
+          green: '#00d68f',
+          'green-muted': 'rgba(0, 214, 143, 0.12)',
+          red: '#ff3d5a',
+          'red-muted': 'rgba(255, 61, 90, 0.12)',
           amber: '#ffab00',
           'amber-muted': 'rgba(255, 171, 0, 0.12)',
           blue: '#448aff',
@@ -53,8 +53,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseBorder: {
-          '0%, 100%': { borderLeftColor: 'rgba(0, 230, 118, 0.3)' },
-          '50%': { borderLeftColor: 'rgba(0, 230, 118, 0.8)' },
+          '0%, 100%': { borderLeftColor: 'rgba(0, 214, 143, 0.3)' },
+          '50%': { borderLeftColor: 'rgba(0, 214, 143, 0.8)' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },

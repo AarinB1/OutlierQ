@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators, fetchEdgar } from '../api'
+import { fetchTickers, fetchChartData, fetchCompanyInfo, fetchKeyStats, fetchOptionsFlow, fetchIndicators, fetchEdgar, fetchSparkline } from '../api'
 import type {
   TickerSummary,
   ChartData,
@@ -13,6 +13,7 @@ import StockHeader from './StockHeader'
 import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
 import SignalHistory from './SignalHistory'
+import Sparkline from './Sparkline'
 
 interface TickerViewProps {
   initialTicker?: string | null
@@ -21,6 +22,7 @@ interface TickerViewProps {
 
 export default function TickerView({ initialTicker, onNavigated }: TickerViewProps = {}) {
   const [tickers, setTickers] = useState<TickerSummary[]>([])
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({})
   const [selected, setSelected] = useState<string | null>(initialTicker ?? null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +50,28 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(
+      tickers.map(async (ticker) => {
+        try {
+          const data = await fetchSparkline(ticker.ticker)
+          return [ticker.ticker, data] as const
+        } catch {
+          return [ticker.ticker, []] as const
+        }
+      })
+    ).then((entries) => {
+      if (!cancelled) {
+        setSparklines(Object.fromEntries(entries))
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [tickers])
 
   useEffect(() => {
     if (!selected) {
@@ -389,34 +413,78 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {tickers.map(t => (
-            <button
+            <TickerCard
               key={t.ticker}
-              onClick={() => setSelected(t.ticker)}
-              className="text-left card transition-all duration-150 hover:border-border-hover"
-            >
-              <div className="font-mono font-bold text-xl text-txt-primary mb-3">{t.ticker}</div>
-              <div className="space-y-1.5 text-xs font-sans">
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Signals</span>
-                  <span className="font-mono text-txt-primary">{t.total_signals}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Win rate</span>
-                  <span className={`font-mono ${t.win_rate >= 0.5 ? 'text-accent-green' : t.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
-                    {(t.win_rate * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-txt-tertiary">Last signal</span>
-                  <span className="font-mono text-txt-tertiary text-[11px]">
-                    {t.last_signal_date ? new Date(t.last_signal_date).toLocaleDateString() : '\u2014'}
-                  </span>
-                </div>
-              </div>
-            </button>
+              ticker={t}
+              sparkline={sparklines[t.ticker] ?? []}
+              onSelect={() => setSelected(t.ticker)}
+            />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+function TickerCard({
+  ticker,
+  sparkline,
+  onSelect,
+}: {
+  ticker: TickerSummary
+  sparkline: number[]
+  onSelect: () => void
+}) {
+  const latestPrice = sparkline.length ? sparkline[sparkline.length - 1] : null
+  const previousPrice = sparkline.length > 1 ? sparkline[sparkline.length - 2] : null
+  const dailyChange = latestPrice != null && previousPrice != null
+    ? ((latestPrice - previousPrice) / previousPrice) * 100
+    : null
+
+  return (
+    <button
+      onClick={onSelect}
+      className="card text-left transition-all duration-150 hover:border-border-hover"
+    >
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-xl font-bold text-txt-primary">{ticker.ticker}</div>
+          <div className="mt-1 flex items-center gap-2 text-xs">
+            <span className="font-mono text-txt-primary">
+              {latestPrice != null ? `$${latestPrice.toFixed(2)}` : '—'}
+            </span>
+            <span className={`font-mono ${dailyChange != null && dailyChange >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {dailyChange != null ? `${dailyChange >= 0 ? '+' : ''}${dailyChange.toFixed(2)}%` : '—'}
+            </span>
+          </div>
+        </div>
+        <div className={`rounded-full px-2 py-1 text-[10px] font-mono ${
+          ticker.win_rate >= 0.5 ? 'bg-accent-green-muted text-accent-green' : 'bg-surface-tertiary text-txt-secondary'
+        }`}>
+          {(ticker.win_rate * 100).toFixed(0)}%
+        </div>
+      </div>
+
+      <div className="mb-3 h-10">
+        {sparkline.length > 1 ? (
+          <Sparkline data={sparkline} height={40} color={dailyChange != null && dailyChange < 0 ? '#ff3d5a' : '#00d68f'} />
+        ) : (
+          <div className="skeleton h-full w-full rounded" />
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg bg-surface-tertiary px-3 py-2">
+          <div className="text-txt-tertiary">Signals</div>
+          <div className="font-mono text-txt-primary">{ticker.total_signals}</div>
+        </div>
+        <div className="rounded-lg bg-surface-tertiary px-3 py-2">
+          <div className="text-txt-tertiary">Last signal</div>
+          <div className="font-mono text-[11px] text-txt-secondary">
+            {ticker.last_signal_date ? new Date(ticker.last_signal_date).toLocaleDateString() : '\u2014'}
+          </div>
+        </div>
+      </div>
+    </button>
   )
 }

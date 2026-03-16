@@ -162,12 +162,12 @@ export default function Layout({ section, setSection, page, setPage, connected, 
         <div className="px-4 pb-4 flex items-center gap-2 text-txt-tertiary text-xs font-mono max-lg:px-2 max-lg:justify-center max-md:hidden">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500 ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
           <span className="max-lg:hidden">{connected ? 'Live' : 'Offline'}</span>
-          <span className="max-lg:hidden ml-auto">v1.0</span>
+          <span className="max-lg:hidden ml-auto">v1.5</span>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary">
+      <main className="main-scroll-area flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary">
         <div className="max-w-content mx-auto p-8 max-md:p-4">
           {!connected ? (
             <div className="flex items-center justify-center h-[calc(100vh-8rem)]">

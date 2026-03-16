@@ -34,13 +34,13 @@ export default function ScanButton() {
       <button
         onClick={handleScan}
         disabled={scanning || !input.trim()}
-        className={`w-full py-2 rounded-lg font-mono font-bold text-xs tracking-wider transition-all duration-150 ${
+        className={`scan-now-button w-full py-2 rounded-lg font-mono font-bold text-xs tracking-wider transition-all duration-150 ${
           scanning
             ? 'bg-accent-blue/50 text-white animate-pulse'
             : 'bg-accent-blue text-white hover:shadow-[0_0_16px_rgba(68,138,255,0.3)]'
         } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
       >
-        {scanning ? 'SCANNING...' : '\u26A1 SCAN NOW'}
+        {scanning ? 'SCANNING...' : <span><span className="scan-now-icon inline-block">{'\u26A1'}</span> SCAN NOW</span>}
       </button>
 
       {result && (

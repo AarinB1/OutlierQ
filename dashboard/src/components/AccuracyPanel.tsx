@@ -1,6 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import {
+  Area,
+  AreaChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { fetchStats, fetchConfusion, triggerEvaluate, fetchMlReadiness, fetchMlStatus, triggerMlTrain } from '../api'
 import type { AccuracyStats, ConfusionMatrix, MlReadiness, MlStatus } from '../types'
+import { SkeletonStatCard } from './SkeletonCard'
+import { useStaggeredList } from '../hooks/useStaggeredList'
 
 function useCountUp(target: number, duration = 600): number {
   const [value, setValue] = useState(0)
@@ -70,11 +80,37 @@ export default function AccuracyPanel() {
   const avgPnl = useCountUp(stats?.avg_pnl ?? 0)
   const totalEval = useCountUp(stats?.total_evaluated ?? 0)
   const totalPending = useCountUp(stats?.total_pending ?? 0)
+  const statCards = useMemo(
+    () => [
+      {
+        label: 'Win Rate',
+        value: `${(winRate * 100).toFixed(1)}%`,
+        color: (stats?.win_rate ?? 0) >= 0.5 ? 'text-accent-green' : 'text-accent-red',
+      },
+      {
+        label: 'Avg P&L',
+        value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`,
+        color: (stats?.avg_pnl ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red',
+      },
+      {
+        label: 'Evaluated',
+        value: Math.round(totalEval).toString(),
+        color: 'text-txt-primary',
+      },
+      {
+        label: 'Pending',
+        value: Math.round(totalPending).toString(),
+        color: 'text-accent-amber',
+      },
+    ],
+    [avgPnl, stats?.avg_pnl, stats?.win_rate, totalEval, totalPending, winRate]
+  )
+  const { visibleItems: visibleStatCards, getDelay } = useStaggeredList(statCards, 50)
 
   if (loading) return (
     <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-6">
-        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-28" />)}
+      <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => <SkeletonStatCard key={i} />)}
       </div>
       <div className="skeleton h-48" />
       <div className="skeleton h-64" />
@@ -95,6 +131,19 @@ export default function AccuracyPanel() {
   const isTrained = mlStatus?.is_trained ?? false
   const topFeatures = mlStatus?.feature_importances ?? []
   const recentMlComparison = mlStatus?.recent_comparison
+  const pnlSeries = stats.recent_signals
+    .filter((signal) => signal.pnl != null)
+    .slice()
+    .reverse()
+    .reduce<{ date: string; cumulative: number }[]>((acc, signal) => {
+      const previous = acc[acc.length - 1]?.cumulative ?? 0
+      acc.push({
+        date: signal.created_at ? new Date(signal.created_at).toLocaleDateString() : `#${acc.length + 1}`,
+        cumulative: previous + (signal.pnl ?? 0),
+      })
+      return acc
+    }, [])
+  const cumulativeIsPositive = (pnlSeries[pnlSeries.length - 1]?.cumulative ?? 0) >= 0
 
   return (
     <div className="space-y-6">
@@ -204,39 +253,90 @@ export default function AccuracyPanel() {
         )}
       </div>
 
-      {/* Top stats */}
-      {stats.total_evaluated === 0 && stats.total_pending === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="text-txt-tertiary text-4xl mb-4">{'\u25C7'}</div>
-          <p className="text-txt-secondary text-sm mb-1">No evaluated signals yet.</p>
-          <p className="text-txt-tertiary text-xs">Signals will be evaluated after their expiry dates pass.</p>
+      <div className="card">
+        <h3 className="label mb-4">Cumulative P&L</h3>
+        {pnlSeries.length > 0 ? (
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={pnlSeries}>
+                <defs>
+                  <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset="0%"
+                      stopColor={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
+                      stopOpacity={0.18}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
+                      stopOpacity={0}
+                    />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tick={{ fill: '#8888a0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#8888a0', fontSize: 10 }} axisLine={false} tickLine={false} width={48} />
+                <Tooltip
+                  contentStyle={{
+                    background: '#12121a',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '12px',
+                    color: '#e8e8ed',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulative"
+                  stroke={cumulativeIsPositive ? '#00d68f' : '#ff3d5a'}
+                  strokeWidth={1.5}
+                  fill="url(#pnlGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border bg-surface-tertiary px-4 py-8 text-center text-sm text-txt-tertiary">
+            Cumulative P&L chart will appear once signals have outcomes.
+          </div>
+        )}
+      </div>
+
+      {stats.total_evaluated === 0 ? (
+        <div className="card">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="mb-2 text-3xl text-accent-blue">▁▃▅▇</div>
+              <h3 className="text-lg font-semibold text-txt-primary">Building Your Track Record</h3>
+              <p className="mt-1 text-sm text-txt-secondary">
+                Signals are being collected. Accuracy metrics will appear once signals expire and are evaluated.
+              </p>
+            </div>
+            <button onClick={handleEvaluate} disabled={evaluating} className="btn-primary">
+              {evaluating ? 'EVALUATING...' : 'EVALUATE PENDING'}
+            </button>
+          </div>
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-xs text-txt-secondary">
+              <span>{stats.total_pending} signals pending evaluation</span>
+              <span>Need outcomes to calculate accuracy</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-surface-tertiary">
+              <div
+                className="confidence-bar h-full rounded-full bg-accent-amber"
+                style={{ width: `${Math.min(100, stats.total_pending * 5)}%` }}
+              />
+            </div>
+          </div>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard
-              label="Win Rate"
-              value={`${(winRate * 100).toFixed(1)}%`}
-              color={(stats.win_rate) >= 0.5 ? 'text-accent-green' : 'text-accent-red'}
-            />
-            <StatCard
-              label="Avg P&L"
-              value={`${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`}
-              color={(stats.avg_pnl) >= 0 ? 'text-accent-green' : 'text-accent-red'}
-            />
-            <StatCard
-              label="Evaluated"
-              value={Math.round(totalEval).toString()}
-              color="text-txt-primary"
-            />
-            <StatCard
-              label="Pending"
-              value={Math.round(totalPending).toString()}
-              color="text-accent-amber"
-            />
+          <div className="stagger-container grid grid-cols-2 gap-6 lg:grid-cols-4">
+            {visibleStatCards.map((card, index) => (
+              <div key={card.label} className="stagger-item" style={getDelay(index)}>
+                <StatCard label={card.label} value={card.value} color={card.color} />
+              </div>
+            ))}
           </div>
 
-          {/* W / L / E */}
           <div className="grid grid-cols-3 gap-6">
             <div className="card text-center">
               <div className="stat-number text-accent-green mb-1">{stats.wins}</div>
@@ -252,7 +352,34 @@ export default function AccuracyPanel() {
             </div>
           </div>
 
-          {/* Confusion Matrix */}
+          <div className="card">
+            <h3 className="label mb-4">Recent Signal Outcomes</h3>
+            <div className="flex flex-wrap gap-2">
+              {stats.recent_signals.slice(0, 20).map((signal) => {
+                const tooltip = `${signal.ticker} ${signal.direction.toUpperCase()} — ${
+                  signal.pnl != null ? `${signal.pnl >= 0 ? '+' : ''}${signal.pnl.toFixed(1)}%` : 'Pending'
+                } ${signal.outcome ?? ''}`.trim()
+                const className =
+                  signal.outcome === 'profit'
+                    ? 'bg-accent-green'
+                    : signal.outcome === 'loss'
+                      ? 'bg-accent-red'
+                      : signal.outcome === 'expired'
+                        ? 'bg-txt-tertiary'
+                        : 'h-6 border border-accent-amber text-accent-amber'
+
+                return (
+                  <div
+                    key={signal.id}
+                    title={tooltip}
+                    className={`w-3 rounded-sm ${className}`}
+                    style={{ height: signal.outcome ? '2rem' : '1.5rem', marginTop: signal.outcome ? 0 : 4 }}
+                  />
+                )
+              })}
+            </div>
+          </div>
+
           <div className="card">
             <h3 className="label mb-4">Confusion Matrix</h3>
             <div className="grid grid-cols-[auto_1fr_1fr] gap-2 max-w-md">
@@ -261,21 +388,33 @@ export default function AccuracyPanel() {
               <div className="text-center text-txt-tertiary text-[11px] font-sans font-medium uppercase tracking-wider pb-2">Actually Down</div>
 
               <div className="text-txt-secondary text-xs font-sans pr-3 flex items-center">Predicted Call</div>
-              <div className="bg-accent-green-muted rounded-lg p-4 text-center">
+              <div
+                title="Predicted Call, market went up — correct prediction"
+                className="rounded-lg bg-accent-green-muted p-4 text-center transition-all hover:border hover:border-accent-green/30 hover:opacity-100"
+              >
                 <div className="font-mono font-bold text-2xl text-accent-green">{confusion.true_bullish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Call {'\u2713'}</div>
               </div>
-              <div className="bg-accent-red-muted rounded-lg p-4 text-center">
+              <div
+                title="Predicted Call, market went down — incorrect prediction"
+                className="rounded-lg bg-accent-red-muted p-4 text-center transition-all hover:border hover:border-accent-red/30 hover:opacity-100"
+              >
                 <div className="font-mono font-bold text-2xl text-accent-red">{confusion.false_bullish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Call {'\u2717'}</div>
               </div>
 
               <div className="text-txt-secondary text-xs font-sans pr-3 flex items-center">Predicted Put</div>
-              <div className="bg-accent-red-muted rounded-lg p-4 text-center">
+              <div
+                title="Predicted Put, market went up — incorrect prediction"
+                className="rounded-lg bg-accent-red-muted p-4 text-center transition-all hover:border hover:border-accent-red/30 hover:opacity-100"
+              >
                 <div className="font-mono font-bold text-2xl text-accent-red">{confusion.false_bearish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Put {'\u2717'}</div>
               </div>
-              <div className="bg-accent-green-muted rounded-lg p-4 text-center">
+              <div
+                title="Predicted Put, market went down — correct prediction"
+                className="rounded-lg bg-accent-green-muted p-4 text-center transition-all hover:border hover:border-accent-green/30 hover:opacity-100"
+              >
                 <div className="font-mono font-bold text-2xl text-accent-green">{confusion.true_bearish}</div>
                 <div className="text-txt-tertiary text-[10px] mt-1">Predicted Put {'\u2713'}</div>
               </div>
