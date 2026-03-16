@@ -67,6 +67,7 @@ def init_db() -> None:
     from src.db.trading_tables import (  # noqa: F401
         TradeSignal, TradeExecution, BacktestRun,
         ModelCheckpoint, PortfolioState, MarketRegime,
+        StrategyConfig, Watchlist, TradeJournal, UserSettings,
     )
 
     Base.metadata.create_all(bind=engine)

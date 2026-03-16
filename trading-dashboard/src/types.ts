@@ -235,3 +235,121 @@ export interface ClosedTrade {
   strategy_name: string
 }
 
+// ── Sprint 4: Strategy & Chart Types ────────────────────────────
+
+export interface StrategyDefaults {
+  momentum: Record<string, number>
+  mean_reversion: Record<string, number>
+  breakout: Record<string, number>
+}
+
+export interface StrategyConfigSaved {
+  id: string
+  name: string
+  strategy_name: string
+  regime: string | null
+  params: Record<string, number> | null
+  toggles: Record<string, boolean> | null
+  created_at: string | null
+}
+
+export interface ChartOHLCV {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface ChartMarker {
+  time: number
+  position: 'aboveBar' | 'belowBar'
+  color: string
+  shape: 'arrowUp' | 'arrowDown'
+  text: string
+  id: string
+  direction: string
+  confidence: number
+  entry_price: number | null
+  target_price: number | null
+  stop_loss: number | null
+}
+
+export interface TradingChartData {
+  ticker: string
+  ohlcv: ChartOHLCV[]
+  markers: ChartMarker[]
+}
+
+// ── Sprint 5: Watchlist & Journal Types ─────────────────────────
+
+export interface WatchlistItem {
+  id: string
+  name: string
+  tickers: string[]
+  created_at: string | null
+}
+
+export interface JournalEntry {
+  id: string
+  execution_id: string | null
+  ticker: string
+  direction: string | null
+  entry_price: number | null
+  exit_price: number | null
+  pnl_dollars: number | null
+  setup_notes: string | null
+  review_notes: string | null
+  tags: string[]
+  rating: number | null
+  created_at: string | null
+}
+
+export interface JournalStats {
+  total_entries: number
+  avg_rating: number
+  total_pnl: number
+  tag_counts: Record<string, number>
+}
+
+// ── Sprint 6: Settings & Performance Types ──────────────────────
+
+export interface UserSettingsData {
+  notifications_enabled: boolean
+  notify_on_signal: boolean
+  notify_on_backtest_complete: boolean
+  notify_on_drawdown_breach: boolean
+  min_signal_confidence: number
+  drawdown_alert_threshold: number
+  email: string | null
+  watched_tickers_only: boolean
+}
+
+export interface PerformanceAttribution {
+  by_strategy: Record<string, {
+    total: number
+    wins: number
+    losses: number
+    total_pnl: number
+    win_rate: number
+    avg_pnl: number
+  }>
+  by_direction: Record<string, {
+    total: number
+    wins: number
+    total_pnl: number
+    win_rate: number
+  }>
+  by_exit_reason: Record<string, {
+    total: number
+    total_pnl: number
+  }>
+  rolling_accuracy: {
+    trade_index: number
+    accuracy: number
+    timestamp: string | null
+  }[]
+  total_executions: number
+}
+

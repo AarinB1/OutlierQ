@@ -144,3 +144,99 @@ export async function triggerModelTrain(modelType: string, ticker: string = 'SPY
   })
 }
 
+// ── Sprint 4: Strategy Configs & Chart Data ─────────────────────
+
+export async function fetchStrategyDefaults(): Promise<import('./types').StrategyDefaults> {
+  return fetchJSON('/strategies/defaults')
+}
+
+export async function fetchStrategyConfigs(): Promise<import('./types').StrategyConfigSaved[]> {
+  return fetchJSON('/strategies/configs')
+}
+
+export async function saveStrategyConfig(config: Record<string, unknown>): Promise<{ id: string; name: string; status: string }> {
+  return fetchJSON('/strategies/configs', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  })
+}
+
+export async function deleteStrategyConfig(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/strategies/configs/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<import('./types').TradingChartData> {
+  return fetchJSON(`/chart-data/${encodeURIComponent(ticker)}?period=${period}`)
+}
+
+// ── Sprint 5: Watchlists & Journal ──────────────────────────────
+
+export async function fetchWatchlists(): Promise<import('./types').WatchlistItem[]> {
+  return fetchJSON('/watchlists')
+}
+
+export async function createWatchlist(body: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
+  return fetchJSON('/watchlists', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateWatchlist(id: string, body: Record<string, unknown>): Promise<import('./types').WatchlistItem> {
+  return fetchJSON(`/watchlists/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteWatchlist(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/watchlists/${id}`, { method: 'DELETE' })
+}
+
+export async function scanWatchlist(id: string): Promise<{ generated: number; signal_ids: string[] }> {
+  return fetchJSON(`/watchlists/${id}/scan`, { method: 'POST' })
+}
+
+export async function fetchJournalEntries(limit = 50, offset = 0): Promise<import('./types').JournalEntry[]> {
+  return fetchJSON(`/journal?limit=${limit}&offset=${offset}`)
+}
+
+export async function createJournalEntry(body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  return fetchJSON('/journal', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateJournalEntry(id: string, body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  return fetchJSON(`/journal/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteJournalEntry(id: string): Promise<{ deleted: string }> {
+  return fetchJSON(`/journal/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchJournalStats(): Promise<import('./types').JournalStats> {
+  return fetchJSON('/journal/stats')
+}
+
+// ── Sprint 6: Settings & Performance ────────────────────────────
+
+export async function fetchSettings(): Promise<import('./types').UserSettingsData> {
+  return fetchJSON('/settings')
+}
+
+export async function updateSettings(body: Record<string, unknown>): Promise<{ status: string }> {
+  return fetchJSON('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function fetchPerformanceAttribution(): Promise<import('./types').PerformanceAttribution> {
+  return fetchJSON('/performance')
+}
+

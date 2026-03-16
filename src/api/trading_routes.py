@@ -21,8 +21,12 @@ from src.db.trading_tables import (
     MarketRegime,
     ModelCheckpoint,
     PortfolioState,
+    StrategyConfig,
     TradeExecution,
+    TradeJournal,
     TradeSignal,
+    UserSettings,
+    Watchlist,
 )
 
 logging.basicConfig(format=LOG_FORMAT)
@@ -654,6 +658,402 @@ def generate_signals_endpoint(body: dict, db: Session = Depends(get_db)) -> dict
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
+
+
+# ── Strategy Defaults & Configs ───────────────────────────────────
+
+
+@router.get("/strategies/defaults")
+def get_strategy_defaults() -> dict:
+    """Return default parameters for each strategy."""
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+
+    return {
+        "momentum": MomentumStrategy().get_parameters(),
+        "mean_reversion": MeanReversionStrategy().get_parameters(),
+        "breakout": BreakoutStrategy().get_parameters(),
+    }
+
+
+@router.get("/strategies/configs")
+def list_strategy_configs(db: Session = Depends(get_db)) -> list[dict]:
+    configs = db.query(StrategyConfig).order_by(StrategyConfig.updated_at.desc()).all()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "strategy_name": c.strategy_name,
+            "regime": c.regime,
+            "params": c.params_json,
+            "toggles": c.toggles_json,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in configs
+    ]
+
+
+@router.post("/strategies/configs")
+def save_strategy_config(body: dict, db: Session = Depends(get_db)) -> dict:
+    name = body.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Config name is required")
+    existing = db.query(StrategyConfig).filter(StrategyConfig.name == name).first()
+    if existing:
+        existing.strategy_name = body.get("strategy_name", existing.strategy_name)
+        existing.regime = body.get("regime", existing.regime)
+        existing.params_json = body.get("params", existing.params_json)
+        existing.toggles_json = body.get("toggles", existing.toggles_json)
+        db.commit()
+        return {"id": existing.id, "name": existing.name, "status": "updated"}
+    config = StrategyConfig(
+        name=name,
+        strategy_name=body.get("strategy_name", "ensemble"),
+        regime=body.get("regime"),
+        params_json=body.get("params"),
+        toggles_json=body.get("toggles"),
+    )
+    db.add(config)
+    db.commit()
+    return {"id": config.id, "name": config.name, "status": "created"}
+
+
+@router.delete("/strategies/configs/{config_id}")
+def delete_strategy_config(config_id: str, db: Session = Depends(get_db)) -> dict:
+    config = db.query(StrategyConfig).filter(StrategyConfig.id == config_id).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    db.delete(config)
+    db.commit()
+    return {"deleted": config_id}
+
+
+# ── Chart Data ───────────────────────────────────────────────────
+
+
+@router.get("/chart-data/{ticker}")
+def get_chart_data(
+    ticker: str,
+    period: str = Query("6mo", pattern="^(1mo|3mo|6mo|1y|2y)$"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Return OHLCV data and signal markers for charting."""
+    import yfinance as yf
+
+    hist = yf.Ticker(ticker.upper()).history(period=period)
+    if hist.empty:
+        raise HTTPException(status_code=404, detail=f"No data for {ticker}")
+
+    ohlcv = [
+        {
+            "time": int(row.Index.timestamp()),
+            "open": round(row.Open, 2),
+            "high": round(row.High, 2),
+            "low": round(row.Low, 2),
+            "close": round(row.Close, 2),
+            "volume": int(row.Volume),
+        }
+        for row in hist.itertuples()
+    ]
+
+    signals = (
+        db.query(TradeSignal)
+        .filter(TradeSignal.ticker == ticker.upper())
+        .order_by(TradeSignal.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    markers = [
+        {
+            "time": int(s.created_at.timestamp()) if s.created_at else None,
+            "position": "aboveBar" if s.direction in ("SHORT", "SELL") else "belowBar",
+            "color": "#00d68f" if s.direction == "BUY" else "#ff3d5a",
+            "shape": "arrowUp" if s.direction == "BUY" else "arrowDown",
+            "text": f"{s.strategy_name} {s.direction} ({int(s.confidence * 100)}%)",
+            "id": s.id,
+            "direction": s.direction,
+            "confidence": s.confidence,
+            "entry_price": s.entry_price,
+            "target_price": s.target_price,
+            "stop_loss": s.stop_loss,
+        }
+        for s in signals
+        if s.created_at
+    ]
+
+    return {"ticker": ticker.upper(), "ohlcv": ohlcv, "markers": markers}
+
+
+# ── Watchlists ───────────────────────────────────────────────────
+
+
+@router.get("/watchlists")
+def list_watchlists(db: Session = Depends(get_db)) -> list[dict]:
+    wls = db.query(Watchlist).order_by(Watchlist.updated_at.desc()).all()
+    return [
+        {"id": w.id, "name": w.name, "tickers": w.tickers_json, "created_at": w.created_at.isoformat() if w.created_at else None}
+        for w in wls
+    ]
+
+
+@router.post("/watchlists")
+def create_watchlist(body: dict, db: Session = Depends(get_db)) -> dict:
+    name = body.get("name", "Untitled")
+    tickers = body.get("tickers", [])
+    wl = Watchlist(name=name, tickers_json=tickers)
+    db.add(wl)
+    db.commit()
+    return {"id": wl.id, "name": wl.name}
+
+
+@router.put("/watchlists/{watchlist_id}")
+def update_watchlist(watchlist_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id).first()
+    if not wl:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    if "name" in body:
+        wl.name = body["name"]
+    if "tickers" in body:
+        wl.tickers_json = body["tickers"]
+    db.commit()
+    return {"id": wl.id, "name": wl.name, "tickers": wl.tickers_json}
+
+
+@router.delete("/watchlists/{watchlist_id}")
+def delete_watchlist(watchlist_id: str, db: Session = Depends(get_db)) -> dict:
+    wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id).first()
+    if not wl:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    db.delete(wl)
+    db.commit()
+    return {"deleted": watchlist_id}
+
+
+@router.post("/watchlists/{watchlist_id}/scan")
+def scan_watchlist(watchlist_id: str, db: Session = Depends(get_db)) -> dict:
+    """Generate signals for all tickers in a watchlist."""
+    wl = db.query(Watchlist).filter(Watchlist.id == watchlist_id).first()
+    if not wl:
+        raise HTTPException(status_code=404, detail="Watchlist not found")
+    tickers = wl.tickers_json or []
+    if not tickers:
+        return {"generated": 0, "signals": []}
+    from src.trading.signals.trade_signal_engine import TradeSignalEngine
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+
+    engine = TradeSignalEngine()
+    engine.register_strategy(MomentumStrategy())
+    engine.register_strategy(MeanReversionStrategy())
+    engine.register_strategy(BreakoutStrategy())
+    signals = engine.generate_signals(tickers)
+    signal_ids = engine.store_signals(signals)
+    return {"generated": len(signals), "signal_ids": signal_ids}
+
+
+# ── Trade Journal ────────────────────────────────────────────────
+
+
+@router.get("/journal")
+def list_journal_entries(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    entries = db.query(TradeJournal).order_by(TradeJournal.created_at.desc()).offset(offset).limit(limit).all()
+    return [
+        {
+            "id": e.id, "execution_id": e.execution_id, "ticker": e.ticker,
+            "direction": e.direction, "entry_price": e.entry_price, "exit_price": e.exit_price,
+            "pnl_dollars": e.pnl_dollars, "setup_notes": e.setup_notes, "review_notes": e.review_notes,
+            "tags": e.tags_json or [], "rating": e.rating,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]
+
+
+@router.post("/journal")
+def create_journal_entry(body: dict, db: Session = Depends(get_db)) -> dict:
+    entry = TradeJournal(
+        execution_id=body.get("execution_id"),
+        ticker=body.get("ticker", ""),
+        direction=body.get("direction"),
+        entry_price=body.get("entry_price"),
+        exit_price=body.get("exit_price"),
+        pnl_dollars=body.get("pnl_dollars"),
+        setup_notes=body.get("setup_notes"),
+        review_notes=body.get("review_notes"),
+        tags_json=body.get("tags", []),
+        rating=body.get("rating"),
+    )
+    db.add(entry)
+    db.commit()
+    return {"id": entry.id, "status": "created"}
+
+
+@router.patch("/journal/{entry_id}")
+def update_journal_entry(entry_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    entry = db.query(TradeJournal).filter(TradeJournal.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    for field in ("setup_notes", "review_notes", "rating"):
+        if field in body:
+            setattr(entry, field, body[field])
+    if "tags" in body:
+        entry.tags_json = body["tags"]
+    db.commit()
+    return {"id": entry.id, "status": "updated"}
+
+
+@router.delete("/journal/{entry_id}")
+def delete_journal_entry(entry_id: str, db: Session = Depends(get_db)) -> dict:
+    entry = db.query(TradeJournal).filter(TradeJournal.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    db.delete(entry)
+    db.commit()
+    return {"deleted": entry_id}
+
+
+@router.get("/journal/stats")
+def get_journal_stats(db: Session = Depends(get_db)) -> dict:
+    entries = db.query(TradeJournal).all()
+    total = len(entries)
+    if total == 0:
+        return {"total_entries": 0, "avg_rating": 0, "total_pnl": 0, "tag_counts": {}}
+    rated = [e for e in entries if e.rating]
+    avg_rating = sum(e.rating for e in rated) / max(1, len(rated))
+    total_pnl = sum(e.pnl_dollars or 0 for e in entries)
+    tag_counts: dict[str, int] = {}
+    for e in entries:
+        for tag in (e.tags_json or []):
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    return {"total_entries": total, "avg_rating": round(avg_rating, 1), "total_pnl": round(total_pnl, 2), "tag_counts": tag_counts}
+
+
+# ── User Settings ────────────────────────────────────────────────
+
+
+@router.get("/settings")
+def get_settings(db: Session = Depends(get_db)) -> dict:
+    rows = db.query(UserSettings).all()
+    settings = {row.key: row.value_json for row in rows}
+    defaults = {
+        "notifications_enabled": True,
+        "notify_on_signal": True,
+        "notify_on_backtest_complete": True,
+        "notify_on_drawdown_breach": True,
+        "min_signal_confidence": 0.5,
+        "drawdown_alert_threshold": 5.0,
+        "email": None,
+        "watched_tickers_only": False,
+    }
+    return {**defaults, **settings}
+
+
+@router.put("/settings")
+def update_settings(body: dict, db: Session = Depends(get_db)) -> dict:
+    for key, value in body.items():
+        existing = db.query(UserSettings).filter(UserSettings.key == key).first()
+        if existing:
+            existing.value_json = value
+        else:
+            db.add(UserSettings(key=key, value_json=value))
+    db.commit()
+    return {"status": "updated", "keys": list(body.keys())}
+
+
+# ── Demo Mode ────────────────────────────────────────────────────
+
+
+_demo_mode = False
+
+
+@router.get("/demo-status")
+def get_demo_status() -> dict:
+    return {"demo_mode": _demo_mode}
+
+
+@router.post("/demo-toggle")
+def toggle_demo_mode() -> dict:
+    global _demo_mode
+    _demo_mode = not _demo_mode
+    return {"demo_mode": _demo_mode}
+
+
+# ── Performance Attribution ──────────────────────────────────────
+
+
+@router.get("/performance")
+def get_performance_attribution(db: Session = Depends(get_db)) -> dict:
+    """Break down P&L and win rate by strategy, direction, and exit reason."""
+    executions = db.query(TradeExecution).all()
+    if not executions:
+        return {"by_strategy": {}, "by_direction": {}, "by_exit_reason": {}, "rolling_accuracy": [], "total_executions": 0}
+
+    by_strategy: dict[str, dict] = {}
+    for e in executions:
+        key = e.strategy_name or "unknown"
+        if key not in by_strategy:
+            by_strategy[key] = {"total": 0, "wins": 0, "losses": 0, "total_pnl": 0.0}
+        by_strategy[key]["total"] += 1
+        pnl = e.pnl_dollars or 0
+        by_strategy[key]["total_pnl"] += pnl
+        if pnl > 0:
+            by_strategy[key]["wins"] += 1
+        elif pnl < 0:
+            by_strategy[key]["losses"] += 1
+
+    for data in by_strategy.values():
+        data["win_rate"] = round(data["wins"] / data["total"] * 100, 1) if data["total"] > 0 else 0
+        data["avg_pnl"] = round(data["total_pnl"] / data["total"], 2) if data["total"] > 0 else 0
+
+    by_direction: dict[str, dict] = {}
+    for e in executions:
+        key = e.direction or "unknown"
+        if key not in by_direction:
+            by_direction[key] = {"total": 0, "wins": 0, "total_pnl": 0.0}
+        by_direction[key]["total"] += 1
+        pnl = e.pnl_dollars or 0
+        by_direction[key]["total_pnl"] += pnl
+        if pnl > 0:
+            by_direction[key]["wins"] += 1
+    for data in by_direction.values():
+        data["win_rate"] = round(data["wins"] / data["total"] * 100, 1) if data["total"] > 0 else 0
+
+    by_exit: dict[str, dict] = {}
+    for e in executions:
+        key = e.exit_reason or "unknown"
+        if key not in by_exit:
+            by_exit[key] = {"total": 0, "total_pnl": 0.0}
+        by_exit[key]["total"] += 1
+        by_exit[key]["total_pnl"] += e.pnl_dollars or 0
+
+    sorted_exec = sorted(executions, key=lambda e: e.exit_time or datetime.min.replace(tzinfo=timezone.utc))
+    rolling: list[dict] = []
+    window = 20
+    for i in range(window, len(sorted_exec) + 1):
+        batch = sorted_exec[i - window:i]
+        wins = sum(1 for e in batch if (e.pnl_dollars or 0) > 0)
+        rolling.append({
+            "trade_index": i,
+            "accuracy": round(wins / window * 100, 1),
+            "timestamp": batch[-1].exit_time.isoformat() if batch[-1].exit_time else None,
+        })
+
+    return {
+        "by_strategy": by_strategy,
+        "by_direction": by_direction,
+        "by_exit_reason": by_exit,
+        "rolling_accuracy": rolling,
+        "total_executions": len(executions),
+    }
+
+
+# ── Helpers ──────────────────────────────────────────────────────
 
 
 def _trade_signal_to_dict(sig: TradeSignal) -> dict:

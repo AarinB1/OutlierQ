@@ -408,3 +408,141 @@ export async function fetchExecutions(params?: {
   if (!res.ok) throw new Error('Failed to fetch executions');
   return res.json();
 }
+
+// ── Sprint 4: Strategy Configs & Chart Data ─────────────────────
+
+export async function fetchStrategyDefaults(): Promise<import('./types').StrategyDefaults> {
+  const res = await fetch(`${TRADING_BASE}/strategies/defaults`);
+  if (!res.ok) throw new Error('Failed to fetch strategy defaults');
+  return res.json();
+}
+
+export async function fetchStrategyConfigs(): Promise<import('./types').StrategyConfigSaved[]> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs`);
+  if (!res.ok) throw new Error('Failed to fetch strategy configs');
+  return res.json();
+}
+
+export async function saveStrategyConfig(config: Record<string, unknown>): Promise<{ id: string; name: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to save strategy config');
+  return res.json();
+}
+
+export async function deleteStrategyConfig(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/strategies/configs/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete strategy config');
+  return res.json();
+}
+
+export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<import('./types').TradingChartData> {
+  const res = await fetch(`${TRADING_BASE}/chart-data/${encodeURIComponent(ticker)}?period=${period}`);
+  if (!res.ok) throw new Error('Failed to fetch chart data');
+  return res.json();
+}
+
+// ── Sprint 5: Watchlists & Journal ──────────────────────────────
+
+export async function fetchWatchlists(): Promise<import('./types').WatchlistItem[]> {
+  const res = await fetch(`${TRADING_BASE}/watchlists`);
+  if (!res.ok) throw new Error('Failed to fetch watchlists');
+  return res.json();
+}
+
+export async function createWatchlist(body: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to create watchlist');
+  return res.json();
+}
+
+export async function updateWatchlist(id: string, body: Record<string, unknown>): Promise<import('./types').WatchlistItem> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update watchlist');
+  return res.json();
+}
+
+export async function deleteWatchlist(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete watchlist');
+  return res.json();
+}
+
+export async function scanWatchlist(id: string): Promise<{ generated: number; signal_ids: string[] }> {
+  const res = await fetch(`${TRADING_BASE}/watchlists/${id}/scan`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to scan watchlist');
+  return res.json();
+}
+
+export async function fetchJournalEntries(limit = 50, offset = 0): Promise<import('./types').JournalEntry[]> {
+  const res = await fetch(`${TRADING_BASE}/journal?limit=${limit}&offset=${offset}`);
+  if (!res.ok) throw new Error('Failed to fetch journal entries');
+  return res.json();
+}
+
+export async function createJournalEntry(body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to create journal entry');
+  return res.json();
+}
+
+export async function updateJournalEntry(id: string, body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update journal entry');
+  return res.json();
+}
+
+export async function deleteJournalEntry(id: string): Promise<{ deleted: string }> {
+  const res = await fetch(`${TRADING_BASE}/journal/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete journal entry');
+  return res.json();
+}
+
+export async function fetchJournalStats(): Promise<import('./types').JournalStats> {
+  const res = await fetch(`${TRADING_BASE}/journal/stats`);
+  if (!res.ok) throw new Error('Failed to fetch journal stats');
+  return res.json();
+}
+
+// ── Sprint 6: Settings & Performance ────────────────────────────
+
+export async function fetchSettings(): Promise<import('./types').UserSettingsData> {
+  const res = await fetch(`${TRADING_BASE}/settings`);
+  if (!res.ok) throw new Error('Failed to fetch settings');
+  return res.json();
+}
+
+export async function updateSettings(body: Record<string, unknown>): Promise<{ status: string }> {
+  const res = await fetch(`${TRADING_BASE}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update settings');
+  return res.json();
+}
+
+export async function fetchPerformanceAttribution(): Promise<import('./types').PerformanceAttribution> {
+  const res = await fetch(`${TRADING_BASE}/performance`);
+  if (!res.ok) throw new Error('Failed to fetch performance data');
+  return res.json();
+}

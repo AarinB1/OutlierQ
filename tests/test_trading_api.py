@@ -169,3 +169,123 @@ def test_model_train_endpoint_exists():
     data = resp.json()
     assert "status" in data
 
+
+# ── Sprint 4: Strategy Defaults & Configs ────────────────────────
+
+
+def test_strategy_defaults_returns_all_strategies():
+    resp = client.get("/api/trading/strategies/defaults")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "momentum" in data
+    assert "mean_reversion" in data
+    assert "breakout" in data
+    assert "rsi_low" in data["momentum"]
+    assert "rsi2_buy_threshold" in data["mean_reversion"]
+    assert "lookback" in data["breakout"]
+
+
+def test_save_and_list_strategy_config():
+    payload = {
+        "name": "test_config_1",
+        "strategy_name": "momentum",
+        "regime": "bull_trend",
+        "params": {"rsi_low": 35, "rsi_high": 75},
+        "toggles": {"momentum": True, "mean_reversion": False},
+    }
+    resp = client.post("/api/trading/strategies/configs", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "created"
+
+    list_resp = client.get("/api/trading/strategies/configs")
+    assert list_resp.status_code == 200
+    configs = list_resp.json()
+    assert any(c["name"] == "test_config_1" for c in configs)
+
+
+def test_save_strategy_config_upsert():
+    payload = {"name": "test_upsert", "strategy_name": "breakout", "params": {"lookback": 30}}
+    client.post("/api/trading/strategies/configs", json=payload)
+    payload["params"]["lookback"] = 40
+    resp = client.post("/api/trading/strategies/configs", json=payload)
+    assert resp.json()["status"] == "updated"
+
+
+def test_delete_strategy_config():
+    payload = {"name": "test_delete", "strategy_name": "momentum"}
+    resp = client.post("/api/trading/strategies/configs", json=payload)
+    config_id = resp.json()["id"]
+    del_resp = client.delete(f"/api/trading/strategies/configs/{config_id}")
+    assert del_resp.status_code == 200
+
+
+# ── Sprint 5: Watchlists ─────────────────────────────────────────
+
+
+def test_watchlist_crud():
+    resp = client.post("/api/trading/watchlists", json={"name": "Tech", "tickers": ["AAPL", "MSFT"]})
+    assert resp.status_code == 200
+    wl_id = resp.json()["id"]
+    resp = client.get("/api/trading/watchlists")
+    assert any(w["name"] == "Tech" for w in resp.json())
+    resp = client.put(f"/api/trading/watchlists/{wl_id}", json={"tickers": ["AAPL", "MSFT", "NVDA"]})
+    assert len(resp.json()["tickers"]) == 3
+    resp = client.delete(f"/api/trading/watchlists/{wl_id}")
+    assert resp.status_code == 200
+
+
+# ── Sprint 5: Trade Journal ──────────────────────────────────────
+
+
+def test_journal_crud():
+    payload = {"ticker": "AAPL", "direction": "BUY", "entry_price": 150.0, "exit_price": 155.0, "pnl_dollars": 50.0, "setup_notes": "Test entry", "tags": ["test"], "rating": 4}
+    resp = client.post("/api/trading/journal", json=payload)
+    assert resp.status_code == 200
+    entry_id = resp.json()["id"]
+
+    resp = client.get("/api/trading/journal")
+    assert any(e["id"] == entry_id for e in resp.json())
+
+    resp = client.patch(f"/api/trading/journal/{entry_id}", json={"rating": 5, "review_notes": "Good trade"})
+    assert resp.json()["status"] == "updated"
+
+    resp = client.delete(f"/api/trading/journal/{entry_id}")
+    assert resp.status_code == 200
+
+
+def test_journal_stats_empty():
+    resp = client.get("/api/trading/journal/stats")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_entries"] == 0
+
+
+# ── Sprint 6: Settings ───────────────────────────────────────────
+
+
+def test_settings_returns_defaults():
+    resp = client.get("/api/trading/settings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["notifications_enabled"] is True
+    assert data["min_signal_confidence"] == 0.5
+
+
+def test_settings_update():
+    resp = client.put("/api/trading/settings", json={"min_signal_confidence": 0.7, "email": "test@example.com"})
+    assert resp.status_code == 200
+    get_resp = client.get("/api/trading/settings")
+    assert get_resp.json()["min_signal_confidence"] == 0.7
+    assert get_resp.json()["email"] == "test@example.com"
+
+
+# ── Sprint 6: Performance ────────────────────────────────────────
+
+
+def test_performance_attribution_empty():
+    resp = client.get("/api/trading/performance")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["by_strategy"] == {}
+    assert data["rolling_accuracy"] == []
+
