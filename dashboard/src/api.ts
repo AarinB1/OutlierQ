@@ -30,6 +30,13 @@ import type {
   BacktestSummary,
   PortfolioHistoryPoint,
   ClosedTrade,
+  MarketRegime,
+  RegimeHistoryPoint,
+  RiskSummary,
+  RiskLimitsConfig,
+  ModelCheckpointEnhanced,
+  ModelVersionHistoryEntry,
+  ModelTrainResult,
 } from './types';
 
 const BASE_URL = '/api';
@@ -285,15 +292,39 @@ export async function fetchTradingModels() {
   return res.json();
 }
 
-export async function fetchMarketRegime() {
+export async function fetchTradingModelsEnhanced(): Promise<ModelCheckpointEnhanced[]> {
+  const res = await fetch(`${TRADING_BASE}/models`);
+  if (!res.ok) throw new Error('Failed to fetch models');
+  return res.json();
+}
+
+export async function fetchMarketRegime(): Promise<MarketRegime> {
   const res = await fetch(`${TRADING_BASE}/regime`);
   if (!res.ok) throw new Error('Failed to fetch regime');
+  return res.json();
+}
+
+export async function fetchRegimeHistory(days: number = 90): Promise<RegimeHistoryPoint[]> {
+  const res = await fetch(`${TRADING_BASE}/regime/history?days=${days}`);
+  if (!res.ok) throw new Error('Failed to fetch regime history');
   return res.json();
 }
 
 export async function fetchTradingMetrics() {
   const res = await fetch(`${TRADING_BASE}/metrics`);
   if (!res.ok) throw new Error('Failed to fetch trading metrics');
+  return res.json();
+}
+
+export async function fetchRiskSummary(): Promise<RiskSummary> {
+  const res = await fetch(`${TRADING_BASE}/risk/summary`);
+  if (!res.ok) throw new Error('Failed to fetch risk summary');
+  return res.json();
+}
+
+export async function fetchRiskLimits(): Promise<RiskLimitsConfig> {
+  const res = await fetch(`${TRADING_BASE}/risk/limits`);
+  if (!res.ok) throw new Error('Failed to fetch risk limits');
   return res.json();
 }
 
@@ -304,6 +335,26 @@ export async function generateTradingSignals(tickers: string[]) {
     body: JSON.stringify({ tickers }),
   });
   if (!res.ok) throw new Error('Failed to generate trading signals');
+  return res.json();
+}
+
+export async function fetchModelHistory(modelName: string): Promise<ModelVersionHistoryEntry[]> {
+  const res = await fetch(`${TRADING_BASE}/models/${encodeURIComponent(modelName)}/history`);
+  if (!res.ok) throw new Error('Failed to fetch model history');
+  return res.json();
+}
+
+export async function triggerModelTrain(payload: {
+  model_type?: string;
+  ticker?: string;
+  period?: string;
+}): Promise<ModelTrainResult> {
+  const res = await fetch(`${TRADING_BASE}/models/train`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Failed to trigger model training');
   return res.json();
 }
 

@@ -502,6 +502,60 @@ export interface MarketRegime {
   confidence: number
 }
 
+export interface RegimeHistoryPoint {
+  timestamp: string
+  regime: MarketRegime['regime']
+  confidence: number
+  vix_level: number | null
+  vix_percentile: number | null
+}
+
+export interface RiskSummary {
+  total_gross_exposure: number
+  max_single_name_exposure_pct: number
+  realized_pnl: number
+  sector_exposure: Record<string, number>
+  ticker_exposure: Record<string, number>
+}
+
+export interface RiskLimitsConfig {
+  max_gross_exposure: number
+  max_single_name_pct: number
+  max_sector_pct: number
+  max_drawdown_pct: number
+  max_leverage: number
+}
+
+export interface ModelCheckpointEnhanced {
+  id: string
+  model_name: string
+  model_type: string
+  version: number
+  val_accuracy: number | null
+  val_sharpe: number | null
+  trained_at: string | null
+  hyperparameters: Record<string, unknown> | null
+  feature_names: string[] | null
+  model_path: string | null
+  is_trained: boolean
+}
+
+export interface ModelVersionHistoryEntry {
+  id: string
+  version: number
+  val_accuracy: number | null
+  val_sharpe: number | null
+  trained_at: string | null
+  hyperparameters: Record<string, unknown> | null
+}
+
+export interface ModelTrainResult {
+  status: 'completed' | 'failed'
+  model_type: string
+  result?: unknown
+  error?: string
+}
+
 // ── Trading Backtest Types ───────────────────────────────────────────
 
 export interface BacktestFullResult {

@@ -53,13 +53,14 @@ export interface ModelCheckpoint {
   id: string
   model_name: string
   model_type: string
-  version: string
+  version: number
   trained_at: string | null
   val_accuracy: number | null
   val_sharpe: number | null
   feature_names: string[] | null
   hyperparameters: Record<string, unknown> | null
   model_path: string | null
+  is_trained?: boolean | null
 }
 
 export interface RegimeStatus {
@@ -69,6 +70,46 @@ export interface RegimeStatus {
   vix_percentile?: number | null
   breadth_score?: number | null
   confidence: number
+}
+
+export interface RegimeHistoryPoint {
+  timestamp: string
+  regime: string
+  confidence: number
+  vix_level: number | null
+  vix_percentile: number | null
+}
+
+export interface RiskSummary {
+  total_gross_exposure: number
+  max_single_name_exposure_pct: number
+  realized_pnl: number
+  sector_exposure: Record<string, number>
+  ticker_exposure: Record<string, number>
+}
+
+export interface RiskLimitsConfig {
+  max_gross_exposure: number
+  max_single_name_pct: number
+  max_sector_pct: number
+  max_drawdown_pct: number
+  max_leverage: number
+}
+
+export interface ModelVersionHistoryEntry {
+  id: string
+  version: number
+  val_accuracy: number | null
+  val_sharpe: number | null
+  trained_at: string | null
+  hyperparameters: Record<string, unknown> | null
+}
+
+export interface ModelTrainResult {
+  status: 'completed' | 'failed'
+  model_type: string
+  result?: unknown
+  error?: string
 }
 
 // ── Backtest Types ───────────────────────────────────────────────────

@@ -321,12 +321,29 @@ def list_executions(
 
 @router.get("/models")
 def list_models(db: Session = Depends(get_db)) -> list[dict]:
+    """Return model checkpoints, deduplicated by model_name (latest version only)."""
+    from sqlalchemy import func
+
+    subq = (
+        db.query(
+            ModelCheckpoint.model_name,
+            func.max(ModelCheckpoint.version).label("max_version"),
+        )
+        .group_by(ModelCheckpoint.model_name)
+        .subquery()
+    )
+
     checkpoints = (
         db.query(ModelCheckpoint)
-        .order_by(ModelCheckpoint.trained_at.desc())
-        .limit(20)
+        .join(
+            subq,
+            (ModelCheckpoint.model_name == subq.c.model_name)
+            & (ModelCheckpoint.version == subq.c.max_version),
+        )
+        .order_by(ModelCheckpoint.model_name.asc())
         .all()
     )
+
     return [
         {
             "id": m.id,
@@ -337,9 +354,68 @@ def list_models(db: Session = Depends(get_db)) -> list[dict]:
             "val_sharpe": m.val_sharpe,
             "trained_at": m.trained_at.isoformat() if m.trained_at else None,
             "hyperparameters": m.hyperparameters,
+            "feature_names": m.feature_names,
+            "model_path": m.model_path,
+            "is_trained": m.model_path is not None and m.val_accuracy is not None,
         }
         for m in checkpoints
     ]
+
+
+@router.get("/models/{model_name}/history")
+def get_model_history(model_name: str, db: Session = Depends(get_db)) -> list[dict]:
+    """Return version history for a specific model."""
+    checkpoints = (
+        db.query(ModelCheckpoint)
+        .filter(ModelCheckpoint.model_name == model_name)
+        .order_by(ModelCheckpoint.version.desc())
+        .limit(10)
+        .all()
+    )
+    if not checkpoints:
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+    return [
+        {
+            "id": m.id,
+            "version": m.version,
+            "val_accuracy": m.val_accuracy,
+            "val_sharpe": m.val_sharpe,
+            "trained_at": m.trained_at.isoformat() if m.trained_at else None,
+            "hyperparameters": m.hyperparameters,
+        }
+        for m in checkpoints
+    ]
+
+
+@router.post("/models/train")
+def trigger_model_training(body: dict, db: Session = Depends(get_db)) -> dict:
+    """Trigger training for a specific model type.
+
+    Body: { "model_type": "lstm" | "transformer" | "hybrid" | "all" }
+    """
+    model_type = body.get("model_type", "all")
+
+    try:
+        from src.trading.training.trainer import TradingTrainer
+
+        trainer = TradingTrainer()
+
+        ticker = body.get("ticker", "SPY")
+        period = body.get("period", "2y")
+
+        result = trainer.train_all_models(ticker=ticker, period=period)
+        return {
+            "status": "completed",
+            "model_type": model_type,
+            "result": result if isinstance(result, dict) else str(result),
+        }
+    except Exception as e:
+        logger.exception("Model training failed")
+        return {
+            "status": "failed",
+            "model_type": model_type,
+            "error": str(e),
+        }
 
 
 # ── Regime ───────────────────────────────────────────────────────────
@@ -361,6 +437,34 @@ def get_current_regime(db: Session = Depends(get_db)) -> dict:
         "vix_percentile": latest.vix_percentile,
         "timestamp": latest.timestamp.isoformat() if latest.timestamp else None,
     }
+
+
+@router.get("/regime/history")
+def get_regime_history(
+    days: int = 90, db: Session = Depends(get_db)
+) -> list[dict]:
+    """Return historical market regimes for the last N days."""
+    if days <= 0:
+        days = 30
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(MarketRegime)
+        .filter(MarketRegime.timestamp >= cutoff)
+        .order_by(MarketRegime.timestamp.asc())
+        .all()
+    )
+    return [
+        {
+            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "regime": r.regime,
+            "confidence": r.confidence,
+            "vix_level": r.vix_level,
+            "vix_percentile": r.vix_percentile,
+        }
+        for r in rows
+    ]
 
 
 # ── Metrics ──────────────────────────────────────────────────────────
@@ -385,6 +489,59 @@ def get_trading_metrics(db: Session = Depends(get_db)) -> dict:
         "total_executions": total_exec,
         "total_pnl": total_pnl,
         "win_rate": winning / total_exec if total_exec > 0 else 0.0,
+    }
+
+
+@router.get("/risk/summary")
+def get_risk_summary(db: Session = Depends(get_db)) -> dict:
+    """Return aggregate risk summary computed from current portfolio and executions."""
+    # Use latest portfolio snapshot to derive exposures
+    latest_state = (
+        db.query(PortfolioState)
+        .order_by(PortfolioState.timestamp.desc())
+        .first()
+    )
+
+    sector_exposure: dict[str, float] = {}
+    ticker_exposure: dict[str, float] = {}
+    total_gross = 0.0
+
+    if latest_state and latest_state.positions_json:
+        for pos in latest_state.positions_json:
+            ticker = pos.get("ticker") or "UNKNOWN"
+            sector = pos.get("sector") or "Unknown"
+            quantity = pos.get("quantity") or 0
+            mark_price = pos.get("mark_price") or pos.get("entry_price") or 0
+            value = float(quantity) * float(mark_price)
+            total_gross += abs(value)
+            sector_exposure[sector] = sector_exposure.get(sector, 0.0) + value
+            ticker_exposure[ticker] = ticker_exposure.get(ticker, 0.0) + value
+
+    max_ticker = max((abs(v) for v in ticker_exposure.values()), default=0.0)
+    max_ticker_pct = (max_ticker / total_gross) if total_gross > 0 else 0.0
+
+    # Realized PnL from executions
+    executions = db.query(TradeExecution).all()
+    realized_pnl = sum(e.pnl_dollars or 0 for e in executions)
+
+    return {
+        "total_gross_exposure": total_gross,
+        "max_single_name_exposure_pct": max_ticker_pct,
+        "realized_pnl": realized_pnl,
+        "sector_exposure": sector_exposure,
+        "ticker_exposure": ticker_exposure,
+    }
+
+
+@router.get("/risk/limits")
+def get_risk_limits() -> dict:
+    """Return static risk limits configuration."""
+    return {
+        "max_gross_exposure": 2.0,  # 200% of equity
+        "max_single_name_pct": 0.10,  # 10% per name
+        "max_sector_pct": 0.30,  # 30% per sector
+        "max_drawdown_pct": 0.20,  # 20% peak-to-trough
+        "max_leverage": 2.0,
     }
 
 

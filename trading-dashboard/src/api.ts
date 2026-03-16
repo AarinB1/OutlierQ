@@ -9,6 +9,11 @@ import type {
   BacktestSummary,
   PortfolioHistoryPoint,
   ClosedTrade,
+  RegimeHistoryPoint,
+  RiskSummary,
+  RiskLimitsConfig,
+  ModelVersionHistoryEntry,
+  ModelTrainResult,
 } from './types'
 
 const BASE_URL = '/api/trading'
@@ -94,11 +99,23 @@ export async function fetchRegime(): Promise<RegimeStatus> {
   return fetchJSON('/regime')
 }
 
+export async function fetchRegimeHistory(days: number = 90): Promise<RegimeHistoryPoint[]> {
+  return fetchJSON(`/regime/history?days=${days}`)
+}
+
 export async function updateSignalStatus(id: string, status: string): Promise<TradingSignal> {
   return fetchJSON(`/signals/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   })
+}
+
+export async function fetchRiskSummary(): Promise<RiskSummary> {
+  return fetchJSON('/risk/summary')
+}
+
+export async function fetchRiskLimits(): Promise<RiskLimitsConfig> {
+  return fetchJSON('/risk/limits')
 }
 
 export async function fetchExecutions(params?: {
@@ -114,5 +131,20 @@ export async function fetchExecutions(params?: {
   if (params?.offset) sp.set('offset', String(params.offset))
   const qs = sp.toString()
   return fetchJSON(`/executions${qs ? `?${qs}` : ''}`)
+}
+
+export async function fetchModelHistory(modelName: string): Promise<ModelVersionHistoryEntry[]> {
+  return fetchJSON(`/models/${encodeURIComponent(modelName)}/history`)
+}
+
+export async function triggerModelTrain(payload: {
+  model_type?: string
+  ticker?: string
+  period?: string
+}): Promise<ModelTrainResult> {
+  return fetchJSON('/models/train', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
