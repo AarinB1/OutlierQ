@@ -24,6 +24,11 @@ import type {
   MlStatus,
   MlTrainingMetrics,
 } from './types';
+import type {
+  TradingSignal,
+  BacktestFullResult,
+  BacktestSummary,
+} from './types';
 
 const BASE_URL = '/api';
 const SPARKLINE_TTL_MS = 5 * 60 * 1000;
@@ -214,29 +219,43 @@ export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: str
 
 const TRADING_BASE = '/api/trading';
 
-export async function fetchTradingSignals(params?: { ticker?: string; strategy?: string; limit?: number }) {
+export async function fetchTradingSignals(params?: {
+  ticker?: string
+  direction?: string
+  strategy?: string
+  status?: string
+  limit?: number
+}): Promise<TradingSignal[]> {
   const query = new URLSearchParams();
   if (params?.ticker) query.set('ticker', params.ticker);
+  if (params?.direction) query.set('direction', params.direction);
   if (params?.strategy) query.set('strategy', params.strategy);
+  if (params?.status) query.set('status', params.status);
   if (params?.limit) query.set('limit', String(params.limit));
   const res = await fetch(`${TRADING_BASE}/signals?${query}`);
   if (!res.ok) throw new Error('Failed to fetch trading signals');
   return res.json();
 }
 
-export async function fetchTradingSignalById(id: string) {
+export async function fetchTradingSignalById(id: string): Promise<TradingSignal> {
   const res = await fetch(`${TRADING_BASE}/signals/${id}`);
   if (!res.ok) throw new Error('Failed to fetch trading signal');
   return res.json();
 }
 
-export async function runBacktest(config: Record<string, unknown>) {
+export async function runBacktest(config: Record<string, unknown>): Promise<BacktestFullResult> {
   const res = await fetch(`${TRADING_BASE}/backtest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
   if (!res.ok) throw new Error('Failed to run backtest');
+  return res.json();
+}
+
+export async function fetchBacktestList(): Promise<BacktestSummary[]> {
+  const res = await fetch(`${TRADING_BASE}/backtests`);
+  if (!res.ok) throw new Error('Failed to fetch backtest list');
   return res.json();
 }
 
@@ -277,5 +296,15 @@ export async function generateTradingSignals(tickers: string[]) {
     body: JSON.stringify({ tickers }),
   });
   if (!res.ok) throw new Error('Failed to generate trading signals');
+  return res.json();
+}
+
+export async function updateSignalStatus(id: string, status: string): Promise<TradingSignal> {
+  const res = await fetch(`${TRADING_BASE}/signals/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error('Failed to update signal status');
   return res.json();
 }

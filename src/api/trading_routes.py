@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -74,6 +75,19 @@ def get_trading_signal(signal_id: str, db: Session = Depends(get_db)) -> dict:
     return _trade_signal_to_dict(sig)
 
 
+@router.patch("/signals/{signal_id}/status")
+def update_signal_status(signal_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
+    sig = db.query(TradeSignal).filter(TradeSignal.id == signal_id).first()
+    if not sig:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    new_status = body.get("status")
+    if new_status not in ("pending", "active", "closed", "cancelled"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    sig.status = new_status
+    db.commit()
+    return _trade_signal_to_dict(sig)
+
+
 # ── Backtesting ──────────────────────────────────────────────────────
 
 
@@ -113,6 +127,15 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
     engine = BacktestEngine(initial_capital=initial_capital)
     result = engine.run(features_df, strategy, ticker)
 
+    equity_curve = result.equity_curve
+    if not isinstance(equity_curve, pd.Series):
+        equity_curve = pd.Series(equity_curve)
+
+    peak = equity_curve.cummax()
+    drawdown = (equity_curve - peak) / peak * 100
+
+    monthly = equity_curve.resample("ME").last().pct_change().dropna() * 100
+
     # Store in DB
     bt_run = BacktestRun(
         strategy_name=strategy_name,
@@ -135,9 +158,17 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
         "id": bt_run.id,
         "metrics": asdict(result.metrics),
         "equity_curve": {
-            "dates": [str(d) for d in result.equity_curve.index],
-            "values": result.equity_curve.values.tolist(),
+            "dates": [str(d) for d in equity_curve.index],
+            "values": equity_curve.values.tolist(),
         },
+        "drawdown_curve": {
+            "dates": [str(d) for d in drawdown.index],
+            "values": drawdown.values.tolist(),
+        },
+        "monthly_returns": [
+            {"month": d.strftime("%Y-%m"), "return_pct": round(v, 2)}
+            for d, v in monthly.items()
+        ],
         "trades": result.trades[:100],
         "config": result.config,
     }

@@ -463,3 +463,57 @@ export interface MarketRegime {
   breadth_score: number
   confidence: number
 }
+
+// ── Trading Backtest Types ───────────────────────────────────────────
+
+export interface BacktestFullResult {
+  id: string
+  metrics: {
+    sharpe_ratio: number
+    sortino_ratio: number
+    calmar_ratio: number
+    max_drawdown_pct: number
+    max_drawdown_duration_days: number
+    win_rate: number
+    profit_factor: number
+    expectancy: number
+    avg_trade_pnl: number
+    best_trade_pnl: number
+    worst_trade_pnl: number
+    total_trades: number
+    total_return_pct: number
+    cagr: number
+    avg_holding_period_days: number
+    total_pnl: number
+  }
+  equity_curve: { dates: string[]; values: number[] }
+  drawdown_curve: { dates: string[]; values: number[] }
+  monthly_returns: { month: string; return_pct: number }[]
+  trades: BacktestTrade[]
+  config: Record<string, unknown>
+}
+
+export interface BacktestTrade {
+  trade_id: string
+  ticker: string
+  direction: string
+  entry_price: number
+  exit_price: number
+  entry_time: string
+  exit_time: string
+  quantity: number
+  pnl_dollars: number
+  pnl_pct: number
+  exit_reason: string
+  holding_days: number
+}
+
+export interface BacktestSummary {
+  id: string
+  strategy_name: string
+  ticker: string
+  total_return_pct: number
+  sharpe: number
+  total_trades: number
+  created_at: string
+}

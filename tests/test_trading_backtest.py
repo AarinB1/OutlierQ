@@ -111,3 +111,59 @@ def test_backtest_engine_runs():
     assert result.metrics.total_trades >= 0
     assert len(result.equity_curve) > 0
     assert result.config["ticker"] == "TEST"
+
+
+def test_backtest_result_has_equity_curve():
+    """Ensure BacktestResult contains equity_curve with dates."""
+    np.random.seed(42)
+    n = 250
+    dates = pd.date_range("2023-01-01", periods=n, freq="B")
+    close = 100 + np.cumsum(np.random.randn(n) * 0.5)
+    high = close + np.abs(np.random.randn(n))
+    low = close - np.abs(np.random.randn(n))
+    df = pd.DataFrame(
+        {
+            "open": close + np.random.randn(n) * 0.3,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": np.random.randint(1_000_000, 10_000_000, n).astype(float),
+        },
+        index=dates,
+    )
+
+    df = compute_technical_features(df)
+    df = compute_volume_features(df)
+    df = df.ffill().dropna()
+
+    strategy = MomentumStrategy(min_confidence=0.3)
+    engine = BacktestEngine(initial_capital=100000)
+    result = engine.run(df, strategy, "TEST_EQ")
+
+    assert isinstance(result.equity_curve, pd.Series)
+    assert len(result.equity_curve) > 0
+    assert isinstance(result.equity_curve.index, pd.DatetimeIndex)
+
+
+def test_drawdown_computation():
+    """Test that drawdown is computed correctly from equity curve."""
+    equity = pd.Series(
+        [100, 110, 105, 95, 100, 120],
+        index=pd.date_range("2024-01-01", periods=6, freq="B"),
+    )
+    peak = equity.cummax()
+    drawdown = (equity - peak) / peak * 100
+    assert drawdown.iloc[0] == 0.0  # no drawdown at start
+    assert drawdown.iloc[3] < 0  # drawdown at trough
+    assert abs(drawdown.iloc[3] - (-13.636)) < 0.1  # 95 vs peak 110
+
+
+def test_monthly_returns_computation():
+    """Test monthly return resampling."""
+    dates = pd.date_range("2024-01-01", periods=60, freq="B")
+    values = 100000 + np.arange(60) * 100  # steady growth
+    equity = pd.Series(values, index=dates)
+    monthly = equity.resample("ME").last().pct_change().dropna() * 100
+    assert len(monthly) >= 2
+    # Values are numpy floats; ensure they are numeric scalars
+    assert all(np.isscalar(v) for v in monthly.values)
