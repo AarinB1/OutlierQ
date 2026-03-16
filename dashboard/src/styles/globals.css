@@ -39,6 +39,13 @@
   }
 }
 
+@keyframes staggerFallback {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer base {
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
@@ -133,6 +140,11 @@
 
   .stagger-container.is-ready .stagger-item {
     animation: staggerFadeIn 300ms ease-out forwards;
+  }
+
+  /* Fallback: if animation doesn't trigger within 2s, force items visible */
+  .stagger-container:not(.is-ready) .stagger-item {
+    animation: staggerFallback 0ms 2s forwards;
   }
 
   .sparkline-path {

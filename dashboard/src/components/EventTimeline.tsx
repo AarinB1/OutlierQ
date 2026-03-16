@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { fetchEvents } from '../api'
 import type { EventData } from '../types'
 import { SkeletonEventCard } from './SkeletonCard'
@@ -72,14 +72,18 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
       .finally(() => setLoading(false))
   }, [ticker])
 
-  const filteredEvents = events.filter((event) => {
-    if (!keywordFilter) return true
-    const meta = event.metadata as Record<string, unknown> | null
-    const themes = ((meta?.common_themes as string[] | undefined) ?? []).map((theme) =>
-      theme.toLowerCase()
-    )
-    return themes.includes(keywordFilter.toLowerCase())
-  })
+  const filteredEvents = useMemo(
+    () =>
+      events.filter((event) => {
+        if (!keywordFilter) return true
+        const meta = event.metadata as Record<string, unknown> | null
+        const themes = ((meta?.common_themes as string[] | undefined) ?? []).map((theme) =>
+          theme.toLowerCase()
+        )
+        return themes.includes(keywordFilter.toLowerCase())
+      }),
+    [events, keywordFilter]
+  )
   const { visibleItems, getDelay, ready } = useStaggeredList(filteredEvents)
 
   const toggleArticles = (eventId: string) => {
