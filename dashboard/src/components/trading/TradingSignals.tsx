@@ -80,7 +80,7 @@ export default function TradingSignals() {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [direction, strategy, status])
 
   const onGenerate = async () => {
     setBusy(true)

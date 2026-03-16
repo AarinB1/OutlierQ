@@ -301,8 +301,8 @@ export default function BacktestPanel() {
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  formatter={(v: unknown) =>
-                    typeof v === 'number' ? formatCurrency(v) : v
+                  formatter={(v) =>
+                    typeof v === 'number' ? formatCurrency(v) : String(v ?? '')
                   }
                   labelFormatter={(d) =>
                     new Date(d).toLocaleDateString('en-US', {
@@ -359,8 +359,8 @@ export default function BacktestPanel() {
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  formatter={(v: unknown) =>
-                    typeof v === 'number' ? `${v.toFixed(1)}%` : v
+                  formatter={(v) =>
+                    typeof v === 'number' ? `${v.toFixed(1)}%` : String(v ?? '')
                   }
                   labelFormatter={(d) =>
                     new Date(d).toLocaleDateString('en-US', {
