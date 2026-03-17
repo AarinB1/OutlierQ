@@ -98,6 +98,8 @@ def update_signal_status(signal_id: str, body: dict, db: Session = Depends(get_d
 @router.post("/backtest")
 def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
     """Run a backtest with the given configuration."""
+    from datetime import datetime as dt
+
     from src.trading.backtesting.backtest_engine import BacktestEngine
     from src.trading.features.feature_pipeline import FeaturePipeline
     from src.trading.strategies.momentum_strategy import MomentumStrategy
@@ -107,6 +109,9 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
     ticker = body.get("ticker", "SPY")
     strategy_name = body.get("strategy", "momentum")
     period = body.get("period", "1y")
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+    benchmark = body.get("benchmark", "SPY")
     initial_capital = body.get("initial_capital", 100000)
 
     strategy_map = {
@@ -124,7 +129,13 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
         strategy.set_parameters(body["params"])
 
     pipeline = FeaturePipeline()
-    features_df = pipeline.build_features(ticker, period=period, include_sentiment=False)
+    features_df = pipeline.build_features(
+        ticker,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        include_sentiment=False,
+    )
     if features_df.empty:
         raise HTTPException(status_code=400, detail=f"No data available for {ticker}")
 
@@ -140,10 +151,41 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
 
     monthly = equity_curve.resample("ME").last().pct_change().dropna() * 100
 
+    # Benchmark buy-and-hold for comparison
+    bench_equity = pd.Series(dtype=float)
+    if benchmark:
+        bench_df = pipeline.build_features(
+            benchmark,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            include_sentiment=False,
+        )
+        if not bench_df.empty:
+            # Align benchmark to strategy dates (reindex and ffill)
+            bench_close = bench_df["close"].reindex(equity_curve.index).ffill().bfill()
+            bench_equity = (bench_close / bench_close.iloc[0]) * initial_capital
+
+    # Parse dates for DB storage
+    bt_start = None
+    bt_end = None
+    if start_date:
+        try:
+            bt_start = dt.fromisoformat(start_date.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            bt_end = dt.fromisoformat(end_date.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+
     # Store in DB
     bt_run = BacktestRun(
         strategy_name=strategy_name,
         ticker=ticker,
+        start_date=bt_start,
+        end_date=bt_end,
         initial_capital=initial_capital,
         final_capital=equity_curve.iloc[-1] if len(equity_curve) > 0 else initial_capital,
         sharpe=result.metrics.sharpe_ratio,
@@ -158,7 +200,7 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
     db.add(bt_run)
     db.commit()
 
-    return {
+    response = {
         "id": bt_run.id,
         "metrics": asdict(result.metrics),
         "equity_curve": {
@@ -176,6 +218,101 @@ def run_backtest(body: dict, db: Session = Depends(get_db)) -> dict:
         "trades": result.trades[:100],
         "config": result.config,
     }
+
+    if not bench_equity.empty:
+        response["benchmark_curve"] = {
+            "dates": [str(d) for d in bench_equity.index],
+            "values": bench_equity.values.tolist(),
+            "ticker": benchmark,
+        }
+        # Add benchmark final return for quick comparison
+        bench_return = (bench_equity.iloc[-1] - initial_capital) / initial_capital * 100
+        response["benchmark_return_pct"] = round(bench_return, 2)
+
+    return response
+
+
+@router.post("/backtest/compare")
+def compare_backtests(body: dict, db: Session = Depends(get_db)) -> dict:
+    """Run multiple strategies on the same ticker/date range and return results for comparison."""
+    from src.trading.backtesting.backtest_engine import BacktestEngine
+    from src.trading.features.feature_pipeline import FeaturePipeline
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+
+    strategies_requested = body.get("strategies", ["momentum", "mean_reversion", "breakout"])
+    ticker = body.get("ticker", "SPY")
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+    period = body.get("period", "1y")
+    initial_capital = body.get("initial_capital", 100000)
+    benchmark = body.get("benchmark", "SPY")
+
+    pipeline = FeaturePipeline()
+    features_df = pipeline.build_features(
+        ticker,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        include_sentiment=False,
+    )
+    if features_df.empty:
+        raise HTTPException(status_code=400, detail=f"No data available for {ticker}")
+
+    strategy_map = {
+        "momentum": MomentumStrategy,
+        "mean_reversion": MeanReversionStrategy,
+        "breakout": BreakoutStrategy,
+    }
+
+    results = []
+    for strat_name in strategies_requested:
+        StrategyClass = strategy_map.get(strat_name)
+        if not StrategyClass:
+            continue
+        strategy = StrategyClass()
+        if body.get("params"):
+            strategy.set_parameters(body["params"])
+        engine = BacktestEngine(initial_capital=initial_capital)
+        result = engine.run(features_df.copy(), strategy, ticker)
+        equity = result.equity_curve
+        if not isinstance(equity, pd.Series):
+            equity = pd.Series(equity)
+        results.append({
+            "strategy": strat_name,
+            "metrics": asdict(result.metrics),
+            "equity_curve": {
+                "dates": [str(d) for d in equity.index],
+                "values": equity.values.tolist(),
+            },
+            "trades": result.trades[:50],
+        })
+
+    # Benchmark curve
+    bench_equity = pd.Series(dtype=float)
+    if benchmark:
+        bench_df = pipeline.build_features(
+            benchmark,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            include_sentiment=False,
+        )
+        if not bench_df.empty and results:
+            first_dates = pd.DatetimeIndex(results[0]["equity_curve"]["dates"])
+            bench_close = bench_df["close"].reindex(first_dates).ffill().bfill()
+            if not bench_close.empty and bench_close.iloc[0] > 0:
+                bench_equity = (bench_close / bench_close.iloc[0]) * initial_capital
+
+    out = {"ticker": ticker, "results": results}
+    if not bench_equity.empty:
+        out["benchmark_curve"] = {
+            "dates": [str(d) for d in bench_equity.index],
+            "values": bench_equity.values.tolist(),
+            "ticker": benchmark,
+        }
+    return out
 
 
 @router.get("/backtest/{backtest_id}")
@@ -196,6 +333,61 @@ def get_backtest(backtest_id: str, db: Session = Depends(get_db)) -> dict:
         "total_trades": bt.total_trades,
         "profit_factor": bt.profit_factor,
         "total_return_pct": bt.total_return_pct,
+        "config": bt.config_json,
+        "created_at": bt.created_at.isoformat() if bt.created_at else None,
+    }
+
+
+@router.get("/backtest/{backtest_id}/export")
+def export_backtest(
+    backtest_id: str,
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    db: Session = Depends(get_db),
+):
+    """Export backtest results as CSV or JSON."""
+    import csv
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    bt = db.query(BacktestRun).filter(BacktestRun.id == backtest_id).first()
+    if not bt:
+        raise HTTPException(status_code=404, detail="Backtest not found")
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "strategy", "ticker", "sharpe", "total_return_pct", "max_drawdown",
+            "win_rate", "total_trades", "profit_factor",
+        ])
+        writer.writerow([
+            bt.strategy_name,
+            bt.ticker or "",
+            bt.sharpe,
+            bt.total_return_pct,
+            bt.max_drawdown,
+            bt.win_rate,
+            bt.total_trades,
+            bt.profit_factor,
+        ])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=backtest_{backtest_id}.csv"},
+        )
+
+    return {
+        "id": bt.id,
+        "strategy_name": bt.strategy_name,
+        "ticker": bt.ticker,
+        "sharpe": bt.sharpe,
+        "total_return_pct": bt.total_return_pct,
+        "max_drawdown": bt.max_drawdown,
+        "win_rate": bt.win_rate,
+        "total_trades": bt.total_trades,
+        "profit_factor": bt.profit_factor,
         "config": bt.config_json,
         "created_at": bt.created_at.isoformat() if bt.created_at else None,
     }

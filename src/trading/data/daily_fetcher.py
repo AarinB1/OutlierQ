@@ -25,19 +25,26 @@ class DailyFetcher:
         self,
         ticker: str,
         period: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> pd.DataFrame:
         """Return daily OHLCV DataFrame with standardized column names.
 
         Columns: date (index), open, high, low, close, volume, adj_close
+
+        If start_date and end_date are provided (ISO format), use those instead of period.
         """
-        cache_key = f"{ticker}_{period}"
+        cache_key = f"{ticker}_{period}_{start_date}_{end_date}"
         cached = self._cache.get(cache_key)
         if cached and (time.time() - cached[1]) < CACHE_TTL:
             return cached[0]
 
-        logger.info("Fetching daily data for %s (period=%s)", ticker, period)
+        logger.info("Fetching daily data for %s (period=%s, start=%s, end=%s)", ticker, period, start_date, end_date)
         stock = yf.Ticker(ticker)
-        df = stock.history(period=period, interval="1d")
+        if start_date and end_date:
+            df = stock.history(start=start_date, end=end_date, interval="1d")
+        else:
+            df = stock.history(period=period, interval="1d")
 
         if df.empty:
             logger.warning("No daily data returned for %s", ticker)

@@ -37,23 +37,33 @@ class FeaturePipeline:
         self,
         ticker: str,
         period: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
         include_sentiment: bool = True,
         include_regime: bool = True,
     ) -> pd.DataFrame:
         """Build a complete feature DataFrame for the given ticker.
 
+        If start_date and end_date are provided (ISO format), use those instead of period.
         Returns a DataFrame with no NaN values, ready for model consumption.
         """
-        cache_key = f"{ticker}_{period}_{include_sentiment}_{include_regime}"
+        if start_date and end_date:
+            from datetime import datetime
+            sd = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            ed = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            if ed <= sd:
+                raise ValueError("end_date must be after start_date")
+
+        cache_key = f"{ticker}_{period}_{start_date}_{end_date}_{include_sentiment}_{include_regime}"
         cached = self._cache.get(cache_key)
         if cached and (time.time() - cached[1]) < CACHE_TTL:
             return cached[0]
 
         start = time.perf_counter()
-        logger.info("Building features for %s (period=%s)", ticker, period)
+        logger.info("Building features for %s (period=%s, start=%s, end=%s)", ticker, period, start_date, end_date)
 
         # 1. Fetch raw OHLCV
-        df = self.daily_fetcher.fetch(ticker, period=period)
+        df = self.daily_fetcher.fetch(ticker, period=period, start_date=start_date, end_date=end_date)
         if df.empty:
             logger.warning("No data for %s, returning empty DataFrame", ticker)
             return pd.DataFrame()

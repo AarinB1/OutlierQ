@@ -169,6 +169,8 @@ export interface BacktestFullResult {
   monthly_returns: { month: string; return_pct: number }[]
   trades: BacktestTrade[]
   config: Record<string, unknown>
+  benchmark_curve?: { dates: string[]; values: number[]; ticker: string }
+  benchmark_return_pct?: number
 }
 
 export interface BacktestTrade {

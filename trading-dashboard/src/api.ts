@@ -71,6 +71,37 @@ export async function runBacktest(config: Record<string, unknown>): Promise<Back
   })
 }
 
+export interface CompareBacktestResult {
+  strategy: string
+  metrics: BacktestFullResult['metrics']
+  equity_curve: { dates: string[]; values: number[] }
+  trades: import('./types').BacktestTrade[]
+}
+
+export async function compareBacktests(config: Record<string, unknown>): Promise<{
+  ticker: string
+  results: CompareBacktestResult[]
+  benchmark_curve?: { dates: string[]; values: number[]; ticker: string }
+}> {
+  const res = await fetch(`${BASE_URL}/backtest/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) throw new Error('Failed to run comparison')
+  return res.json()
+}
+
+export function getBacktestExportUrl(backtestId: string, format: 'csv' | 'json' = 'csv'): string {
+  return `${BASE_URL}/backtest/${encodeURIComponent(backtestId)}/export?format=${format}`
+}
+
+export async function exportBacktest(backtestId: string, format: 'csv' | 'json' = 'csv'): Promise<Blob> {
+  const res = await fetch(getBacktestExportUrl(backtestId, format))
+  if (!res.ok) throw new Error('Export failed')
+  return res.blob()
+}
+
 export async function fetchBacktestList(): Promise<BacktestSummary[]> {
   return fetchJSON('/backtests')
 }

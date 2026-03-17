@@ -38,6 +38,54 @@ def test_backtest_list_endpoint():
   assert resp.status_code == 200
 
 
+@pytest.mark.skip(reason="Requires network for yfinance")
+def test_backtest_with_date_range_and_benchmark():
+  """Backtest accepts start_date, end_date, benchmark and returns benchmark_curve when available."""
+  resp = client.post(
+    "/api/trading/backtest",
+    json={
+      "ticker": "SPY",
+      "strategy": "momentum",
+      "start_date": "2023-01-01",
+      "end_date": "2023-12-31",
+      "benchmark": "SPY",
+      "initial_capital": 100000,
+    },
+  )
+  assert resp.status_code == 200
+  data = resp.json()
+  assert "equity_curve" in data
+  assert "benchmark_curve" in data
+  assert data["benchmark_curve"]["ticker"] == "SPY"
+  assert "benchmark_return_pct" in data
+
+
+@pytest.mark.skip(reason="Requires network for yfinance")
+def test_compare_backtests_endpoint():
+  """Compare endpoint runs multiple strategies and returns comparison results."""
+  resp = client.post(
+    "/api/trading/backtest/compare",
+    json={
+      "ticker": "SPY",
+      "strategies": ["momentum", "mean_reversion"],
+      "start_date": "2023-01-01",
+      "end_date": "2023-06-30",
+      "initial_capital": 100000,
+    },
+  )
+  assert resp.status_code == 200
+  data = resp.json()
+  assert data["ticker"] == "SPY"
+  assert len(data["results"]) == 2
+  assert all("strategy" in r and "metrics" in r and "equity_curve" in r for r in data["results"])
+
+
+def test_export_backtest_not_found():
+  """Export returns 404 for non-existent backtest."""
+  resp = client.get("/api/trading/backtest/nonexistent-id/export?format=csv")
+  assert resp.status_code == 404
+
+
 def test_portfolio_returns_default_when_empty():
   resp = client.get("/api/trading/portfolio")
   assert resp.status_code == 200
