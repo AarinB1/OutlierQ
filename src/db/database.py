@@ -62,7 +62,7 @@ def migrate_db() -> None:
 
 def init_db() -> None:
     """Create all tables. Safe to call multiple times — existing tables are skipped."""
-    from src.db.tables import Article, Event, Signal  # noqa: F401
+    from src.db.tables import Article, Event, Signal, SimulationResult  # noqa: F401
     from src.discovery.discovery_db import DiscoveredTicker  # noqa: F401
     from src.db.trading_tables import (  # noqa: F401
         TradeSignal, TradeExecution, BacktestRun,

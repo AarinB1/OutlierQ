@@ -7,7 +7,7 @@ JSON columns are used instead of JSONB/ARRAY (PostgreSQL-specific types).
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text
 
 from src.db.database import Base
 
@@ -73,3 +73,23 @@ class Signal(Base):
 
     def __repr__(self) -> str:
         return f"<Signal {self.ticker} {self.direction} conf={self.confidence:.2f}>"
+
+
+class SimulationResult(Base):
+    __tablename__ = "simulation_results"
+
+    id = Column(String, primary_key=True, default=_generate_uuid)
+    event_id = Column(String, ForeignKey("events.id"), nullable=False, index=True)
+    direction = Column(String, nullable=True)           # bullish / bearish / neutral
+    bearish_pct = Column(Float, nullable=True)
+    bullish_pct = Column(Float, nullable=True)
+    consensus_strength = Column(Float, nullable=True)
+    narrative_summary = Column(Text, nullable=True)
+    raw_report = Column(Text, nullable=True)
+    simulation_rounds = Column(Integer, nullable=True)
+    agent_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<SimulationResult event={self.event_id} direction={self.direction}>"

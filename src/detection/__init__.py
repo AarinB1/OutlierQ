@@ -463,6 +463,32 @@ class AnomalyPipeline:
             engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)
             signals = engine.generate_and_store(event_dicts, session=s)
 
+            # --- MiroFish simulation enrichment (non-blocking) ---
+            try:
+                from config.settings import MIROFISH_ENABLED, MIROFISH_MIN_CONFIDENCE
+                if MIROFISH_ENABLED:
+                    from src.simulation.mirofish_client import MirofishClient
+                    from src.simulation.runner import submit_simulation
+
+                    client = MirofishClient()
+                    if client.is_available():
+                        for event in events:
+                            if event.confidence >= MIROFISH_MIN_CONFIDENCE:
+                                articles = (
+                                    s.query(Article)
+                                    .filter(Article.id.in_(event.article_ids or []))
+                                    .all()
+                                )
+                                submit_simulation(event, articles, client=client)
+                                logger.info(
+                                    "MiroFish simulation submitted for %s (confidence=%.2f)",
+                                    event.ticker, event.confidence,
+                                )
+                    else:
+                        logger.debug("MiroFish not available — skipping simulation enrichment")
+            except Exception:
+                logger.debug("MiroFish enrichment skipped", exc_info=True)
+
             logger.info(
                 "Pipeline complete: %d tickers scanned -> %d outliers detected -> %d signals generated",
                 len(tickers), len(events), len(signals),

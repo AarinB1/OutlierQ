@@ -36,6 +36,13 @@ DEFAULT_TICKERS: list[str] = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN"]
 # Logging format
 LOG_FORMAT: str = "[%(asctime)s] %(name)s %(levelname)s: %(message)s"
 
+# MiroFish simulation settings
+MIROFISH_BASE_URL: str = os.getenv("MIROFISH_BASE_URL", "http://localhost:5001")
+MIROFISH_ENABLED: bool = os.getenv("MIROFISH_ENABLED", "false").lower() in ("true", "1", "yes")
+MIROFISH_MAX_ROUNDS: int = int(os.getenv("MIROFISH_MAX_ROUNDS", "20"))
+MIROFISH_MIN_CONFIDENCE: float = float(os.getenv("MIROFISH_MIN_CONFIDENCE", "0.7"))
+MIROFISH_TIMEOUT: int = int(os.getenv("MIROFISH_TIMEOUT", "30"))
+
 # FinBERT settings
 FINBERT_MODEL: str = os.getenv("FINBERT_MODEL", "ProsusAI/finbert")
 FINBERT_DEVICE: str | None = os.getenv("FINBERT_DEVICE", None)
