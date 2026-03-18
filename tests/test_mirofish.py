@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.db.database import Base
 from src.db.tables import Article, Event, SimulationResult
 from src.simulation.mirofish_client import MirofishClient
-from src.simulation.seed_builder import build_seed
+from src.simulation.seed_builder import build_seed, build_seed_from_snapshot
 from src.simulation.runner import _parse_answers, _run_simulation, _REPORT_QUESTIONS
 
 
@@ -280,9 +280,23 @@ class TestRunner:
     @patch("src.simulation.runner.get_session")
     @patch("src.simulation.runner.MirofishClient")
     def test_run_simulation_end_to_end(self, MockClient, mock_get_session):
-        """Full lifecycle with mocked client and DB."""
+        """Full lifecycle with mocked client and DB (uses plain-dict snapshots)."""
         event = _make_event()
         articles = _make_articles()
+
+        # Build snapshots the same way submit_simulation does
+        event_snapshot = {
+            "id": event.id,
+            "ticker": event.ticker,
+            "event_type": event.event_type,
+            "direction": event.direction,
+            "confidence": event.confidence,
+            "metadata_json": event.metadata_json,
+        }
+        article_snapshots = [
+            {"headline": a.headline, "summary": a.summary, "source": a.source}
+            for a in articles
+        ]
 
         client = MagicMock()
         client.build_graph.return_value = "proj-001"
@@ -305,7 +319,7 @@ class TestRunner:
         mock_ctx.__exit__ = MagicMock(return_value=False)
         mock_get_session.return_value = mock_ctx
 
-        _run_simulation(event.id, event, articles, client=client)
+        _run_simulation(event_snapshot, article_snapshots, client=client)
 
         client.build_graph.assert_called_once()
         client.prepare_simulation.assert_called_once_with("proj-001")
@@ -313,6 +327,7 @@ class TestRunner:
         client.generate_report.assert_called_once_with("proj-001")
         assert client.chat_report.call_count == 3
         mock_session.add.assert_called_once()
+        mock_session.commit.assert_called_once()
 
         sim_result = mock_session.add.call_args[0][0]
         assert isinstance(sim_result, SimulationResult)
