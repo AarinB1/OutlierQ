@@ -30,5 +30,8 @@ htmlcov/
 # OS
 .DS_Store
 
+# MiroFish-Offline (AGPL-3.0 — cloned locally, not vendored)
+lib/mirofish/
+
 # Node (dashboard)
 node_modules/
