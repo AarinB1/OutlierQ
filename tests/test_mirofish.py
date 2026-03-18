@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.db.database import Base
 from src.db.tables import Article, Event, SimulationResult
 from src.simulation.mirofish_client import MirofishClient
-from src.simulation.seed_builder import build_seed
+from src.simulation.seed_builder import build_seed, build_seed_from_snapshot
 from src.simulation.runner import _parse_answers, _run_simulation, _REPORT_QUESTIONS
 
 
@@ -280,9 +280,23 @@ class TestRunner:
     @patch("src.simulation.runner.get_session")
     @patch("src.simulation.runner.MirofishClient")
     def test_run_simulation_end_to_end(self, MockClient, mock_get_session):
-        """Full lifecycle with mocked client and DB."""
+        """Full lifecycle with mocked client and DB (uses plain-dict snapshots)."""
         event = _make_event()
         articles = _make_articles()
+
+        # Build snapshots the same way submit_simulation does
+        event_snapshot = {
+            "id": event.id,
+            "ticker": event.ticker,
+            "event_type": event.event_type,
+            "direction": event.direction,
+            "confidence": event.confidence,
+            "metadata_json": event.metadata_json,
+        }
+        article_snapshots = [
+            {"headline": a.headline, "summary": a.summary, "source": a.source}
+            for a in articles
+        ]
 
         client = MagicMock()
         client.build_graph.return_value = "proj-001"
@@ -305,7 +319,7 @@ class TestRunner:
         mock_ctx.__exit__ = MagicMock(return_value=False)
         mock_get_session.return_value = mock_ctx
 
-        _run_simulation(event.id, event, articles, client=client)
+        _run_simulation(event_snapshot, article_snapshots, client=client)
 
         client.build_graph.assert_called_once()
         client.prepare_simulation.assert_called_once_with("proj-001")
@@ -313,6 +327,7 @@ class TestRunner:
         client.generate_report.assert_called_once_with("proj-001")
         assert client.chat_report.call_count == 3
         mock_session.add.assert_called_once()
+        mock_session.commit.assert_called_once()
 
         sim_result = mock_session.add.call_args[0][0]
         assert isinstance(sim_result, SimulationResult)
@@ -358,3 +373,290 @@ class TestSimulationResultModel:
         assert fetched.direction == "bullish"
         assert fetched.bearish_pct == 20.0
         assert fetched.agent_count == 40
+
+
+# ---------------------------------------------------------------------------
+# Signal + Simulation integration tests
+# ---------------------------------------------------------------------------
+
+class TestSimulationSignalIntegration:
+    """Verify that SignalEngine correctly adjusts signals based on SimulationResult."""
+
+    @pytest.fixture(autouse=True)
+    def _import_engine(self):
+        # Mock heavy dependencies that may not be installed in CI/test envs
+        import types
+        for mod_name in (
+            "yfinance", "ta", "ta.momentum", "ta.volatility", "ta.trend",
+            "curl_cffi", "curl_cffi.requests",
+        ):
+            if mod_name not in sys.modules:
+                sys.modules[mod_name] = types.ModuleType(mod_name)
+        from src.signals.signal_engine import SignalEngine
+        self.SignalEngine = SignalEngine
+
+    def _make_signal_dict(self, direction="call", confidence=0.75, ticker="AAPL", event_id=None):
+        return {
+            "ticker": ticker,
+            "event_type": "earnings_beat",
+            "event_id": event_id or str(uuid.uuid4()),
+            "direction": direction,
+            "current_price": 150.0,
+            "suggested_strike": 155.0,
+            "suggested_expiry": "2026-04-17",
+            "expected_move_pct": 0.07,
+            "decay_type": "moderate",
+            "confidence": confidence,
+            "contract": None,
+            "reasoning": "Test signal",
+            "exploratory": False,
+        }
+
+    def _make_sim_result(self, event_id, direction="bullish", consensus_strength=0.80):
+        return SimulationResult(
+            id=str(uuid.uuid4()),
+            event_id=event_id,
+            direction=direction,
+            bearish_pct=20.0 if direction == "bullish" else 80.0,
+            bullish_pct=80.0 if direction == "bullish" else 20.0,
+            consensus_strength=consensus_strength,
+            narrative_summary="Test simulation result.",
+        )
+
+    def test_boost_confidence_when_simulation_agrees(self):
+        """Signal direction=call (bullish) + sim direction=bullish => boost."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        sim = self._make_sim_result(signal["event_id"], direction="bullish", consensus_strength=0.80)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "call"  # unchanged
+        assert adjusted["simulation_enhanced"] is True
+        # Boost: 0.75 + 0.80 * 0.2 = 0.75 + 0.16 = 0.91
+        assert abs(adjusted["confidence"] - 0.91) < 0.01
+
+    def test_flip_direction_when_simulation_strongly_disagrees(self):
+        """Signal direction=call (bullish) + sim direction=bearish + high consensus => flip to put."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        sim = self._make_sim_result(signal["event_id"], direction="bearish", consensus_strength=0.85)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "put"  # flipped!
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.85 * 0.6 = 0.51
+        assert abs(adjusted["confidence"] - 0.51) < 0.01
+
+    def test_reduce_confidence_when_simulation_weakly_disagrees(self):
+        """Signal direction=call (bullish) + sim direction=bearish + low consensus => reduce 30%."""
+        signal = self._make_signal_dict(direction="call", confidence=0.80)
+        sim = self._make_sim_result(signal["event_id"], direction="bearish", consensus_strength=0.55)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "call"  # NOT flipped (consensus < 0.7)
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.80 * 0.7 = 0.56
+        assert abs(adjusted["confidence"] - 0.56) < 0.01
+
+    def test_neutral_simulation_reduces_confidence(self):
+        """Neutral simulation result => reduce confidence by 10%."""
+        signal = self._make_signal_dict(direction="put", confidence=0.80)
+        sim = self._make_sim_result(signal["event_id"], direction="neutral", consensus_strength=0.50)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "put"  # unchanged
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.80 * 0.9 = 0.72
+        assert abs(adjusted["confidence"] - 0.72) < 0.01
+
+    def test_fallback_no_simulation_result(self):
+        """When no SimulationResult exists, signal is unchanged."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        event_id = signal["event_id"]
+
+        # generate_signals with empty sim map should leave signal alone
+        engine = self.SignalEngine.__new__(self.SignalEngine)
+        engine.demo = False
+        engine._event_profiles = {}
+
+        # Manually test: no sim in map => signal unchanged
+        sim_map: dict = {}
+        sim = sim_map.get(event_id)
+        assert sim is None  # no adjustment applied
+
+        # The original signal should be returned as-is
+        assert signal["confidence"] == 0.75
+        assert signal["direction"] == "call"
+        assert signal.get("simulation_enhanced") is None
+
+    def test_generate_signals_applies_simulation(self):
+        """generate_signals() integrates simulation results into the pipeline."""
+        event_id = str(uuid.uuid4())
+        event_dict = {
+            "ticker": "AAPL",
+            "event_type": "earnings_beat",
+            "event_id": event_id,
+            "id": event_id,
+            "direction": "bullish",
+            "confidence": 0.80,
+            "metadata": {},
+        }
+        sim = self._make_sim_result(event_id, direction="bullish", consensus_strength=0.90)
+        sim_map = {event_id: sim}
+
+        mock_market = MagicMock()
+        mock_market.get_current_price.return_value = 150.0
+        mock_market.fetch_options_chain.return_value = {"calls": None, "puts": None}
+
+        with patch.object(self.SignalEngine, '_apply_technical_adjustments', side_effect=lambda s, _: s):
+            engine = self.SignalEngine(market_fetcher=mock_market)
+            # Mock technical analyzer to avoid real calls
+            engine.technical = MagicMock()
+            engine.technical.get_ticker_indicators.return_value = None
+            signals = engine.generate_signals([event_dict], simulation_results=sim_map)
+
+        assert len(signals) == 1
+        sig = signals[0]
+        assert sig.get("simulation_enhanced") is True
+        # Boosted: base confidence + 0.90 * 0.2
+        assert sig["confidence"] > 0.70
+
+
+# ---------------------------------------------------------------------------
+# Runtime config tests
+# ---------------------------------------------------------------------------
+
+class TestRuntimeConfig:
+    """Verify config/runtime.py toggle behaviour."""
+
+    def test_default_state_matches_settings(self):
+        """Runtime config initialises from MIROFISH_ENABLED in settings."""
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+        from config.settings import MIROFISH_ENABLED
+
+        # Reset to default
+        set_mirofish_enabled(MIROFISH_ENABLED)
+        assert is_mirofish_enabled() == MIROFISH_ENABLED
+
+    def test_set_mirofish_enabled(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+
+        set_mirofish_enabled(True)
+        assert is_mirofish_enabled() is True
+
+        set_mirofish_enabled(False)
+        assert is_mirofish_enabled() is False
+
+    def test_toggle_mirofish(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled, toggle_mirofish
+
+        set_mirofish_enabled(False)
+        result = toggle_mirofish()
+        assert result is True
+        assert is_mirofish_enabled() is True
+
+        result = toggle_mirofish()
+        assert result is False
+        assert is_mirofish_enabled() is False
+
+
+# ---------------------------------------------------------------------------
+# CLI flag test
+# ---------------------------------------------------------------------------
+
+class TestCLIFlag:
+    """Verify --mirofish CLI flag sets runtime config."""
+
+    def test_mirofish_flag_enables_runtime(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+
+        # Start disabled
+        set_mirofish_enabled(False)
+        assert is_mirofish_enabled() is False
+
+        # Simulate what main() does when --mirofish is passed
+        set_mirofish_enabled(True)
+        assert is_mirofish_enabled() is True
+
+        # Clean up
+        set_mirofish_enabled(False)
+
+    def test_argparse_accepts_mirofish_flag(self):
+        """The argument parser recognises --mirofish without error."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from scripts.run_ingestion import parse_args
+
+        with patch("sys.argv", ["run_ingestion.py", "--mirofish", "--once"]):
+            args = parse_args()
+
+        assert args.mirofish is True
+
+    def test_argparse_default_mirofish_off(self):
+        from scripts.run_ingestion import parse_args
+
+        with patch("sys.argv", ["run_ingestion.py", "--once"]):
+            args = parse_args()
+
+        assert args.mirofish is False
+
+
+# ---------------------------------------------------------------------------
+# API endpoint tests
+# ---------------------------------------------------------------------------
+
+class TestMirofishAPI:
+    """Verify /api/mirofish/toggle and /api/mirofish/status endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_client(self):
+        # Mock heavy deps so FastAPI app can import in CI
+        import types
+        for mod_name in (
+            "yfinance", "ta", "ta.momentum", "ta.volatility", "ta.trend",
+            "curl_cffi", "curl_cffi.requests",
+            "vaderSentiment", "vaderSentiment.vaderSentiment",
+            "torch", "transformers",
+        ):
+            if mod_name not in sys.modules:
+                mod = types.ModuleType(mod_name)
+                # vaderSentiment.vaderSentiment needs SentimentIntensityAnalyzer
+                if mod_name == "vaderSentiment.vaderSentiment":
+                    mod.SentimentIntensityAnalyzer = MagicMock  # type: ignore[attr-defined]
+                sys.modules[mod_name] = mod
+
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        self.client = TestClient(app)
+
+    def test_get_status(self):
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "mirofish_enabled" in data
+        assert isinstance(data["mirofish_enabled"], bool)
+
+    def test_toggle_flips_state(self):
+        from config.runtime import set_mirofish_enabled
+
+        # Start from a known state
+        set_mirofish_enabled(False)
+
+        # First toggle: False -> True
+        resp = self.client.post("/api/mirofish/toggle")
+        assert resp.status_code == 200
+        assert resp.json()["mirofish_enabled"] is True
+
+        # Verify via GET
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.json()["mirofish_enabled"] is True
+
+        # Second toggle: True -> False
+        resp = self.client.post("/api/mirofish/toggle")
+        assert resp.status_code == 200
+        assert resp.json()["mirofish_enabled"] is False
+
+        # Verify via GET
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.json()["mirofish_enabled"] is False

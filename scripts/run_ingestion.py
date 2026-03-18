@@ -161,6 +161,11 @@ def parse_args() -> argparse.Namespace:
         default="momentum",
         help="Trading strategy for backtesting (momentum, mean_reversion, breakout)",
     )
+    parser.add_argument(
+        "--mirofish",
+        action="store_true",
+        help="Enable MiroFish simulation enrichment for this run (overrides .env setting)",
+    )
     return parser.parse_args()
 
 
@@ -971,6 +976,12 @@ def main() -> None:
 
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(format=LOG_FORMAT, level=level)
+
+    # Apply --mirofish CLI override before anything else
+    if args.mirofish:
+        from config.runtime import set_mirofish_enabled
+        set_mirofish_enabled(True)
+        logger.info("MiroFish simulation enrichment enabled via --mirofish flag")
 
     # Standalone modes
     init_db()

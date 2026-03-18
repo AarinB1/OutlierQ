@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from config.settings import LOG_FORMAT
 from src.db.database import get_session
-from src.db.tables import Event, Signal
+from src.db.tables import Event, Signal, SimulationResult
 from src.ingestion.market_fetcher import MarketFetcher
 from src.indicators.technical import TechnicalAnalyzer
 
@@ -614,12 +614,93 @@ class SignalEngine:
 
         return signal
 
-    def generate_signals(self, events: list[dict]) -> list[dict]:
-        """Generate signals for a batch of events, sorted by confidence."""
+    # ── Simulation adjustment ────────────────────────────────────────
+
+    @staticmethod
+    def apply_simulation_adjustment(
+        signal: dict,
+        sim_result: SimulationResult,
+    ) -> dict:
+        """Adjust a signal dict based on MiroFish simulation output.
+
+        Rules:
+        - Agreement: boost confidence by consensus_strength * 0.2 (cap 1.0)
+        - Disagreement with high consensus (>= 0.7): flip direction, set
+          confidence to consensus_strength * 0.6
+        - Disagreement with low consensus (< 0.7): reduce confidence by 30%
+        - Neutral simulation: reduce confidence by 10%
+        """
+        adjusted = dict(signal)
+        sim_direction = (sim_result.direction or "neutral").lower()
+        consensus = float(sim_result.consensus_strength or 0.5)
+
+        # Map event direction (bullish/bearish) to signal direction (call/put)
+        signal_dir = adjusted["direction"]  # call or put
+        event_implies = "bullish" if signal_dir == "call" else "bearish"
+
+        if sim_direction == "neutral":
+            adjusted["confidence"] = max(0.1, adjusted["confidence"] * 0.9)
+            adjusted["simulation_enhanced"] = True
+            logger.info(
+                "Simulation neutral for %s — confidence reduced 10%% to %.2f",
+                adjusted["ticker"], adjusted["confidence"],
+            )
+        elif sim_direction == event_implies:
+            # Agreement — boost
+            boost = consensus * 0.2
+            adjusted["confidence"] = min(1.0, adjusted["confidence"] + boost)
+            adjusted["simulation_enhanced"] = True
+            logger.info(
+                "Simulation agrees (%s) for %s — confidence boosted by %.2f to %.2f",
+                sim_direction, adjusted["ticker"], boost, adjusted["confidence"],
+            )
+        else:
+            # Disagreement
+            if consensus >= 0.7:
+                # Flip direction
+                adjusted["direction"] = "put" if signal_dir == "call" else "call"
+                adjusted["confidence"] = consensus * 0.6
+                adjusted["simulation_enhanced"] = True
+                logger.info(
+                    "Simulation strongly disagrees for %s (consensus=%.2f) — "
+                    "flipping %s -> %s, confidence=%.2f",
+                    adjusted["ticker"], consensus,
+                    signal_dir, adjusted["direction"], adjusted["confidence"],
+                )
+            else:
+                # Reduce confidence by 30%
+                adjusted["confidence"] = max(0.1, adjusted["confidence"] * 0.7)
+                adjusted["simulation_enhanced"] = True
+                logger.info(
+                    "Simulation weakly disagrees for %s (consensus=%.2f) — "
+                    "confidence reduced 30%% to %.2f",
+                    adjusted["ticker"], consensus, adjusted["confidence"],
+                )
+
+        return adjusted
+
+    def generate_signals(
+        self,
+        events: list[dict],
+        simulation_results: dict | None = None,
+    ) -> list[dict]:
+        """Generate signals for a batch of events, sorted by confidence.
+
+        Parameters
+        ----------
+        simulation_results : dict, optional
+            Mapping of event_id -> SimulationResult.  When present, signals
+            are adjusted based on simulation output before sorting.
+        """
+        sim_map = simulation_results or {}
         signals = []
         for event in events:
             signal = self.generate_signal(event)
             if signal is not None:
+                event_id = signal.get("event_id")
+                sim = sim_map.get(event_id) if event_id else None
+                if sim is not None:
+                    signal = self.apply_simulation_adjustment(signal, sim)
                 signals.append(signal)
 
         signals.sort(key=lambda s: s["confidence"], reverse=True)
@@ -630,13 +711,19 @@ class SignalEngine:
         self,
         events: list[dict],
         session: Session | None = None,
+        simulation_results: dict | None = None,
     ) -> list[Signal]:
         """Generate signals and store them in the signals table.
 
         Each signal is linked to its source event via event_id.
+
+        Parameters
+        ----------
+        simulation_results : dict, optional
+            Mapping of event_id -> SimulationResult used to adjust signals.
         """
         def _run(s: Session) -> list[Signal]:
-            signal_dicts = self.generate_signals(events)
+            signal_dicts = self.generate_signals(events, simulation_results=simulation_results)
             stored: list[Signal] = []
 
             for sig in signal_dicts:
@@ -654,6 +741,7 @@ class SignalEngine:
                     confidence=sig["confidence"],
                     exploratory=sig.get("exploratory", False),
                     discovery_source=sig.get("discovery_source"),
+                    simulation_enhanced=sig.get("simulation_enhanced", False),
                 )
                 s.add(record)
                 stored.append(record)
