@@ -196,6 +196,11 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             SEC
           </span>
         )}
+        {signal.simulation_enhanced && (
+          <span className="inline-block px-2 py-0.5 rounded bg-violet-500/20 text-violet-400 text-[10px] font-sans font-medium uppercase tracking-wider" title="Verified by MiroFish simulation">
+            MiroFish
+          </span>
+        )}
         {signal.exploratory && (
           <span className="inline-block px-2 py-0.5 rounded bg-accent-amber/20 text-accent-amber text-[10px] font-sans font-medium uppercase tracking-wider">
             Exploratory

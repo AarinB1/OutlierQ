@@ -50,6 +50,7 @@ export interface Signal {
   event?: EventData;
   exploratory?: boolean;
   discovery_source?: string | null;
+  simulation_enhanced?: boolean;
 }
 
 export interface AccuracyStats {
