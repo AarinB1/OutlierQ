@@ -37,6 +37,9 @@
   .btn-primary {
     @apply px-4 py-2 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm;
   }
+  .skeleton {
+    @apply animate-pulse bg-surface-tertiary/80;
+  }
   .toast-enter {
     animation: toastSlideIn 250ms ease-out forwards;
   }

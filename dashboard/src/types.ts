@@ -692,7 +692,11 @@ export interface TradingChartData {
 
 // ── Sprint 5: Watchlist & Journal Types ─────────────────────────
 
-export interface WatchlistItem {
+export interface DemoStatus {
+  demo_mode: boolean
+}
+
+export interface WatchlistSaved {
   id: string
   name: string
   tickers: string[]
@@ -723,7 +727,7 @@ export interface JournalStats {
 
 // ── Sprint 6: Settings & Performance Types ──────────────────────
 
-export interface UserSettingsData {
+export interface TradingSettings {
   notifications_enabled: boolean
   notify_on_signal: boolean
   notify_on_backtest_complete: boolean

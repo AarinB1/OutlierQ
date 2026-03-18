@@ -12,6 +12,7 @@ import TradeJournal from './components/TradeJournal'
 import PerformanceAttribution from './components/PerformanceAttribution'
 import SettingsPage from './components/SettingsPage'
 import { ToastProvider } from './components/Toast'
+import { TradingSettingsProvider } from './context/TradingSettingsContext'
 
 export type Page =
   | 'signals'
@@ -31,22 +32,23 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <Layout page={page} setPage={setPage}>
-        <div key={page} className="animate-fade-in">
-          {page === 'signals' && <TradingSignals />}
-          {page === 'backtest' && <BacktestPanel />}
-          {page === 'models' && <ModelPerformance />}
-          {page === 'portfolio' && <PortfolioView />}
-          {page === 'performance' && <PerformanceAttribution />}
-          {page === 'risk' && <RiskDashboard />}
-          {page === 'strategy' && <StrategyBuilder />}
-          {page === 'charts' && <ChartView />}
-          {page === 'watchlists' && <WatchlistManager />}
-          {page === 'journal' && <TradeJournal />}
-          {page === 'settings' && <SettingsPage />}
-        </div>
-      </Layout>
+      <TradingSettingsProvider>
+        <Layout page={page} setPage={setPage}>
+          <div key={page} className="animate-fade-in">
+            {page === 'signals' && <TradingSignals />}
+            {page === 'backtest' && <BacktestPanel />}
+            {page === 'models' && <ModelPerformance />}
+            {page === 'portfolio' && <PortfolioView />}
+            {page === 'performance' && <PerformanceAttribution />}
+            {page === 'risk' && <RiskDashboard />}
+            {page === 'strategy' && <StrategyBuilder />}
+            {page === 'charts' && <ChartView />}
+            {page === 'watchlists' && <WatchlistManager />}
+            {page === 'journal' && <TradeJournal />}
+            {page === 'settings' && <SettingsPage />}
+          </div>
+        </Layout>
+      </TradingSettingsProvider>
     </ToastProvider>
   )
 }
-

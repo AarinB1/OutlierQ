@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchModels, fetchModelHistory, triggerModelTrain } from '../api'
 import type { ModelCheckpoint, ModelTrainResult, ModelVersionHistoryEntry } from '../types'
 import { useToast } from '../hooks/useToast'
+import EmptyState from './EmptyState'
 
 type CardTrainState = 'idle' | 'running'
 
@@ -193,14 +194,12 @@ export default function ModelPerformance() {
           ))}
         </div>
       ) : sortedModels.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center text-center py-10">
-          <div className="text-sm text-txt-secondary mb-2">
-            No model checkpoints registered.
-          </div>
-          <div className="text-xs text-txt-tertiary">
-            Models are created when the training pipeline runs. Use{' '}
-            <span className="font-mono text-[11px]">--train-trading</span> to train models.
-          </div>
+        <div className="card">
+          <EmptyState
+            icon="⚙"
+            title="No model checkpoints registered"
+            subtitle="Models are created when the training pipeline runs. Use the CLI command --train-trading or click Train on a model card."
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

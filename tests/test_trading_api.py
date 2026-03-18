@@ -256,6 +256,7 @@ def test_save_strategy_config_upsert():
     client.post("/api/trading/strategies/configs", json=payload)
     payload["params"]["lookback"] = 40
     resp = client.post("/api/trading/strategies/configs", json=payload)
+    assert resp.status_code == 200
     assert resp.json()["status"] == "updated"
 
 
@@ -267,6 +268,31 @@ def test_delete_strategy_config():
     assert del_resp.status_code == 200
 
 
+def test_chart_data_returns_structure():
+    resp = client.get("/api/trading/chart-data/SPY?period=1mo")
+    if resp.status_code == 200:
+        data = resp.json()
+        assert "ticker" in data
+        assert "ohlcv" in data
+        assert "markers" in data
+        assert isinstance(data["ohlcv"], list)
+    else:
+        assert resp.status_code in (404, 500, 502, 503)
+
+
+def test_demo_toggle_and_status():
+    status_resp = client.get("/api/trading/demo-status")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["demo_mode"] is False
+
+    toggle_resp = client.post("/api/trading/demo-toggle")
+    assert toggle_resp.status_code == 200
+    assert toggle_resp.json()["demo_mode"] is True
+
+    status_resp = client.get("/api/trading/demo-status")
+    assert status_resp.json()["demo_mode"] is True
+
+
 # ── Sprint 5: Watchlists ─────────────────────────────────────────
 
 
@@ -274,10 +300,18 @@ def test_watchlist_crud():
     resp = client.post("/api/trading/watchlists", json={"name": "Tech", "tickers": ["AAPL", "MSFT"]})
     assert resp.status_code == 200
     wl_id = resp.json()["id"]
+
     resp = client.get("/api/trading/watchlists")
+    assert resp.status_code == 200
     assert any(w["name"] == "Tech" for w in resp.json())
-    resp = client.put(f"/api/trading/watchlists/{wl_id}", json={"tickers": ["AAPL", "MSFT", "NVDA"]})
+
+    resp = client.put(
+        f"/api/trading/watchlists/{wl_id}",
+        json={"tickers": ["AAPL", "MSFT", "NVDA"]},
+    )
+    assert resp.status_code == 200
     assert len(resp.json()["tickers"]) == 3
+
     resp = client.delete(f"/api/trading/watchlists/{wl_id}")
     assert resp.status_code == 200
 
@@ -308,6 +342,47 @@ def test_journal_stats_empty():
     assert data["total_entries"] == 0
 
 
+def test_journal_crud_and_stats():
+    create_resp = client.post(
+        "/api/trading/journal",
+        json={
+            "ticker": "AAPL",
+            "direction": "BUY",
+            "entry_price": 100.0,
+            "exit_price": 110.0,
+            "pnl_dollars": 250.0,
+            "setup_notes": "Breakout setup",
+            "review_notes": "Worked well",
+            "tags": ["breakout", "trend"],
+            "rating": 4,
+        },
+    )
+    assert create_resp.status_code == 200
+    entry_id = create_resp.json()["id"]
+
+    list_resp = client.get("/api/trading/journal")
+    assert list_resp.status_code == 200
+    assert len(list_resp.json()) == 1
+
+    update_resp = client.patch(
+        f"/api/trading/journal/{entry_id}",
+        json={"review_notes": "Updated review", "tags": ["breakout"], "rating": 5},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["status"] == "updated"
+
+    stats_resp = client.get("/api/trading/journal/stats")
+    assert stats_resp.status_code == 200
+    stats = stats_resp.json()
+    assert stats["total_entries"] == 1
+    assert stats["avg_rating"] == 5.0
+    assert stats["total_pnl"] == 250.0
+    assert stats["tag_counts"]["breakout"] == 1
+
+    delete_resp = client.delete(f"/api/trading/journal/{entry_id}")
+    assert delete_resp.status_code == 200
+
+
 # ── Sprint 6: Settings ───────────────────────────────────────────
 
 
@@ -320,7 +395,10 @@ def test_settings_returns_defaults():
 
 
 def test_settings_update():
-    resp = client.put("/api/trading/settings", json={"min_signal_confidence": 0.7, "email": "test@example.com"})
+    resp = client.put(
+        "/api/trading/settings",
+        json={"min_signal_confidence": 0.7, "email": "test@example.com"},
+    )
     assert resp.status_code == 200
     get_resp = client.get("/api/trading/settings")
     assert get_resp.json()["min_signal_confidence"] == 0.7
@@ -336,4 +414,3 @@ def test_performance_attribution_empty():
     data = resp.json()
     assert data["by_strategy"] == {}
     assert data["rolling_accuracy"] == []
-

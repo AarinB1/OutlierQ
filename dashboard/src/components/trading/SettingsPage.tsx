@@ -1,127 +1,223 @@
-import { useState, useEffect } from 'react'
-import { fetchSettings, updateSettings } from '../../api'
-import type { UserSettingsData } from '../../types'
+import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '../../hooks/useToast'
+import { useTradingSettings } from '../../context/TradingSettingsContext'
+import type { TradingSettings } from '../../types'
 
 export default function SettingsPage() {
   const { addToast } = useToast()
-  const [settings, setSettings] = useState<UserSettingsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default')
+  const { settings, settingsLoading, saveSettings } = useTradingSettings()
+  const [draft, setDraft] = useState<TradingSettings | null>(null)
+  const [permission, setPermission] = useState<string>('default')
 
   useEffect(() => {
-    fetchSettings()
-      .then(setSettings)
-      .catch(() => addToast('error', 'Load failed', 'Could not load settings'))
-      .finally(() => setLoading(false))
-    if ('Notification' in window) {
-      setNotifPermission(Notification.permission)
+    if (settings) setDraft(settings)
+  }, [settings])
+
+  useEffect(() => {
+    if (typeof Notification !== 'undefined') {
+      setPermission(Notification.permission)
     }
   }, [])
 
-  const update = <K extends keyof UserSettingsData>(key: K, value: UserSettingsData[K]) => {
-    setSettings(prev => prev ? { ...prev, [key]: value } : prev)
-  }
+  const masterDisabled = !draft?.notifications_enabled
 
-  const handleSave = async () => {
-    if (!settings) return
-    try {
-      await updateSettings(settings as unknown as Record<string, unknown>)
-      addToast('info', 'Settings saved', 'Your preferences have been updated')
-    } catch {
-      addToast('error', 'Save failed', 'Could not save settings')
-    }
-  }
+  const permissionMeta = useMemo(() => {
+    if (permission === 'granted') return { label: 'Granted', className: 'text-accent-green' }
+    if (permission === 'denied') return { label: 'Denied', className: 'text-accent-red' }
+    return { label: 'Not set', className: 'text-accent-amber' }
+  }, [permission])
 
-  const requestNotifPermission = async () => {
-    if ('Notification' in window) {
-      const perm = await Notification.requestPermission()
-      setNotifPermission(perm)
-    }
-  }
-
-  const sendTestNotification = () => {
-    if (Notification.permission === 'granted') {
-      new Notification('OutlierQ Test', { body: 'Browser notifications are working!' })
-    }
-  }
-
-  if (loading || !settings) {
+  if (settingsLoading || !draft) {
     return (
       <div className="space-y-4">
         <h2 className="font-mono font-bold text-lg">Settings</h2>
-        <div className="card"><div className="skeleton h-48 w-full" /></div>
+        <div className="card space-y-3">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <div key={idx} className="skeleton h-10 w-full rounded" />
+          ))}
+        </div>
       </div>
     )
   }
 
-  const disabled = !settings.notifications_enabled
+  const update = <K extends keyof TradingSettings>(key: K, value: TradingSettings[K]) => {
+    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev))
+  }
+
+  const requestPermission = async () => {
+    if (typeof Notification === 'undefined') return
+    const result = await Notification.requestPermission()
+    setPermission(result)
+  }
+
+  const sendTest = () => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    new Notification('OutlierQ test notification', {
+      body: 'Trading alerts are enabled in your browser.',
+      icon: '/favicon.ico',
+    })
+  }
+
+  const handleSave = async () => {
+    try {
+      await saveSettings(draft)
+      addToast('info', 'Settings saved', 'Trading notification preferences updated.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save settings'
+      addToast('error', 'Save failed', message)
+    }
+  }
 
   return (
     <div className="space-y-4">
       <h2 className="font-mono font-bold text-lg">Settings</h2>
 
-      {/* Notifications */}
       <div className="card space-y-3">
-        <h3 className="font-mono font-bold text-sm">Notifications</h3>
-        <ToggleRow label="Enable notifications" checked={settings.notifications_enabled} onChange={v => update('notifications_enabled', v)} />
-        <ToggleRow label="Notify on new signal" checked={settings.notify_on_signal} onChange={v => update('notify_on_signal', v)} disabled={disabled} />
-        <ToggleRow label="Notify on backtest complete" checked={settings.notify_on_backtest_complete} onChange={v => update('notify_on_backtest_complete', v)} disabled={disabled} />
-        <ToggleRow label="Notify on drawdown breach" checked={settings.notify_on_drawdown_breach} onChange={v => update('notify_on_drawdown_breach', v)} disabled={disabled} />
-        <ToggleRow label="Only notify for watched tickers" checked={settings.watched_tickers_only} onChange={v => update('watched_tickers_only', v)} disabled={disabled} />
+        <h3 className="font-mono font-semibold text-sm">Notifications</h3>
+        <ToggleRow
+          label="Enable notifications"
+          checked={draft.notifications_enabled}
+          onChange={(value) => update('notifications_enabled', value)}
+        />
+        <ToggleRow
+          label="Notify on new signal"
+          checked={draft.notify_on_signal}
+          disabled={masterDisabled}
+          onChange={(value) => update('notify_on_signal', value)}
+        />
+        <ToggleRow
+          label="Notify on backtest complete"
+          checked={draft.notify_on_backtest_complete}
+          disabled={masterDisabled}
+          onChange={(value) => update('notify_on_backtest_complete', value)}
+        />
+        <ToggleRow
+          label="Notify on drawdown breach"
+          checked={draft.notify_on_drawdown_breach}
+          disabled={masterDisabled}
+          onChange={(value) => update('notify_on_drawdown_breach', value)}
+        />
+        <ToggleRow
+          label="Only notify for watched tickers"
+          checked={draft.watched_tickers_only}
+          disabled={masterDisabled}
+          onChange={(value) => update('watched_tickers_only', value)}
+        />
       </div>
 
-      {/* Thresholds */}
-      <div className="card space-y-3">
-        <h3 className="font-mono font-bold text-sm">Thresholds</h3>
-        <div className="flex items-center gap-4">
-          <span className="label w-48 text-xs">Min Signal Confidence</span>
-          <input type="range" min={0.3} max={0.9} step={0.05} value={settings.min_signal_confidence} onChange={e => update('min_signal_confidence', parseFloat(e.target.value))} className="flex-1 accent-accent-blue" />
-          <span className="font-mono text-sm w-12 text-right">{settings.min_signal_confidence.toFixed(2)}</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="label w-48 text-xs">Drawdown Alert Threshold (%)</span>
-          <input type="range" min={1} max={20} step={0.5} value={settings.drawdown_alert_threshold} onChange={e => update('drawdown_alert_threshold', parseFloat(e.target.value))} className="flex-1 accent-accent-blue" />
-          <span className="font-mono text-sm w-12 text-right">{settings.drawdown_alert_threshold.toFixed(1)}%</span>
-        </div>
+      <div className="card space-y-4">
+        <h3 className="font-mono font-semibold text-sm">Thresholds</h3>
+        <SliderRow
+          label="Min signal confidence"
+          min={0.3}
+          max={0.9}
+          step={0.05}
+          value={draft.min_signal_confidence}
+          onChange={(value) => update('min_signal_confidence', value)}
+        />
+        <SliderRow
+          label="Drawdown alert threshold"
+          min={1}
+          max={20}
+          step={1}
+          value={draft.drawdown_alert_threshold}
+          onChange={(value) => update('drawdown_alert_threshold', value)}
+          suffix="%"
+        />
       </div>
 
-      {/* Browser Push */}
       <div className="card space-y-3">
-        <h3 className="font-mono font-bold text-sm">Browser Push Notifications</h3>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-txt-secondary">Status:</span>
-          <span className={`pill text-xs ${notifPermission === 'granted' ? 'bg-accent-green-muted text-accent-green' : notifPermission === 'denied' ? 'bg-accent-red-muted text-accent-red' : 'bg-accent-amber-muted text-accent-amber'}`}>
-            {notifPermission === 'granted' ? 'Granted' : notifPermission === 'denied' ? 'Denied' : 'Not set'}
-          </span>
-        </div>
+        <h3 className="font-mono font-semibold text-sm">Browser Push Notifications</h3>
+        <div className={`text-sm ${permissionMeta.className}`}>Permission: {permissionMeta.label}</div>
         <div className="flex gap-2">
-          {notifPermission !== 'granted' && (
-            <button className="btn-primary text-xs px-4 py-2" onClick={requestNotifPermission}>Enable Push Notifications</button>
-          )}
-          {notifPermission === 'granted' && (
-            <button className="btn-primary text-xs px-4 py-2" onClick={sendTestNotification}>Send Test Notification</button>
-          )}
+          <button className="btn-primary text-xs px-4 py-2" onClick={requestPermission}>
+            Enable Push Notifications
+          </button>
+          <button
+            className="px-3 py-2 border border-border rounded text-xs text-txt-secondary disabled:opacity-50"
+            onClick={sendTest}
+            disabled={permission !== 'granted'}
+          >
+            Send Test Notification
+          </button>
         </div>
       </div>
 
-      {/* Email */}
-      <div className="card space-y-3 opacity-60">
-        <h3 className="font-mono font-bold text-sm">Email Notifications (Coming Soon)</h3>
-        <input disabled value={settings.email || ''} placeholder="email@example.com" className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm opacity-50" />
+      <div className="card opacity-70 space-y-2">
+        <h3 className="font-mono font-semibold text-sm">Email Notifications (Coming Soon)</h3>
+        <input
+          disabled
+          value={draft.email ?? ''}
+          placeholder="you@example.com"
+          className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+        />
         <p className="text-xs text-txt-tertiary">Email alerts will be available in a future update.</p>
       </div>
 
-      <button className="btn-primary px-6 py-2" onClick={handleSave}>Save Settings</button>
+      <button className="btn-primary" onClick={handleSave}>
+        Save Settings
+      </button>
     </div>
   )
 }
 
-function ToggleRow({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function ToggleRow({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (value: boolean) => void
+}) {
   return (
-    <label className={`flex justify-between items-center py-1 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+    <label className={`flex items-center justify-between gap-3 ${disabled ? 'opacity-50' : ''}`}>
       <span className="text-sm text-txt-secondary">{label}</span>
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-accent-blue w-4 h-4" />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
     </label>
+  )
+}
+
+function SliderRow({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  suffix = '',
+}: {
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  onChange: (value: number) => void
+  suffix?: string
+}) {
+  return (
+    <div className="grid grid-cols-[180px_1fr_72px] gap-4 items-center">
+      <span className="text-sm text-txt-secondary">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="accent-accent-blue"
+      />
+      <span className="font-mono text-sm text-right">
+        {value}
+        {suffix}
+      </span>
+    </div>
   )
 }

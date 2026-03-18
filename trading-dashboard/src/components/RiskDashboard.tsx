@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchRegime, fetchRegimeHistory, fetchRiskSummary, fetchRiskLimits } from '../api'
 import type { RegimeStatus, RegimeHistoryPoint, RiskSummary, RiskLimitsConfig } from '../types'
 import { useToast } from '../hooks/useToast'
+import EmptyState from './EmptyState'
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 
@@ -472,9 +473,11 @@ export default function RiskDashboard() {
             </div>
           </div>
         ) : !hasPositions ? (
-          <div className="text-sm text-txt-secondary">
-            Portfolio is 100% cash. No position concentration risk.
-          </div>
+          <EmptyState
+            icon="◇"
+            title="No concentration data yet"
+            subtitle="Portfolio is fully in cash, so there is no position concentration risk to display."
+          />
         ) : (
           <>
             <div className="h-8 rounded-full overflow-hidden flex bg-surface-tertiary mb-3">
@@ -541,9 +544,11 @@ export default function RiskDashboard() {
             <div className="skeleton h-3 w-2/3" />
           </div>
         ) : sectorEntries.length === 0 ? (
-          <div className="text-sm text-txt-secondary">
-            No sector exposure data. Open positions to see sector breakdown.
-          </div>
+          <EmptyState
+            icon="◇"
+            title="No sector exposure yet"
+            subtitle="Open positions to see sector concentration and diversification risk."
+          />
         ) : (
           <div className="space-y-3">
             {sectorEntries.map(({ sector, pct }) => {
@@ -590,9 +595,11 @@ export default function RiskDashboard() {
             <div className="skeleton h-3 w-2/3" />
           </div>
         ) : segments.length === 0 ? (
-          <div className="text-sm text-txt-secondary">
-            No regime history yet. Regime is detected when the signal engine runs.
-          </div>
+          <EmptyState
+            icon="◇"
+            title="No regime history yet"
+            subtitle="Regime history appears after the trading signal engine has run and stored market regime snapshots."
+          />
         ) : (
           <>
             <div className="h-10 rounded-lg overflow-hidden flex mb-3 bg-surface-tertiary">

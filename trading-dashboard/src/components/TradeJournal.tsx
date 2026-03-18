@@ -1,24 +1,37 @@
-import { useState, useEffect } from 'react'
-import { fetchJournalEntries, createJournalEntry, updateJournalEntry, deleteJournalEntry, fetchJournalStats } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  createJournalEntry,
+  deleteJournalEntry,
+  fetchJournalEntries,
+  fetchJournalStats,
+  updateJournalEntry,
+} from '../api'
 import type { JournalEntry, JournalStats } from '../types'
 import { useToast } from '../hooks/useToast'
 import EmptyState from './EmptyState'
 
-function StarRating({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
-  return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map(n => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange?.(n)}
-          className={`text-lg ${n <= value ? 'text-accent-amber' : 'text-surface-tertiary'} ${onChange ? 'cursor-pointer' : 'cursor-default'}`}
-        >
-          ★
-        </button>
-      ))}
-    </div>
-  )
+interface JournalFormState {
+  ticker: string
+  direction: string
+  entry_price: string
+  exit_price: string
+  pnl_dollars: string
+  setup_notes: string
+  review_notes: string
+  tags: string
+  rating: number
+}
+
+const emptyForm: JournalFormState = {
+  ticker: '',
+  direction: 'BUY',
+  entry_price: '',
+  exit_price: '',
+  pnl_dollars: '',
+  setup_notes: '',
+  review_notes: '',
+  tags: '',
+  rating: 3,
 }
 
 export default function TradeJournal() {
@@ -27,217 +40,286 @@ export default function TradeJournal() {
   const [stats, setStats] = useState<JournalStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null)
+  const [form, setForm] = useState<JournalFormState>(emptyForm)
 
-  const [formTicker, setFormTicker] = useState('')
-  const [formDirection, setFormDirection] = useState('BUY')
-  const [formEntry, setFormEntry] = useState('')
-  const [formExit, setFormExit] = useState('')
-  const [formPnl, setFormPnl] = useState('')
-  const [formSetup, setFormSetup] = useState('')
-  const [formReview, setFormReview] = useState('')
-  const [formTags, setFormTags] = useState('')
-  const [formRating, setFormRating] = useState(3)
-
-  const load = () => {
+  const load = async () => {
     setLoading(true)
-    Promise.all([fetchJournalEntries(), fetchJournalStats()])
-      .then(([e, s]) => { setEntries(e); setStats(s) })
-      .catch(() => addToast('error', 'Load failed', 'Could not load journal'))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
-
-  const resetForm = () => {
-    setFormTicker(''); setFormDirection('BUY'); setFormEntry(''); setFormExit('')
-    setFormPnl(''); setFormSetup(''); setFormReview(''); setFormTags(''); setFormRating(3)
-    setEditingId(null); setShowForm(false)
-  }
-
-  const handleSave = async () => {
-    const body: Record<string, unknown> = {
-      ticker: formTicker.toUpperCase(),
-      direction: formDirection,
-      entry_price: formEntry ? parseFloat(formEntry) : null,
-      exit_price: formExit ? parseFloat(formExit) : null,
-      pnl_dollars: formPnl ? parseFloat(formPnl) : null,
-      setup_notes: formSetup || null,
-      review_notes: formReview || null,
-      tags: formTags.split(',').map(t => t.trim()).filter(Boolean),
-      rating: formRating,
-    }
     try {
-      if (editingId) {
-        await updateJournalEntry(editingId, body)
-        addToast('info', 'Entry updated', 'Journal entry updated')
-      } else {
-        await createJournalEntry(body)
-        addToast('info', 'Entry created', 'Journal entry added')
-      }
-      resetForm()
-      load()
-    } catch {
-      addToast('error', 'Save failed', 'Could not save journal entry')
+      const [nextEntries, nextStats] = await Promise.all([
+        fetchJournalEntries(),
+        fetchJournalStats(),
+      ])
+      setEntries(nextEntries)
+      setStats(nextStats)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load journal'
+      addToast('error', 'Journal error', message)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleEdit = (e: JournalEntry) => {
-    setEditingId(e.id)
-    setFormTicker(e.ticker)
-    setFormDirection(e.direction || 'BUY')
-    setFormEntry(e.entry_price?.toString() || '')
-    setFormExit(e.exit_price?.toString() || '')
-    setFormPnl(e.pnl_dollars?.toString() || '')
-    setFormSetup(e.setup_notes || '')
-    setFormReview(e.review_notes || '')
-    setFormTags(e.tags.join(', '))
-    setFormRating(e.rating || 3)
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const openCreate = () => {
+    setEditingEntry(null)
+    setForm(emptyForm)
     setShowForm(true)
   }
 
-  const handleDelete = async (id: string) => {
+  const openEdit = (entry: JournalEntry) => {
+    setEditingEntry(entry)
+    setForm({
+      ticker: entry.ticker,
+      direction: entry.direction ?? 'BUY',
+      entry_price: entry.entry_price?.toString() ?? '',
+      exit_price: entry.exit_price?.toString() ?? '',
+      pnl_dollars: entry.pnl_dollars?.toString() ?? '',
+      setup_notes: entry.setup_notes ?? '',
+      review_notes: entry.review_notes ?? '',
+      tags: entry.tags.join(', '),
+      rating: entry.rating ?? 3,
+    })
+    setShowForm(true)
+  }
+
+  const topTag = useMemo(() => {
+    if (!stats) return '—'
+    const entries = Object.entries(stats.tag_counts)
+    if (entries.length === 0) return '—'
+    return entries.sort((a, b) => b[1] - a[1])[0][0]
+  }, [stats])
+
+  const saveForm = async () => {
+    const payload = {
+      ticker: form.ticker.trim().toUpperCase(),
+      direction: form.direction,
+      entry_price: form.entry_price ? Number(form.entry_price) : null,
+      exit_price: form.exit_price ? Number(form.exit_price) : null,
+      pnl_dollars: form.pnl_dollars ? Number(form.pnl_dollars) : null,
+      setup_notes: form.setup_notes || null,
+      review_notes: form.review_notes || null,
+      tags: form.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      rating: form.rating,
+    }
     try {
-      await deleteJournalEntry(id)
-      addToast('info', 'Entry deleted', 'Journal entry removed')
-      load()
-    } catch {
-      addToast('error', 'Delete failed', 'Could not delete entry')
+      if (editingEntry) {
+        await updateJournalEntry(editingEntry.id, payload)
+        addToast('info', 'Journal entry updated', editingEntry.ticker)
+      } else {
+        await createJournalEntry(payload)
+        addToast('trade', 'Journal entry created', payload.ticker)
+      }
+      setShowForm(false)
+      setEditingEntry(null)
+      setForm(emptyForm)
+      await load()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save journal entry'
+      addToast('error', 'Save failed', message)
     }
   }
 
-  const topTag = stats?.tag_counts ? Object.entries(stats.tag_counts).sort((a, b) => b[1] - a[1])[0]?.[0] : '—'
+  const removeEntry = async (entry: JournalEntry) => {
+    if (!window.confirm(`Delete journal entry for ${entry.ticker}?`)) return
+    try {
+      await deleteJournalEntry(entry.id)
+      await load()
+      addToast('info', 'Journal entry deleted', entry.ticker)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete journal entry'
+      addToast('error', 'Delete failed', message)
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="font-mono font-bold text-lg">Trade Journal</h2>
-        <button className="btn-primary text-xs px-4 py-2" onClick={() => { resetForm(); setShowForm(true) }}>Add Journal Entry</button>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Entries" value={String(stats?.total_entries ?? 0)} />
+        <StatCard label="Avg Rating" value={stats ? `${stats.avg_rating.toFixed(1)}/5` : '0/5'} />
+        <StatCard
+          label="Total P&L"
+          value={`$${(stats?.total_pnl ?? 0).toFixed(2)}`}
+          className={(stats?.total_pnl ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}
+        />
+        <StatCard label="Top Tag" value={topTag} />
       </div>
 
-      {/* Stats */}
-      {stats && stats.total_entries > 0 && (
-        <div className="grid grid-cols-4 gap-4">
-          <div className="card text-center py-3">
-            <div className="text-xs text-txt-tertiary">Total Entries</div>
-            <div className="font-mono font-bold text-lg">{stats.total_entries}</div>
-          </div>
-          <div className="card text-center py-3">
-            <div className="text-xs text-txt-tertiary">Avg Rating</div>
-            <div className="font-mono font-bold text-lg">{stats.avg_rating}/5</div>
-          </div>
-          <div className="card text-center py-3">
-            <div className="text-xs text-txt-tertiary">Total P&L</div>
-            <div className={`font-mono font-bold text-lg ${stats.total_pnl >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>${stats.total_pnl.toFixed(2)}</div>
-          </div>
-          <div className="card text-center py-3">
-            <div className="text-xs text-txt-tertiary">Top Tag</div>
-            <div className="font-mono font-bold text-lg">{topTag}</div>
-          </div>
-        </div>
-      )}
+      <div className="flex justify-between items-center">
+        <h2 className="font-mono font-bold text-lg">Journal</h2>
+        <button className="btn-primary" onClick={openCreate}>
+          Add Journal Entry
+        </button>
+      </div>
 
-      {/* Form */}
       {showForm && (
         <div className="card space-y-3">
-          <h3 className="font-mono font-bold text-sm">{editingId ? 'Edit Entry' : 'New Entry'}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div>
-              <div className="label mb-1">Ticker</div>
-              <input value={formTicker} onChange={e => setFormTicker(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <div className="label mb-1">Direction</div>
-              <select value={formDirection} onChange={e => setFormDirection(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm">
-                <option value="BUY">BUY</option>
-                <option value="SHORT">SHORT</option>
-                <option value="SELL">SELL</option>
-              </select>
-            </div>
-            <div>
-              <div className="label mb-1">Entry Price</div>
-              <input type="number" value={formEntry} onChange={e => setFormEntry(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <div className="label mb-1">Exit Price</div>
-              <input type="number" value={formExit} onChange={e => setFormExit(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm font-mono" />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <input
+              value={form.ticker}
+              onChange={(e) => setForm((prev) => ({ ...prev, ticker: e.target.value }))}
+              className="bg-surface-tertiary border border-border rounded px-3 py-2 font-mono"
+              placeholder="Ticker"
+            />
+            <select
+              value={form.direction}
+              onChange={(e) => setForm((prev) => ({ ...prev, direction: e.target.value }))}
+              className="bg-surface-tertiary border border-border rounded px-3 py-2"
+            >
+              <option value="BUY">BUY</option>
+              <option value="SHORT">SHORT</option>
+              <option value="SELL">SELL</option>
+            </select>
+            <input
+              value={form.entry_price}
+              onChange={(e) => setForm((prev) => ({ ...prev, entry_price: e.target.value }))}
+              className="bg-surface-tertiary border border-border rounded px-3 py-2"
+              placeholder="Entry Price"
+            />
+            <input
+              value={form.exit_price}
+              onChange={(e) => setForm((prev) => ({ ...prev, exit_price: e.target.value }))}
+              className="bg-surface-tertiary border border-border rounded px-3 py-2"
+              placeholder="Exit Price"
+            />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="label mb-1">P&L ($)</div>
-              <input type="number" value={formPnl} onChange={e => setFormPnl(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <div className="label mb-1">Tags (comma-separated)</div>
-              <input value={formTags} onChange={e => setFormTags(e.target.value)} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm" />
-            </div>
-          </div>
-          <div>
-            <div className="label mb-1">Setup Notes</div>
-            <textarea value={formSetup} onChange={e => setFormSetup(e.target.value)} rows={2} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm resize-none" />
-          </div>
-          <div>
-            <div className="label mb-1">Review Notes</div>
-            <textarea value={formReview} onChange={e => setFormReview(e.target.value)} rows={2} className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm resize-none" />
-          </div>
-          <div>
-            <div className="label mb-1">Rating</div>
-            <StarRating value={formRating} onChange={setFormRating} />
+          <input
+            value={form.pnl_dollars}
+            onChange={(e) => setForm((prev) => ({ ...prev, pnl_dollars: e.target.value }))}
+            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+            placeholder="P&L ($)"
+          />
+          <textarea
+            value={form.setup_notes}
+            onChange={(e) => setForm((prev) => ({ ...prev, setup_notes: e.target.value }))}
+            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 min-h-[88px]"
+            placeholder="Setup notes"
+          />
+          <textarea
+            value={form.review_notes}
+            onChange={(e) => setForm((prev) => ({ ...prev, review_notes: e.target.value }))}
+            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 min-h-[88px]"
+            placeholder="Review notes"
+          />
+          <input
+            value={form.tags}
+            onChange={(e) => setForm((prev) => ({ ...prev, tags: e.target.value }))}
+            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+            placeholder="Tags (comma separated)"
+          />
+          <div className="flex items-center gap-2">
+            <span className="label">Rating</span>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, rating: value }))}
+                className={`px-2 py-1 rounded ${
+                  form.rating >= value ? 'bg-accent-amber/20 text-accent-amber' : 'bg-surface-tertiary text-txt-tertiary'
+                }`}
+              >
+                ★
+              </button>
+            ))}
           </div>
           <div className="flex gap-2">
-            <button className="btn-primary text-xs px-4 py-2" onClick={handleSave}>{editingId ? 'Update' : 'Save'}</button>
-            <button className="text-txt-tertiary text-xs px-3" onClick={resetForm}>Cancel</button>
+            <button className="btn-primary" onClick={saveForm}>
+              {editingEntry ? 'Update Entry' : 'Create Entry'}
+            </button>
+            <button
+              className="px-3 py-2 border border-border rounded text-sm text-txt-secondary"
+              onClick={() => setShowForm(false)}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
 
-      {/* Entries */}
       {loading ? (
-        <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="card"><div className="skeleton h-32 w-full" /></div>)}</div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="card space-y-3">
+              <div className="skeleton h-5 w-32" />
+              <div className="skeleton h-12 w-full" />
+            </div>
+          ))}
+        </div>
       ) : entries.length === 0 ? (
-        <EmptyState
-          icon="◈"
-          title="No journal entries yet"
-          subtitle="Track your trades with notes, ratings, and tags to identify patterns and improve your strategy over time."
-          action={{ label: 'Add Entry', onClick: () => { resetForm(); setShowForm(true) } }}
-        />
+        <div className="card">
+          <EmptyState
+            icon="📓"
+            title="No journal entries yet"
+            subtitle="Track your trades with notes, ratings, and tags to identify patterns and improve your strategy over time."
+          />
+        </div>
       ) : (
         <div className="space-y-3">
-          {entries.map(e => (
-            <div key={e.id} className="card">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-lg">{e.ticker}</span>
-                  {e.direction && (
-                    <span className={`pill text-xs ${e.direction === 'BUY' ? 'bg-accent-green-muted text-accent-green' : 'bg-accent-red-muted text-accent-red'}`}>
-                      {e.direction}
+          {entries.map((entry) => (
+            <div key={entry.id} className="card">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-bold text-lg">{entry.ticker}</span>
+                    <span className={`pill text-[10px] ${entry.direction === 'BUY' ? 'bg-accent-green-muted text-accent-green' : 'bg-accent-red-muted text-accent-red'}`}>
+                      {entry.direction ?? '—'}
                     </span>
-                  )}
-                  {e.pnl_dollars != null && (
-                    <span className={`font-mono font-bold ${e.pnl_dollars >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-                      ${e.pnl_dollars.toFixed(2)}
+                    <span className={(entry.pnl_dollars ?? 0) >= 0 ? 'text-accent-green font-mono' : 'text-accent-red font-mono'}>
+                      ${(entry.pnl_dollars ?? 0).toFixed(2)}
                     </span>
-                  )}
+                  </div>
+                  <div className="text-xs text-txt-tertiary mt-1">
+                    {entry.created_at ? new Date(entry.created_at).toLocaleString() : '—'}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {e.rating && <StarRating value={e.rating} />}
-                  <span className="text-xs text-txt-tertiary">{e.created_at ? new Date(e.created_at).toLocaleDateString() : ''}</span>
-                  <button className="text-txt-tertiary text-xs hover:text-txt-primary" onClick={() => handleEdit(e)}>Edit</button>
-                  <button className="text-accent-red text-xs hover:underline" onClick={() => handleDelete(e.id)}>Delete</button>
+                <div className="flex gap-2">
+                  <button className="text-xs text-txt-secondary" onClick={() => openEdit(entry)}>
+                    Edit
+                  </button>
+                  <button className="text-xs text-accent-red" onClick={() => removeEntry(entry)}>
+                    Delete
+                  </button>
                 </div>
               </div>
-              {e.setup_notes && <div className="mb-1"><span className="text-xs text-txt-tertiary">Setup:</span> <span className="text-sm text-txt-secondary">{e.setup_notes}</span></div>}
-              {e.review_notes && <div className="mb-1"><span className="text-xs text-txt-tertiary">Review:</span> <span className="text-sm text-txt-secondary">{e.review_notes}</span></div>}
-              {e.tags.length > 0 && (
-                <div className="flex gap-1.5 mt-2">
-                  {e.tags.map(tag => <span key={tag} className="pill bg-surface-tertiary text-txt-secondary text-xs">{tag}</span>)}
+
+              {entry.setup_notes && (
+                <div className="mt-3">
+                  <div className="label mb-1">Setup</div>
+                  <div className="text-sm text-txt-secondary">{entry.setup_notes}</div>
                 </div>
               )}
+              {entry.review_notes && (
+                <div className="mt-3">
+                  <div className="label mb-1">Review</div>
+                  <div className="text-sm text-txt-secondary">{entry.review_notes}</div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 mt-3">
+                {entry.tags.map((tag) => (
+                  <span key={tag} className="pill bg-surface-tertiary text-txt-secondary">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              <div className="text-sm text-txt-secondary mt-3">{'★'.repeat(entry.rating ?? 0)}{'☆'.repeat(5 - (entry.rating ?? 0))}</div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function StatCard({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className="card">
+      <div className="label mb-1">{label}</div>
+      <div className={`font-mono font-bold text-xl ${className ?? ''}`}>{value}</div>
     </div>
   )
 }

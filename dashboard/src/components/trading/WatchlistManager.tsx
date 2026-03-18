@@ -1,137 +1,206 @@
-import { useState, useEffect } from 'react'
-import { fetchWatchlists, createWatchlist, updateWatchlist, deleteWatchlist, scanWatchlist } from '../../api'
-import type { WatchlistItem } from '../../types'
+import { useEffect, useState } from 'react'
+import {
+  createWatchlist,
+  deleteWatchlist,
+  fetchWatchlists,
+  scanWatchlist,
+  updateWatchlist,
+} from '../../api'
+import type { WatchlistSaved } from '../../types'
 import { useToast } from '../../hooks/useToast'
 import EmptyState from './EmptyState'
 
 export default function WatchlistManager() {
   const { addToast } = useToast()
-  const [watchlists, setWatchlists] = useState<WatchlistItem[]>([])
+  const [watchlists, setWatchlists] = useState<WatchlistSaved[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newTickers, setNewTickers] = useState('')
+  const [name, setName] = useState('')
+  const [tickers, setTickers] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTickers, setEditTickers] = useState('')
-  const [scanningId, setScanningId] = useState<string | null>(null)
 
-  const load = () => {
+  const load = async () => {
     setLoading(true)
-    fetchWatchlists()
-      .then(setWatchlists)
-      .catch(() => addToast('error', 'Load failed', 'Could not load watchlists'))
-      .finally(() => setLoading(false))
+    try {
+      setWatchlists(await fetchWatchlists())
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load watchlists'
+      addToast('error', 'Watchlist error', message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const parseTickers = (value: string) =>
+    value
+      .split(',')
+      .map((ticker) => ticker.trim().toUpperCase())
+      .filter(Boolean)
 
   const handleCreate = async () => {
-    if (!newName.trim()) return
-    const tickers = newTickers.split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
     try {
-      await createWatchlist({ name: newName.trim(), tickers })
-      addToast('info', 'Watchlist created', `"${newName.trim()}" created`)
+      await createWatchlist({ name: name.trim() || 'Untitled', tickers: parseTickers(tickers) })
+      setName('')
+      setTickers('')
       setShowCreate(false)
-      setNewName('')
-      setNewTickers('')
-      load()
-    } catch {
-      addToast('error', 'Create failed', 'Could not create watchlist')
+      await load()
+      addToast('trade', 'Watchlist created', 'New watchlist saved.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create watchlist'
+      addToast('error', 'Create failed', message)
     }
   }
 
-  const handleUpdate = async (id: string) => {
-    const tickers = editTickers.split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
+  const handleScan = async (watchlist: WatchlistSaved) => {
     try {
-      await updateWatchlist(id, { tickers })
-      addToast('info', 'Watchlist updated', 'Tickers updated')
+      const result = await scanWatchlist(watchlist.id)
+      addToast('signal', `Generated ${result.generated} signals`, `Watchlist: ${watchlist.name}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to scan watchlist'
+      addToast('error', 'Scan failed', message)
+    }
+  }
+
+  const handleSaveEdit = async (watchlist: WatchlistSaved) => {
+    try {
+      await updateWatchlist(watchlist.id, { tickers: parseTickers(editTickers) })
       setEditingId(null)
-      load()
-    } catch {
-      addToast('error', 'Update failed', 'Could not update watchlist')
+      setEditTickers('')
+      await load()
+      addToast('info', 'Watchlist updated', watchlist.name)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update watchlist'
+      addToast('error', 'Update failed', message)
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (watchlist: WatchlistSaved) => {
+    if (!window.confirm(`Delete watchlist "${watchlist.name}"?`)) return
     try {
-      await deleteWatchlist(id)
-      addToast('info', 'Watchlist deleted', 'Watchlist removed')
-      load()
-    } catch {
-      addToast('error', 'Delete failed', 'Could not delete watchlist')
-    }
-  }
-
-  const handleScan = async (wl: WatchlistItem) => {
-    setScanningId(wl.id)
-    try {
-      const result = await scanWatchlist(wl.id)
-      addToast('signal', `Generated ${result.generated} signals`, `Scanned ${wl.name}`)
-    } catch {
-      addToast('error', 'Scan failed', 'Could not scan watchlist')
-    } finally {
-      setScanningId(null)
+      await deleteWatchlist(watchlist.id)
+      await load()
+      addToast('info', 'Watchlist deleted', watchlist.name)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete watchlist'
+      addToast('error', 'Delete failed', message)
     }
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <h2 className="font-mono font-bold text-lg">Watchlists</h2>
-        <button className="btn-primary text-xs px-4 py-2" onClick={() => setShowCreate(true)}>New Watchlist</button>
+        <button className="btn-primary" onClick={() => setShowCreate((prev) => !prev)}>
+          New Watchlist
+        </button>
       </div>
 
       {showCreate && (
-        <div className="card space-y-3">
-          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Watchlist name" className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm" />
-          <input value={newTickers} onChange={e => setNewTickers(e.target.value)} placeholder="Tickers (comma-separated: AAPL, MSFT, NVDA)" className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 text-sm font-mono" />
-          <div className="flex gap-2">
-            <button className="btn-primary text-xs px-4 py-2" onClick={handleCreate}>Create</button>
-            <button className="text-txt-tertiary text-xs px-3" onClick={() => setShowCreate(false)}>Cancel</button>
-          </div>
+        <div className="card grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="bg-surface-tertiary border border-border rounded px-3 py-2"
+            placeholder="Watchlist name"
+          />
+          <input
+            value={tickers}
+            onChange={(e) => setTickers(e.target.value)}
+            className="bg-surface-tertiary border border-border rounded px-3 py-2 font-mono"
+            placeholder="AAPL, MSFT, NVDA"
+          />
+          <button className="btn-primary" onClick={handleCreate}>
+            Save
+          </button>
         </div>
       )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map(i => <div key={i} className="card"><div className="skeleton h-24 w-full" /></div>)}
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="card space-y-3">
+              <div className="skeleton h-6 w-32" />
+              <div className="skeleton h-5 w-20 rounded-full" />
+              <div className="skeleton h-10 w-full" />
+            </div>
+          ))}
         </div>
       ) : watchlists.length === 0 ? (
-        <EmptyState
-          icon="⬡"
-          title="No watchlists yet"
-          subtitle="Create a watchlist to group tickers and scan them for signals in one click."
-          action={{ label: 'New Watchlist', onClick: () => setShowCreate(true) }}
-        />
+        <div className="card">
+          <EmptyState
+            icon="⬡"
+            title="No watchlists yet"
+            subtitle="Create a watchlist to group tickers and scan them for signals in one click."
+          />
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {watchlists.map(wl => (
-            <div key={wl.id} className="card">
-              <div className="flex justify-between items-start mb-3">
+          {watchlists.map((watchlist) => (
+            <div key={watchlist.id} className="card">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-mono font-bold text-lg">{wl.name}</div>
-                  <span className="pill bg-surface-tertiary text-txt-secondary text-xs">{wl.tickers.length} tickers</span>
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn-primary text-xs px-3 py-1" onClick={() => handleScan(wl)} disabled={scanningId === wl.id}>
-                    {scanningId === wl.id ? 'Scanning...' : 'Scan All'}
-                  </button>
-                  <button className="text-txt-tertiary text-xs hover:text-txt-primary" onClick={() => { setEditingId(wl.id); setEditTickers(wl.tickers.join(', ')) }}>Edit</button>
-                  <button className="text-accent-red text-xs hover:underline" onClick={() => handleDelete(wl.id)}>Delete</button>
+                  <h3 className="font-mono font-bold text-lg">{watchlist.name}</h3>
+                  <span className="pill bg-surface-tertiary text-txt-secondary mt-2">
+                    {watchlist.tickers.length} tickers
+                  </span>
                 </div>
               </div>
-              {editingId === wl.id ? (
-                <div className="flex gap-2 mt-2">
-                  <input value={editTickers} onChange={e => setEditTickers(e.target.value)} className="flex-1 bg-surface-tertiary border border-border rounded px-3 py-1 text-sm font-mono" />
-                  <button className="btn-primary text-xs px-3" onClick={() => handleUpdate(wl.id)}>Save</button>
-                  <button className="text-txt-tertiary text-xs" onClick={() => setEditingId(null)}>Cancel</button>
+
+              {editingId === watchlist.id ? (
+                <div className="mt-4 space-y-3">
+                  <input
+                    value={editTickers}
+                    onChange={(e) => setEditTickers(e.target.value)}
+                    className="w-full bg-surface-tertiary border border-border rounded px-3 py-2 font-mono"
+                  />
+                  <div className="flex gap-2">
+                    <button className="btn-primary text-xs px-4 py-2" onClick={() => handleSaveEdit(watchlist)}>
+                      Save
+                    </button>
+                    <button
+                      className="px-3 py-2 border border-border rounded text-xs text-txt-secondary"
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {wl.tickers.map(t => (
-                    <span key={t} className="pill bg-surface-tertiary text-txt-secondary text-xs">{t}</span>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {watchlist.tickers.map((ticker) => (
+                      <span key={ticker} className="pill bg-surface-tertiary text-txt-secondary">
+                        {ticker}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <button className="btn-primary text-xs px-4 py-2" onClick={() => handleScan(watchlist)}>
+                      Scan All
+                    </button>
+                    <button
+                      className="px-3 py-2 border border-border rounded text-xs text-txt-secondary"
+                      onClick={() => {
+                        setEditingId(watchlist.id)
+                        setEditTickers(watchlist.tickers.join(', '))
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="px-3 py-2 border border-border rounded text-xs text-accent-red"
+                      onClick={() => handleDelete(watchlist)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           ))}

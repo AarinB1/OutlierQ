@@ -14,6 +14,15 @@ import type {
   RiskLimitsConfig,
   ModelVersionHistoryEntry,
   ModelTrainResult,
+  StrategyDefaults,
+  StrategyConfigSaved,
+  TradingChartData,
+  DemoStatus,
+  WatchlistSaved,
+  JournalEntry,
+  JournalStats,
+  TradingSettings,
+  PerformanceAttribution,
 } from './types'
 
 const BASE_URL = '/api/trading'
@@ -50,8 +59,11 @@ export async function generateTradingSignals(payload: {
   ticker?: string
   tickers?: string[]
   timeframe?: string
+  period?: string
+  demo?: boolean
 }): Promise<{ generated: number; signals: TradingSignal[] }> {
-  return fetchJSON('/signals/generate', {
+  const demoQuery = payload.demo ? '?demo=true' : ''
+  return fetchJSON(`/generate-signals${demoQuery}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -175,13 +187,11 @@ export async function triggerModelTrain(modelType: string, ticker: string = 'SPY
   })
 }
 
-// ── Sprint 4: Strategy Configs & Chart Data ─────────────────────
-
-export async function fetchStrategyDefaults(): Promise<import('./types').StrategyDefaults> {
+export async function fetchStrategyDefaults(): Promise<StrategyDefaults> {
   return fetchJSON('/strategies/defaults')
 }
 
-export async function fetchStrategyConfigs(): Promise<import('./types').StrategyConfigSaved[]> {
+export async function fetchStrategyConfigs(): Promise<StrategyConfigSaved[]> {
   return fetchJSON('/strategies/configs')
 }
 
@@ -196,27 +206,36 @@ export async function deleteStrategyConfig(id: string): Promise<{ deleted: strin
   return fetchJSON(`/strategies/configs/${id}`, { method: 'DELETE' })
 }
 
-export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<import('./types').TradingChartData> {
+export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<TradingChartData> {
   return fetchJSON(`/chart-data/${encodeURIComponent(ticker)}?period=${period}`)
 }
 
-// ── Sprint 5: Watchlists & Journal ──────────────────────────────
-
-export async function fetchWatchlists(): Promise<import('./types').WatchlistItem[]> {
-  return fetchJSON('/watchlists')
+export async function fetchDemoStatus(): Promise<DemoStatus> {
+  return fetchJSON('/demo-status')
 }
 
-export async function createWatchlist(body: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
-  return fetchJSON('/watchlists', {
+export async function toggleDemoStatus(demoMode?: boolean): Promise<DemoStatus> {
+  return fetchJSON('/demo-toggle', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(typeof demoMode === 'boolean' ? { demo_mode: demoMode } : {}),
   })
 }
 
-export async function updateWatchlist(id: string, body: Record<string, unknown>): Promise<import('./types').WatchlistItem> {
+export async function fetchWatchlists(): Promise<WatchlistSaved[]> {
+  return fetchJSON('/watchlists')
+}
+
+export async function createWatchlist(payload: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
+  return fetchJSON('/watchlists', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateWatchlist(id: string, payload: { name?: string; tickers?: string[] }): Promise<{ id: string; name: string; tickers: string[] }> {
   return fetchJSON(`/watchlists/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -228,21 +247,21 @@ export async function scanWatchlist(id: string): Promise<{ generated: number; si
   return fetchJSON(`/watchlists/${id}/scan`, { method: 'POST' })
 }
 
-export async function fetchJournalEntries(limit = 50, offset = 0): Promise<import('./types').JournalEntry[]> {
+export async function fetchJournalEntries(limit: number = 50, offset: number = 0): Promise<JournalEntry[]> {
   return fetchJSON(`/journal?limit=${limit}&offset=${offset}`)
 }
 
-export async function createJournalEntry(body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+export async function createJournalEntry(payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
   return fetchJSON('/journal', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
 }
 
-export async function updateJournalEntry(id: string, body: Record<string, unknown>): Promise<{ id: string; status: string }> {
+export async function updateJournalEntry(id: string, payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
   return fetchJSON(`/journal/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -250,24 +269,21 @@ export async function deleteJournalEntry(id: string): Promise<{ deleted: string 
   return fetchJSON(`/journal/${id}`, { method: 'DELETE' })
 }
 
-export async function fetchJournalStats(): Promise<import('./types').JournalStats> {
+export async function fetchJournalStats(): Promise<JournalStats> {
   return fetchJSON('/journal/stats')
 }
 
-// ── Sprint 6: Settings & Performance ────────────────────────────
-
-export async function fetchSettings(): Promise<import('./types').UserSettingsData> {
+export async function fetchTradingSettings(): Promise<TradingSettings> {
   return fetchJSON('/settings')
 }
 
-export async function updateSettings(body: Record<string, unknown>): Promise<{ status: string }> {
+export async function updateTradingSettings(settings: Partial<TradingSettings>): Promise<{ status: string; keys: string[] }> {
   return fetchJSON('/settings', {
     method: 'PUT',
-    body: JSON.stringify(body),
+    body: JSON.stringify(settings),
   })
 }
 
-export async function fetchPerformanceAttribution(): Promise<import('./types').PerformanceAttribution> {
+export async function fetchPerformanceAttribution(): Promise<PerformanceAttribution> {
   return fetchJSON('/performance')
 }
-
