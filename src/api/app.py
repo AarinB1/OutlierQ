@@ -636,6 +636,25 @@ def scan(body: dict, db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ── MiroFish runtime toggle ───────────────────────────────────────────
+
+
+@app.post("/api/mirofish/toggle")
+def toggle_mirofish():
+    """Flip the MiroFish enabled state on/off. Takes effect on the next pipeline cycle."""
+    from config.runtime import toggle_mirofish as _toggle
+    new_state = _toggle()
+    logger.info("MiroFish toggled to %s via API", new_state)
+    return {"mirofish_enabled": new_state}
+
+
+@app.get("/api/mirofish/status")
+def mirofish_status():
+    """Return the current MiroFish enabled state."""
+    from config.runtime import is_mirofish_enabled
+    return {"mirofish_enabled": is_mirofish_enabled()}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
@@ -653,6 +672,7 @@ def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:
         "event_id": sig.event_id,
         "exploratory": getattr(sig, "exploratory", False) or False,
         "discovery_source": getattr(sig, "discovery_source", None),
+        "simulation_enhanced": getattr(sig, "simulation_enhanced", False) or False,
     }
     if event:
         d["event"] = _event_to_dict(event)

@@ -522,3 +522,141 @@ class TestSimulationSignalIntegration:
         assert sig.get("simulation_enhanced") is True
         # Boosted: base confidence + 0.90 * 0.2
         assert sig["confidence"] > 0.70
+
+
+# ---------------------------------------------------------------------------
+# Runtime config tests
+# ---------------------------------------------------------------------------
+
+class TestRuntimeConfig:
+    """Verify config/runtime.py toggle behaviour."""
+
+    def test_default_state_matches_settings(self):
+        """Runtime config initialises from MIROFISH_ENABLED in settings."""
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+        from config.settings import MIROFISH_ENABLED
+
+        # Reset to default
+        set_mirofish_enabled(MIROFISH_ENABLED)
+        assert is_mirofish_enabled() == MIROFISH_ENABLED
+
+    def test_set_mirofish_enabled(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+
+        set_mirofish_enabled(True)
+        assert is_mirofish_enabled() is True
+
+        set_mirofish_enabled(False)
+        assert is_mirofish_enabled() is False
+
+    def test_toggle_mirofish(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled, toggle_mirofish
+
+        set_mirofish_enabled(False)
+        result = toggle_mirofish()
+        assert result is True
+        assert is_mirofish_enabled() is True
+
+        result = toggle_mirofish()
+        assert result is False
+        assert is_mirofish_enabled() is False
+
+
+# ---------------------------------------------------------------------------
+# CLI flag test
+# ---------------------------------------------------------------------------
+
+class TestCLIFlag:
+    """Verify --mirofish CLI flag sets runtime config."""
+
+    def test_mirofish_flag_enables_runtime(self):
+        from config.runtime import is_mirofish_enabled, set_mirofish_enabled
+
+        # Start disabled
+        set_mirofish_enabled(False)
+        assert is_mirofish_enabled() is False
+
+        # Simulate what main() does when --mirofish is passed
+        set_mirofish_enabled(True)
+        assert is_mirofish_enabled() is True
+
+        # Clean up
+        set_mirofish_enabled(False)
+
+    def test_argparse_accepts_mirofish_flag(self):
+        """The argument parser recognises --mirofish without error."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from scripts.run_ingestion import parse_args
+
+        with patch("sys.argv", ["run_ingestion.py", "--mirofish", "--once"]):
+            args = parse_args()
+
+        assert args.mirofish is True
+
+    def test_argparse_default_mirofish_off(self):
+        from scripts.run_ingestion import parse_args
+
+        with patch("sys.argv", ["run_ingestion.py", "--once"]):
+            args = parse_args()
+
+        assert args.mirofish is False
+
+
+# ---------------------------------------------------------------------------
+# API endpoint tests
+# ---------------------------------------------------------------------------
+
+class TestMirofishAPI:
+    """Verify /api/mirofish/toggle and /api/mirofish/status endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def _setup_client(self):
+        # Mock heavy deps so FastAPI app can import in CI
+        import types
+        for mod_name in (
+            "yfinance", "ta", "ta.momentum", "ta.volatility", "ta.trend",
+            "curl_cffi", "curl_cffi.requests",
+            "vaderSentiment", "vaderSentiment.vaderSentiment",
+            "torch", "transformers",
+        ):
+            if mod_name not in sys.modules:
+                mod = types.ModuleType(mod_name)
+                # vaderSentiment.vaderSentiment needs SentimentIntensityAnalyzer
+                if mod_name == "vaderSentiment.vaderSentiment":
+                    mod.SentimentIntensityAnalyzer = MagicMock  # type: ignore[attr-defined]
+                sys.modules[mod_name] = mod
+
+        from fastapi.testclient import TestClient
+        from src.api.app import app
+        self.client = TestClient(app)
+
+    def test_get_status(self):
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "mirofish_enabled" in data
+        assert isinstance(data["mirofish_enabled"], bool)
+
+    def test_toggle_flips_state(self):
+        from config.runtime import set_mirofish_enabled
+
+        # Start from a known state
+        set_mirofish_enabled(False)
+
+        # First toggle: False -> True
+        resp = self.client.post("/api/mirofish/toggle")
+        assert resp.status_code == 200
+        assert resp.json()["mirofish_enabled"] is True
+
+        # Verify via GET
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.json()["mirofish_enabled"] is True
+
+        # Second toggle: True -> False
+        resp = self.client.post("/api/mirofish/toggle")
+        assert resp.status_code == 200
+        assert resp.json()["mirofish_enabled"] is False
+
+        # Verify via GET
+        resp = self.client.get("/api/mirofish/status")
+        assert resp.json()["mirofish_enabled"] is False

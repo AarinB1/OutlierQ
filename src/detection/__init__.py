@@ -531,12 +531,10 @@ class AnomalyPipeline:
             # --- MiroFish simulation enrichment (synchronous) ---
             sim_results_map: dict = {}
             try:
-                from config.settings import (
-                    MIROFISH_ENABLED,
-                    MIROFISH_MIN_CONFIDENCE,
-                    MIROFISH_WAIT_TIMEOUT,
-                )
-                if MIROFISH_ENABLED:
+                from config.runtime import is_mirofish_enabled
+                from config.settings import MIROFISH_MIN_CONFIDENCE, MIROFISH_WAIT_TIMEOUT
+
+                if is_mirofish_enabled():
                     sim_results_map = self._run_simulations_sync(
                         events, s, MIROFISH_MIN_CONFIDENCE, MIROFISH_WAIT_TIMEOUT,
                     )
