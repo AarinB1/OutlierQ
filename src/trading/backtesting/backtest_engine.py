@@ -88,7 +88,9 @@ class BacktestEngine:
         equity_values = []
         equity_dates = []
 
-        min_lookback = 60
+        # Some tests and narrower datasets only retain ~50 rows after feature warm-up.
+        # Fall back to the latest available bar instead of producing an empty equity curve.
+        min_lookback = min(60, max(1, len(features_df) - 1))
 
         for i in range(min_lookback, len(features_df)):
             current_bar = features_df.iloc[i]

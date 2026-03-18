@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchTradingSignals, generateTradingSignals, updateSignalStatus } from '../api'
 import type { TradingSignal } from '../types'
 import { useToast } from '../hooks/useToast'
+import { useTradingSettings } from '../context/TradingSettingsContext'
+import EmptyState from './EmptyState'
 
 type DirectionFilter = 'all' | 'BUY' | 'SHORT' | 'SELL'
 type StatusFilter = 'all' | 'pending' | 'active' | 'closed'
@@ -53,6 +55,7 @@ function safePrice(v: number | null): string {
 
 export default function TradingSignals() {
   const { addToast } = useToast()
+  const { settings, demoMode } = useTradingSettings()
 
   const [signals, setSignals] = useState<TradingSignal[]>([])
   const [ticker, setTicker] = useState('AAPL')
@@ -91,8 +94,25 @@ export default function TradingSignals() {
     setBusy(true)
     setError(null)
     try {
-      const result = await generateTradingSignals({ ticker: ticker.toUpperCase(), timeframe: 'daily' })
+      const result = await generateTradingSignals({
+        ticker: ticker.toUpperCase(),
+        timeframe: 'daily',
+        demo: demoMode,
+      })
       load()
+      if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted' &&
+        settings?.notifications_enabled &&
+        settings?.notify_on_signal
+      ) {
+        for (const signal of result.signals ?? []) {
+          new Notification(`OutlierQ Signal: ${signal.ticker} ${signal.direction}`, {
+            body: `${signal.strategy_name} • ${Math.round(signal.confidence * 100)}% confidence`,
+            icon: '/favicon.ico',
+          })
+        }
+      }
       addToast(
         'signal',
         `Generated ${result.generated} signal(s)`,
@@ -135,22 +155,22 @@ export default function TradingSignals() {
   const renderEmptyState = () => {
     if (!hasAnySignals) {
       return (
-        <div className="card flex flex-col items-center justify-center py-12 text-center">
-          <div className="mb-3 text-2xl text-txt-secondary">◇</div>
-          <div className="font-mono font-semibold mb-1">No trading signals yet.</div>
-          <div className="text-sm text-txt-tertiary max-w-md">
-            Enter a ticker above and click Generate Signal to get AI-driven trade recommendations.
-          </div>
+        <div className="card">
+          <EmptyState
+            icon="↕"
+            title="No trading signals yet"
+            subtitle="Enter a ticker above and click Generate Signal to get AI-driven trade recommendations. Try AAPL, TSLA, or NVDA."
+          />
         </div>
       )
     }
     return (
-      <div className="card flex flex-col items-center justify-center py-12 text-center">
-        <div className="mb-3 text-2xl text-txt-secondary">◇</div>
-        <div className="font-mono font-semibold mb-1">No signals match your filters</div>
-        <div className="text-sm text-txt-tertiary max-w-md">
-          Generate a signal or adjust your filters.
-        </div>
+      <div className="card">
+        <EmptyState
+          icon="◇"
+          title="No signals match your filters"
+          subtitle="Try adjusting your direction, strategy, or status filters."
+        />
       </div>
     )
   }

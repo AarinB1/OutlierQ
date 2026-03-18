@@ -237,8 +237,6 @@ export interface ClosedTrade {
   strategy_name: string
 }
 
-// ── Sprint 4: Strategy & Chart Types ────────────────────────────
-
 export interface StrategyDefaults {
   momentum: Record<string, number>
   mean_reversion: Record<string, number>
@@ -284,9 +282,11 @@ export interface TradingChartData {
   markers: ChartMarker[]
 }
 
-// ── Sprint 5: Watchlist & Journal Types ─────────────────────────
+export interface DemoStatus {
+  demo_mode: boolean
+}
 
-export interface WatchlistItem {
+export interface WatchlistSaved {
   id: string
   name: string
   tickers: string[]
@@ -315,9 +315,7 @@ export interface JournalStats {
   tag_counts: Record<string, number>
 }
 
-// ── Sprint 6: Settings & Performance Types ──────────────────────
-
-export interface UserSettingsData {
+export interface TradingSettings {
   notifications_enabled: boolean
   notify_on_signal: boolean
   notify_on_backtest_complete: boolean
@@ -329,29 +327,37 @@ export interface UserSettingsData {
 }
 
 export interface PerformanceAttribution {
-  by_strategy: Record<string, {
-    total: number
-    wins: number
-    losses: number
-    total_pnl: number
-    win_rate: number
-    avg_pnl: number
-  }>
-  by_direction: Record<string, {
-    total: number
-    wins: number
-    total_pnl: number
-    win_rate: number
-  }>
-  by_exit_reason: Record<string, {
-    total: number
-    total_pnl: number
-  }>
-  rolling_accuracy: {
+  by_strategy: Record<
+    string,
+    {
+      total: number
+      wins: number
+      losses: number
+      total_pnl: number
+      win_rate: number
+      avg_pnl: number
+    }
+  >
+  by_direction: Record<
+    string,
+    {
+      total: number
+      wins: number
+      total_pnl: number
+      win_rate: number
+    }
+  >
+  by_exit_reason: Record<
+    string,
+    {
+      total: number
+      total_pnl: number
+    }
+  >
+  rolling_accuracy: Array<{
     trade_index: number
     accuracy: number
     timestamp: string | null
-  }[]
+  }>
   total_executions: number
 }
-

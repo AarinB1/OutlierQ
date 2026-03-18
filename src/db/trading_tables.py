@@ -149,6 +149,9 @@ class StrategyConfig(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
+    def __repr__(self) -> str:
+        return f"<StrategyConfig {self.name} strategy={self.strategy_name}>"
+
 
 class Watchlist(Base):
     __tablename__ = "watchlists"
@@ -158,6 +161,9 @@ class Watchlist(Base):
     tickers_json = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<Watchlist {self.name} tickers={len(self.tickers_json or [])}>"
 
 
 class TradeJournal(Base):
@@ -177,6 +183,9 @@ class TradeJournal(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
+    def __repr__(self) -> str:
+        return f"<TradeJournal {self.ticker} rating={self.rating}>"
+
 
 class UserSettings(Base):
     __tablename__ = "user_settings"
@@ -185,3 +194,6 @@ class UserSettings(Base):
     key = Column(String, nullable=False, unique=True, index=True)
     value_json = Column(JSON, nullable=True)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    def __repr__(self) -> str:
+        return f"<UserSettings {self.key}>"
