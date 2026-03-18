@@ -546,3 +546,67 @@ export async function fetchPerformanceAttribution(): Promise<import('./types').P
   if (!res.ok) throw new Error('Failed to fetch performance data');
   return res.json();
 }
+
+// ── Portfolio Backtest, DSL, Replay, Greeks ──────────────────────
+
+export async function runPortfolioBacktest(body: {
+  tickers: string[];
+  strategy?: string;
+  period?: string;
+  initial_capital?: number;
+  max_positions?: number;
+}): Promise<Record<string, unknown>> {
+  const res = await fetch(`${TRADING_BASE}/backtest/portfolio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Portfolio backtest failed');
+  return res.json();
+}
+
+export async function runDSLBacktest(body: {
+  rules: string;
+  ticker?: string;
+  period?: string;
+  initial_capital?: number;
+}): Promise<Record<string, unknown>> {
+  const res = await fetch(`${TRADING_BASE}/backtest/dsl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('DSL backtest failed');
+  return res.json();
+}
+
+export async function runTradeReplay(body: {
+  ticker?: string;
+  strategy?: string;
+  period?: string;
+}): Promise<Record<string, unknown>> {
+  const res = await fetch(`${TRADING_BASE}/backtest/replay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Trade replay failed');
+  return res.json();
+}
+
+export async function computeGreeks(body: {
+  spot_price: number;
+  strike_price: number;
+  time_to_expiry: number;
+  volatility: number;
+  risk_free_rate?: number;
+  option_type?: string;
+}): Promise<Record<string, number>> {
+  const res = await fetch(`${TRADING_BASE}/options/greeks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Greeks computation failed');
+  return res.json();
+}

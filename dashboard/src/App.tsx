@@ -23,11 +23,15 @@ import WatchlistManager from './components/trading/WatchlistManager'
 import TradeJournal from './components/trading/TradeJournal'
 import PerformanceAttribution from './components/trading/PerformanceAttribution'
 import SettingsPage from './components/trading/SettingsPage'
+import StrategyEditor from './components/trading/StrategyEditor'
+import PortfolioBacktest from './components/trading/PortfolioBacktest'
+import TradeReplay from './components/trading/TradeReplay'
+import GreeksCalculator from './components/trading/GreeksCalculator'
 
 export type Section = 'options' | 'trading'
 
 export type OptionsPage = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery'
-export type TradingPage = 'trade-signals' | 'backtest' | 'models' | 'portfolio' | 'performance' | 'risk' | 'strategies' | 'charts' | 'watchlists' | 'journal' | 'settings'
+export type TradingPage = 'trade-signals' | 'backtest' | 'models' | 'portfolio' | 'performance' | 'risk' | 'strategies' | 'charts' | 'watchlists' | 'journal' | 'settings' | 'dsl-editor' | 'portfolio-backtest' | 'trade-replay' | 'greeks'
 export type Page = OptionsPage | TradingPage
 
 export default function App() {
@@ -107,6 +111,10 @@ export default function App() {
           {page === 'journal' && <TradeJournal />}
           {page === 'performance' && <PerformanceAttribution />}
           {page === 'settings' && <SettingsPage />}
+          {page === 'dsl-editor' && <StrategyEditor />}
+          {page === 'portfolio-backtest' && <PortfolioBacktest />}
+          {page === 'trade-replay' && <TradeReplay />}
+          {page === 'greeks' && <GreeksCalculator />}
         </div>
       </Layout>
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

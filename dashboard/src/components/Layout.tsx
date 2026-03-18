@@ -34,6 +34,10 @@ const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
   { key: 'charts', icon: '\u2E0F', label: 'Charts' },
   { key: 'watchlists', icon: '\u2606', label: 'Watchlists' },
   { key: 'journal', icon: '\u270E', label: 'Journal' },
+  { key: 'dsl-editor', icon: '\u2328', label: 'DSL Editor' },
+  { key: 'portfolio-backtest', icon: '\u25A6', label: 'Portfolio BT' },
+  { key: 'trade-replay', icon: '\u23EF', label: 'Replay' },
+  { key: 'greeks', icon: '\u0394', label: 'Greeks' },
   { key: 'settings', icon: '\u2699', label: 'Settings' },
 ]
 

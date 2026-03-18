@@ -116,7 +116,7 @@ def test_backtest_engine_runs():
 def test_backtest_result_has_equity_curve():
     """Ensure BacktestResult contains equity_curve with dates."""
     np.random.seed(42)
-    n = 250
+    n = 500
     dates = pd.date_range("2023-01-01", periods=n, freq="B")
     close = 100 + np.cumsum(np.random.randn(n) * 0.5)
     high = close + np.abs(np.random.randn(n))

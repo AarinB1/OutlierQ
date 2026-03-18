@@ -1245,6 +1245,245 @@ def get_performance_attribution(db: Session = Depends(get_db)) -> dict:
     }
 
 
+# ── Portfolio Backtest ───────────────────────────────────────────
+
+
+@router.post("/backtest/portfolio")
+def run_portfolio_backtest(body: dict) -> dict:
+    """Run a backtest across multiple tickers with portfolio-level constraints."""
+    from dataclasses import asdict
+
+    from src.trading.backtesting.portfolio_backtest import PortfolioBacktestEngine
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+
+    tickers = body.get("tickers", [])
+    if not tickers:
+        raise HTTPException(status_code=400, detail="No tickers provided")
+
+    strategy_name = body.get("strategy", "momentum")
+    period = body.get("period", "1y")
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+    initial_capital = body.get("initial_capital", 100_000)
+    max_positions = body.get("max_positions", 10)
+
+    strategy_map = {
+        "momentum": MomentumStrategy,
+        "mean_reversion": MeanReversionStrategy,
+        "breakout": BreakoutStrategy,
+    }
+    StrategyClass = strategy_map.get(strategy_name)
+    if not StrategyClass:
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {strategy_name}")
+
+    strategy = StrategyClass()
+    if body.get("params"):
+        strategy.set_parameters(body["params"])
+
+    engine = PortfolioBacktestEngine(
+        initial_capital=initial_capital,
+        max_positions=max_positions,
+    )
+    result = engine.run(
+        tickers=tickers,
+        strategy=strategy,
+        start_date=start_date,
+        end_date=end_date,
+        period=period,
+    )
+
+    equity = result.equity_curve
+    return {
+        "metrics": asdict(result.metrics),
+        "equity_curve": {
+            "dates": [str(d) for d in equity.index],
+            "values": equity.values.tolist(),
+        },
+        "per_ticker_metrics": {
+            t: asdict(m) for t, m in result.per_ticker_metrics.items()
+        },
+        "per_ticker_equity": {
+            t: {
+                "dates": [str(d) for d in eq.index],
+                "values": eq.values.tolist(),
+            }
+            for t, eq in result.per_ticker_equity.items()
+        },
+        "correlation_matrix": (
+            result.correlation_matrix.to_dict() if not result.correlation_matrix.empty else {}
+        ),
+        "trades": result.trades[:200],
+    }
+
+
+# ── DSL Strategy Backtest ───────────────────────────────────────
+
+
+@router.post("/backtest/dsl")
+def run_dsl_backtest(body: dict) -> dict:
+    """Run a backtest using custom DSL rules."""
+    from dataclasses import asdict
+
+    from src.trading.backtesting.backtest_engine import BacktestEngine
+    from src.trading.features.feature_pipeline import FeaturePipeline
+    from src.trading.strategies.dsl_parser import DSLStrategy
+
+    rules_text = body.get("rules", "")
+    if not rules_text:
+        raise HTTPException(status_code=400, detail="No DSL rules provided")
+
+    ticker = body.get("ticker", "SPY")
+    period = body.get("period", "1y")
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+    initial_capital = body.get("initial_capital", 100_000)
+
+    try:
+        strategy = DSLStrategy.from_rules(rules_text)
+    except (SyntaxError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"DSL parse error: {e}")
+
+    pipeline = FeaturePipeline()
+    features_df = pipeline.build_features(
+        ticker,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        include_sentiment=False,
+    )
+    if features_df.empty:
+        raise HTTPException(status_code=400, detail=f"No data for {ticker}")
+
+    missing = strategy.validate_columns(list(features_df.columns))
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown columns in DSL: {', '.join(missing)}",
+        )
+
+    bt_engine = BacktestEngine(initial_capital=initial_capital)
+    result = bt_engine.run(features_df, strategy, ticker)
+
+    equity = result.equity_curve
+    if not isinstance(equity, pd.Series):
+        equity = pd.Series(equity)
+
+    return {
+        "metrics": asdict(result.metrics),
+        "equity_curve": {
+            "dates": [str(d) for d in equity.index],
+            "values": equity.values.tolist(),
+        },
+        "trades": result.trades[:100],
+        "config": result.config,
+    }
+
+
+# ── Trade Replay ────────────────────────────────────────────────
+
+
+@router.post("/backtest/replay")
+def trade_replay(body: dict) -> dict:
+    """Return bar-by-bar replay data for a strategy on a ticker."""
+    from src.trading.features.feature_pipeline import FeaturePipeline
+    from src.trading.strategies.breakout_strategy import BreakoutStrategy
+    from src.trading.strategies.mean_reversion_strategy import MeanReversionStrategy
+    from src.trading.strategies.momentum_strategy import MomentumStrategy
+
+    ticker = body.get("ticker", "SPY")
+    strategy_name = body.get("strategy", "momentum")
+    period = body.get("period", "6mo")
+    start_date = body.get("start_date")
+    end_date = body.get("end_date")
+
+    strategy_map = {
+        "momentum": MomentumStrategy,
+        "mean_reversion": MeanReversionStrategy,
+        "breakout": BreakoutStrategy,
+    }
+    StrategyClass = strategy_map.get(strategy_name)
+    if not StrategyClass:
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {strategy_name}")
+
+    strategy = StrategyClass()
+    if body.get("params"):
+        strategy.set_parameters(body["params"])
+
+    pipeline = FeaturePipeline()
+    features_df = pipeline.build_features(
+        ticker,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        include_sentiment=False,
+    )
+    if features_df.empty:
+        raise HTTPException(status_code=400, detail=f"No data for {ticker}")
+
+    signals_df = strategy.generate_signals(features_df)
+
+    bars: list[dict] = []
+    for i, (idx, row) in enumerate(features_df.iterrows()):
+        bar: dict = {
+            "index": i,
+            "date": str(idx),
+            "open": float(row.get("open", 0)),
+            "high": float(row.get("high", 0)),
+            "low": float(row.get("low", 0)),
+            "close": float(row.get("close", 0)),
+            "volume": float(row.get("volume", 0)),
+        }
+        if idx in signals_df.index:
+            sig_row = signals_df.loc[idx]
+            bar["signal"] = int(sig_row.get("signal", 0))
+        else:
+            bar["signal"] = 0
+
+        for col in ("rsi_14", "sma_20", "sma_50", "sma_200", "macd", "bb_upper", "bb_lower"):
+            if col in row.index:
+                val = row[col]
+                bar[col] = float(val) if pd.notna(val) else None
+        bars.append(bar)
+
+    return {
+        "ticker": ticker,
+        "strategy": strategy_name,
+        "total_bars": len(bars),
+        "bars": bars,
+    }
+
+
+# ── Options Greeks ──────────────────────────────────────────────
+
+
+@router.post("/options/greeks")
+def compute_greeks(body: dict) -> dict:
+    """Compute Black-Scholes Greeks for given parameters."""
+    from src.signals.options_pricer import price_option
+
+    S = body.get("spot_price")
+    K = body.get("strike_price")
+    T = body.get("time_to_expiry")
+    r = body.get("risk_free_rate", 0.05)
+    sigma = body.get("volatility")
+    option_type = body.get("option_type", "call")
+
+    if not all([S, K, T, sigma]):
+        raise HTTPException(
+            status_code=400,
+            detail="Required: spot_price, strike_price, time_to_expiry, volatility",
+        )
+
+    result = price_option(
+        S=float(S), K=float(K), T=float(T),
+        r=float(r), sigma=float(sigma),
+        option_type=option_type,
+    )
+    return result
+
+
 # ── Helpers ──────────────────────────────────────────────────────
 
 

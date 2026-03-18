@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -43,6 +43,9 @@ app.add_middleware(
 from src.api.trading_routes import router as trading_router
 app.include_router(trading_router)
 
+# WebSocket manager
+from src.api.websocket_manager import ws_manager
+
 
 def get_db() -> Session:
     """FastAPI dependency for database sessions."""
@@ -56,6 +59,23 @@ def get_db() -> Session:
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────
+
+
+@app.websocket("/ws/signals")
+async def websocket_signals(websocket: WebSocket) -> None:
+    """Real-time signal stream via WebSocket."""
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive; client can send pings
+            data = await websocket.receive_text()
+            # Echo back as heartbeat
+            await websocket.send_text('{"type":"pong"}')
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
 
 # ── Health ────────────────────────────────────────────────────────────

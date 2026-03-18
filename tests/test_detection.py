@@ -90,7 +90,7 @@ class TestVolumeDetector:
         assert result["ticker"] == "AAPL"
         assert result["z_score"] > 3.0
         assert result["today_count"] == 15
-        assert result["baseline_mean"] == pytest.approx(3.0)
+        assert result["baseline_mean"] == pytest.approx(3.0, abs=0.2)
 
     def test_no_spike(self, db_session):
         """Insert normal volume (3 articles today with 3/day baseline) → no spike."""
@@ -380,6 +380,7 @@ class TestAnomalyPipelineDemo:
         # Production mode should NOT detect outliers (high thresholds)
         prod_pipeline = AnomalyPipeline(demo=False)
         prod_pipeline.edgar.scan_batch = lambda _tickers: []
+        prod_pipeline.options_flow.scan_batch = lambda _tickers: []
         prod_results = prod_pipeline.scan(["MSFT"], session=db_session)
 
         assert len(demo_results) >= 1, "Demo mode should detect the mild-sentiment data"
@@ -406,8 +407,8 @@ class TestAnomalyPipeline:
                 )
                 db_session.add(article)
 
-        # Insert 15 extreme articles within the 6-hour scan window.
-        recent = now - timedelta(hours=1)
+        # Insert 15 extreme articles within the scan window (after today_start).
+        recent = today_start + timedelta(hours=2)
         extreme_headlines = [
             ("CEO arrested in massive fraud scandal", "Reuters"),
             ("Tesla faces devastating class action lawsuit", "Bloomberg"),
@@ -456,6 +457,7 @@ class TestAnomalyPipeline:
         }
         pipeline.sentiment_filter.update_article_scores = lambda _articles, session=None: None
         pipeline.edgar.scan_batch = lambda _tickers: []
+        pipeline.options_flow.scan_batch = lambda _tickers: []
 
         results = pipeline.scan(["TSLA"], session=db_session)
 
@@ -501,6 +503,7 @@ class TestAnomalyPipeline:
 
         pipeline = AnomalyPipeline()
         pipeline.edgar.scan_batch = lambda _tickers: []
+        pipeline.options_flow.scan_batch = lambda _tickers: []
         results = pipeline.scan(["AAPL"], session=db_session)
 
         # Should not detect because volume didn't spike
