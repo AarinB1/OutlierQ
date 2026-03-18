@@ -10,11 +10,11 @@ import atexit
 import logging
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from config.settings import MIROFISH_MAX_ROUNDS
+from config.settings import MIROFISH_MAX_ROUNDS, MIROFISH_WAIT_TIMEOUT
 from src.db.database import get_session
 from src.db.tables import SimulationResult
 from src.simulation.mirofish_client import MirofishClient
@@ -79,6 +79,41 @@ def submit_simulation(
 
     _executor.submit(_run_simulation, event_snapshot, article_snapshots, client)
     logger.info("Simulation submitted for event %s (%s)", event.id, event.ticker)
+
+
+def submit_simulation_sync(
+    event: Event,
+    articles: list[Article],
+    client: MirofishClient | None = None,
+) -> Future | None:
+    """Submit a simulation and return the Future so the caller can wait on it.
+
+    Returns None if the queue is full.
+    """
+    event_snapshot = {
+        "id": event.id,
+        "ticker": event.ticker,
+        "event_type": event.event_type,
+        "direction": event.direction,
+        "confidence": event.confidence,
+        "metadata_json": event.metadata_json,
+    }
+    article_snapshots = [
+        {"headline": a.headline, "summary": a.summary, "source": a.source}
+        for a in articles
+    ]
+
+    pending = _executor._work_queue.qsize()
+    if pending >= _MAX_QUEUED:
+        logger.warning(
+            "Simulation queue full (%d pending) — dropping event %s",
+            pending, event.id,
+        )
+        return None
+
+    future = _executor.submit(_run_simulation, event_snapshot, article_snapshots, client)
+    logger.info("Simulation submitted (sync) for event %s (%s)", event.id, event.ticker)
+    return future
 
 
 def _run_simulation(

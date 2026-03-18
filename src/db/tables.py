@@ -70,6 +70,7 @@ class Signal(Base):
     outcome_pnl = Column(Float, nullable=True)
     exploratory = Column(Boolean, default=False, nullable=False)
     discovery_source = Column(String, nullable=True)  # "manual", "news_scanner", "volume_screener", "both", or null
+    simulation_enhanced = Column(Boolean, default=False, nullable=False)
 
     def __repr__(self) -> str:
         return f"<Signal {self.ticker} {self.direction} conf={self.confidence:.2f}>"

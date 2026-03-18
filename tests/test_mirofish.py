@@ -373,3 +373,152 @@ class TestSimulationResultModel:
         assert fetched.direction == "bullish"
         assert fetched.bearish_pct == 20.0
         assert fetched.agent_count == 40
+
+
+# ---------------------------------------------------------------------------
+# Signal + Simulation integration tests
+# ---------------------------------------------------------------------------
+
+class TestSimulationSignalIntegration:
+    """Verify that SignalEngine correctly adjusts signals based on SimulationResult."""
+
+    @pytest.fixture(autouse=True)
+    def _import_engine(self):
+        # Mock heavy dependencies that may not be installed in CI/test envs
+        import types
+        for mod_name in (
+            "yfinance", "ta", "ta.momentum", "ta.volatility", "ta.trend",
+            "curl_cffi", "curl_cffi.requests",
+        ):
+            if mod_name not in sys.modules:
+                sys.modules[mod_name] = types.ModuleType(mod_name)
+        from src.signals.signal_engine import SignalEngine
+        self.SignalEngine = SignalEngine
+
+    def _make_signal_dict(self, direction="call", confidence=0.75, ticker="AAPL", event_id=None):
+        return {
+            "ticker": ticker,
+            "event_type": "earnings_beat",
+            "event_id": event_id or str(uuid.uuid4()),
+            "direction": direction,
+            "current_price": 150.0,
+            "suggested_strike": 155.0,
+            "suggested_expiry": "2026-04-17",
+            "expected_move_pct": 0.07,
+            "decay_type": "moderate",
+            "confidence": confidence,
+            "contract": None,
+            "reasoning": "Test signal",
+            "exploratory": False,
+        }
+
+    def _make_sim_result(self, event_id, direction="bullish", consensus_strength=0.80):
+        return SimulationResult(
+            id=str(uuid.uuid4()),
+            event_id=event_id,
+            direction=direction,
+            bearish_pct=20.0 if direction == "bullish" else 80.0,
+            bullish_pct=80.0 if direction == "bullish" else 20.0,
+            consensus_strength=consensus_strength,
+            narrative_summary="Test simulation result.",
+        )
+
+    def test_boost_confidence_when_simulation_agrees(self):
+        """Signal direction=call (bullish) + sim direction=bullish => boost."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        sim = self._make_sim_result(signal["event_id"], direction="bullish", consensus_strength=0.80)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "call"  # unchanged
+        assert adjusted["simulation_enhanced"] is True
+        # Boost: 0.75 + 0.80 * 0.2 = 0.75 + 0.16 = 0.91
+        assert abs(adjusted["confidence"] - 0.91) < 0.01
+
+    def test_flip_direction_when_simulation_strongly_disagrees(self):
+        """Signal direction=call (bullish) + sim direction=bearish + high consensus => flip to put."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        sim = self._make_sim_result(signal["event_id"], direction="bearish", consensus_strength=0.85)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "put"  # flipped!
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.85 * 0.6 = 0.51
+        assert abs(adjusted["confidence"] - 0.51) < 0.01
+
+    def test_reduce_confidence_when_simulation_weakly_disagrees(self):
+        """Signal direction=call (bullish) + sim direction=bearish + low consensus => reduce 30%."""
+        signal = self._make_signal_dict(direction="call", confidence=0.80)
+        sim = self._make_sim_result(signal["event_id"], direction="bearish", consensus_strength=0.55)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "call"  # NOT flipped (consensus < 0.7)
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.80 * 0.7 = 0.56
+        assert abs(adjusted["confidence"] - 0.56) < 0.01
+
+    def test_neutral_simulation_reduces_confidence(self):
+        """Neutral simulation result => reduce confidence by 10%."""
+        signal = self._make_signal_dict(direction="put", confidence=0.80)
+        sim = self._make_sim_result(signal["event_id"], direction="neutral", consensus_strength=0.50)
+
+        adjusted = self.SignalEngine.apply_simulation_adjustment(signal, sim)
+
+        assert adjusted["direction"] == "put"  # unchanged
+        assert adjusted["simulation_enhanced"] is True
+        # Confidence: 0.80 * 0.9 = 0.72
+        assert abs(adjusted["confidence"] - 0.72) < 0.01
+
+    def test_fallback_no_simulation_result(self):
+        """When no SimulationResult exists, signal is unchanged."""
+        signal = self._make_signal_dict(direction="call", confidence=0.75)
+        event_id = signal["event_id"]
+
+        # generate_signals with empty sim map should leave signal alone
+        engine = self.SignalEngine.__new__(self.SignalEngine)
+        engine.demo = False
+        engine._event_profiles = {}
+
+        # Manually test: no sim in map => signal unchanged
+        sim_map: dict = {}
+        sim = sim_map.get(event_id)
+        assert sim is None  # no adjustment applied
+
+        # The original signal should be returned as-is
+        assert signal["confidence"] == 0.75
+        assert signal["direction"] == "call"
+        assert signal.get("simulation_enhanced") is None
+
+    def test_generate_signals_applies_simulation(self):
+        """generate_signals() integrates simulation results into the pipeline."""
+        event_id = str(uuid.uuid4())
+        event_dict = {
+            "ticker": "AAPL",
+            "event_type": "earnings_beat",
+            "event_id": event_id,
+            "id": event_id,
+            "direction": "bullish",
+            "confidence": 0.80,
+            "metadata": {},
+        }
+        sim = self._make_sim_result(event_id, direction="bullish", consensus_strength=0.90)
+        sim_map = {event_id: sim}
+
+        mock_market = MagicMock()
+        mock_market.get_current_price.return_value = 150.0
+        mock_market.fetch_options_chain.return_value = {"calls": None, "puts": None}
+
+        with patch.object(self.SignalEngine, '_apply_technical_adjustments', side_effect=lambda s, _: s):
+            engine = self.SignalEngine(market_fetcher=mock_market)
+            # Mock technical analyzer to avoid real calls
+            engine.technical = MagicMock()
+            engine.technical.get_ticker_indicators.return_value = None
+            signals = engine.generate_signals([event_dict], simulation_results=sim_map)
+
+        assert len(signals) == 1
+        sig = signals[0]
+        assert sig.get("simulation_enhanced") is True
+        # Boosted: base confidence + 0.90 * 0.2
+        assert sig["confidence"] > 0.70

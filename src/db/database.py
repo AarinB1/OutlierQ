@@ -58,6 +58,10 @@ def migrate_db() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN discovery_source VARCHAR"))
             conn.commit()
             logger.info("Added signals.discovery_source column.")
+        if "simulation_enhanced" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN simulation_enhanced INTEGER DEFAULT 0 NOT NULL"))
+            conn.commit()
+            logger.info("Added signals.simulation_enhanced column.")
 
 
 def init_db() -> None:

@@ -426,13 +426,81 @@ class AnomalyPipeline:
         with get_session() as s:
             return _run(s)
 
+    def _run_simulations_sync(
+        self,
+        events: list,
+        session: Session,
+        min_confidence: float,
+        wait_timeout: int,
+    ) -> dict:
+        """Run MiroFish simulations synchronously, returning a map of event_id -> SimulationResult.
+
+        Submits all qualifying events in parallel via the thread pool,
+        then waits up to *wait_timeout* seconds for all futures to complete.
+        Falls back gracefully — any simulation that fails or times out is
+        simply omitted from the returned map.
+        """
+        from concurrent.futures import as_completed
+
+        from src.db.tables import SimulationResult
+        from src.simulation.mirofish_client import MirofishClient
+        from src.simulation.runner import submit_simulation_sync
+
+        client = MirofishClient()
+        if not client.is_available():
+            logger.debug("MiroFish not available — skipping simulation enrichment")
+            return {}
+
+        futures: dict = {}  # future -> event_id
+        for event in events:
+            if event.confidence < min_confidence:
+                continue
+            articles = (
+                session.query(Article)
+                .filter(Article.id.in_(event.article_ids or []))
+                .all()
+            )
+            future = submit_simulation_sync(event, articles, client=client)
+            if future is not None:
+                futures[future] = event.id
+                logger.info(
+                    "MiroFish simulation submitted for %s (confidence=%.2f)",
+                    event.ticker, event.confidence,
+                )
+
+        if not futures:
+            return {}
+
+        # Wait for all futures up to the timeout
+        done_ids: set = set()
+        for future in as_completed(futures, timeout=wait_timeout):
+            try:
+                future.result()  # raise any exception
+                done_ids.add(futures[future])
+            except Exception as exc:
+                event_id = futures[future]
+                logger.warning("Simulation for event %s failed: %s", event_id, exc)
+
+        # Query completed SimulationResults from DB
+        completed_event_ids = list(done_ids)
+        if not completed_event_ids:
+            return {}
+
+        sim_rows = (
+            session.query(SimulationResult)
+            .filter(SimulationResult.event_id.in_(completed_event_ids))
+            .all()
+        )
+        return {row.event_id: row for row in sim_rows}
+
     def full_pipeline(
         self, tickers: list[str], session: Session | None = None
     ) -> list[Signal]:
         """Run the complete end-to-end pipeline: detect, classify, and generate signals.
 
         1. scan_and_store — detection + classification
-        2. SignalEngine.generate_and_store — signal generation
+        2. (optional) MiroFish simulation — waits for results when enabled
+        3. SignalEngine.generate_and_store — signal generation (with simulation data)
         Returns the list of created Signal objects.
         """
         from src.signals.signal_engine import SignalEngine
@@ -460,34 +528,25 @@ class AnomalyPipeline:
                     "metadata": event.metadata_json or {},
                 })
 
-            engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)
-            signals = engine.generate_and_store(event_dicts, session=s)
-
-            # --- MiroFish simulation enrichment (non-blocking) ---
+            # --- MiroFish simulation enrichment (synchronous) ---
+            sim_results_map: dict = {}
             try:
-                from config.settings import MIROFISH_ENABLED, MIROFISH_MIN_CONFIDENCE
+                from config.settings import (
+                    MIROFISH_ENABLED,
+                    MIROFISH_MIN_CONFIDENCE,
+                    MIROFISH_WAIT_TIMEOUT,
+                )
                 if MIROFISH_ENABLED:
-                    from src.simulation.mirofish_client import MirofishClient
-                    from src.simulation.runner import submit_simulation
-
-                    client = MirofishClient()
-                    if client.is_available():
-                        for event in events:
-                            if event.confidence >= MIROFISH_MIN_CONFIDENCE:
-                                articles = (
-                                    s.query(Article)
-                                    .filter(Article.id.in_(event.article_ids or []))
-                                    .all()
-                                )
-                                submit_simulation(event, articles, client=client)
-                                logger.info(
-                                    "MiroFish simulation submitted for %s (confidence=%.2f)",
-                                    event.ticker, event.confidence,
-                                )
-                    else:
-                        logger.debug("MiroFish not available — skipping simulation enrichment")
+                    sim_results_map = self._run_simulations_sync(
+                        events, s, MIROFISH_MIN_CONFIDENCE, MIROFISH_WAIT_TIMEOUT,
+                    )
             except Exception:
                 logger.debug("MiroFish enrichment skipped", exc_info=True)
+
+            engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)
+            signals = engine.generate_and_store(
+                event_dicts, session=s, simulation_results=sim_results_map,
+            )
 
             logger.info(
                 "Pipeline complete: %d tickers scanned -> %d outliers detected -> %d signals generated",
@@ -496,9 +555,10 @@ class AnomalyPipeline:
 
             for sig in signals:
                 logger.info(
-                    "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f) — %s",
+                    "SIGNAL: %s %s @ $%.0f exp %s (confidence=%.2f, sim=%s) — %s",
                     sig.direction, sig.ticker, sig.suggested_strike or 0,
                     sig.suggested_expiry or "N/A", sig.confidence,
+                    sig.simulation_enhanced,
                     next(
                         (e.event_type for e in events if e.id == sig.event_id),
                         "unknown",

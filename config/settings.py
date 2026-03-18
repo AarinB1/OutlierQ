@@ -42,6 +42,7 @@ MIROFISH_ENABLED: bool = os.getenv("MIROFISH_ENABLED", "false").lower() in ("tru
 MIROFISH_MAX_ROUNDS: int = int(os.getenv("MIROFISH_MAX_ROUNDS", "20"))
 MIROFISH_MIN_CONFIDENCE: float = float(os.getenv("MIROFISH_MIN_CONFIDENCE", "0.7"))
 MIROFISH_TIMEOUT: int = int(os.getenv("MIROFISH_TIMEOUT", "30"))
+MIROFISH_WAIT_TIMEOUT: int = int(os.getenv("MIROFISH_WAIT_TIMEOUT", "600"))
 
 # FinBERT settings
 FINBERT_MODEL: str = os.getenv("FINBERT_MODEL", "ProsusAI/finbert")
