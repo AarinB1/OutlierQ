@@ -166,6 +166,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable MiroFish simulation enrichment for this run (overrides .env setting)",
     )
+    parser.add_argument(
+        "--predict",
+        action="store_true",
+        help="Scan prediction markets (Polymarket/Kalshi) and generate predictions",
+    )
     return parser.parse_args()
 
 
@@ -764,6 +769,64 @@ def run_scheduled(
             realtime_manager.stop()
 
 
+def run_prediction_scan(demo: bool = False) -> None:
+    """Fetch prediction markets, match with events, generate predictions."""
+    from datetime import datetime, timedelta
+    from src.predictions.polymarket_fetcher import PolymarketFetcher
+    from src.predictions.kalshi_fetcher import KalshiFetcher
+    from src.predictions.market_matcher import MarketMatcher
+    from src.predictions.prediction_engine import PredictionEngine
+    from src.predictions.prediction_tracker import PredictionTracker
+    from src.db.tables import Event
+    from src.db.database import SessionLocal
+
+    db = SessionLocal()
+
+    # Fetch markets
+    markets = []
+    markets.extend(PolymarketFetcher().fetch_active_markets(limit=100))
+    markets.extend(KalshiFetcher(demo=demo).fetch_active_markets(limit=100))
+    print(f"\nFetched {len(markets)} active prediction markets")
+
+    # Get recent events
+    cutoff = datetime.utcnow() - timedelta(hours=48)
+    recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
+    events = [
+        {"ticker": e.ticker, "event_type": e.event_type,
+         "direction": e.direction, "confidence": e.confidence,
+         "headlines": [e.headline] if hasattr(e, "headline") and e.headline else []}
+        for e in recent
+    ]
+    print(f"Found {len(events)} recent events")
+
+    # Match + predict
+    matches = MarketMatcher().match_events_to_markets(events, markets)
+    predictions = PredictionEngine().generate_predictions(matches)
+
+    # Store
+    tracker = PredictionTracker(db)
+    for p in predictions:
+        tracker.store_prediction(p)
+    db.commit()
+
+    # Print
+    print(f"\n{'='*60}")
+    print(f"  PREDICTION MARKET SIGNALS: {len(predictions)}")
+    print(f"{'='*60}")
+    for p in predictions:
+        outcome = "YES" if p["predicted_outcome"] == "yes" else "NO"
+        platform_tag = "PM" if p["platform"] == "polymarket" else "KA"
+        edge_pct = p["edge"] * 100
+        print(f"\n  [{platform_tag}] {outcome}  (edge: {edge_pct:+.1f}%)")
+        print(f"  Q: {p['question'][:80]}")
+        print(f"  Bot: {p['predicted_probability']:.0%}  |  Market: {p['market_probability']:.0%}")
+        print(f"  Event: {p['matched_event_type']}  Ticker: {p['matched_tickers']}")
+        print(f"  {'─'*56}")
+    print()
+
+    db.close()
+
+
 def run_train_trading() -> None:
     """Train LSTM, Transformer, and Hybrid trading models."""
     from src.trading.training.trainer import TradingTrainer
@@ -1026,6 +1089,10 @@ def main() -> None:
 
     if args.reclassify:
         run_reclassify()
+        return
+
+    if args.predict:
+        run_prediction_scan(demo=args.demo)
         return
 
     if args.discover_only:

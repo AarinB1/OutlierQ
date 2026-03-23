@@ -12,6 +12,7 @@ import EventTimeline from './components/EventTimeline'
 import AccuracyPanel from './components/AccuracyPanel'
 import TickerView from './components/TickerView'
 import DiscoveryPanel from './components/DiscoveryPanel'
+import PredictionMarkets from './components/PredictionMarkets'
 // Trading pages (new)
 import TradingSignals from './components/trading/TradingSignals'
 import BacktestPanel from './components/trading/BacktestPanel'
@@ -31,7 +32,7 @@ import GreeksCalculator from './components/trading/GreeksCalculator'
 
 export type Section = 'options' | 'trading'
 
-export type OptionsPage = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery'
+export type OptionsPage = 'signals' | 'events' | 'accuracy' | 'tickers' | 'discovery' | 'predictions'
 export type TradingPage =
   | 'trade-signals'
   | 'backtest'
@@ -115,6 +116,7 @@ export default function App() {
               />
             )}
             {page === 'discovery' && <DiscoveryPanel />}
+            {page === 'predictions' && <PredictionMarkets />}
 
             {/* Trading pages */}
             {page === 'trade-signals' && <TradingSignals />}

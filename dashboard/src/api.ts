@@ -259,6 +259,39 @@ export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: str
   return fetchJSON('/ml/train', { method: 'POST' });
 }
 
+// ── Prediction Markets API ───────────────────────────────────────
+
+export async function fetchPredictionMarkets(platform?: string): Promise<{ markets: unknown[]; count: number }> {
+  const sp = new URLSearchParams();
+  if (platform) sp.set('platform', platform);
+  const qs = sp.toString();
+  return fetchJSON(`/predictions/markets${qs ? `?${qs}` : ''}`);
+}
+
+export async function scanPredictions(body: { platform?: string; min_edge?: number }): Promise<{ predictions: unknown[]; count: number }> {
+  return fetchJSON('/predictions/scan', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchPredictionHistory(opts?: {
+  limit?: number;
+  platform?: string;
+  resolved_only?: boolean;
+}): Promise<{ predictions: unknown[]; count: number }> {
+  const sp = new URLSearchParams();
+  if (opts?.limit) sp.set('limit', String(opts.limit));
+  if (opts?.platform) sp.set('platform', opts.platform);
+  if (opts?.resolved_only) sp.set('resolved_only', 'true');
+  const qs = sp.toString();
+  return fetchJSON(`/predictions/history${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchPredictionStats(): Promise<Record<string, unknown>> {
+  return fetchJSON('/predictions/stats');
+}
+
 // ── Trading API ──────────────────────────────────────────────────
 
 const TRADING_BASE = '/api/trading';
