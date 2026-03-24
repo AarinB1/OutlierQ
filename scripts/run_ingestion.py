@@ -176,6 +176,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Scan for cross-platform prediction market arbitrage opportunities",
     )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute predictions (place bets). Uses paper mode by default.",
+    )
+    parser.add_argument(
+        "--execution-mode",
+        type=str,
+        default="paper",
+        choices=["paper", "kalshi_demo", "kalshi_live", "polymarket"],
+        help="Execution mode for --execute (default: paper)",
+    )
     return parser.parse_args()
 
 
@@ -800,9 +812,81 @@ def run_autopilot(
         name="Cross-platform arbitrage scan",
     )
 
+    # Execution job — execute any new unexecuted predictions (paper mode)
+    def execution_job() -> None:
+        """Execute unexecuted predictions in paper mode."""
+        try:
+            from src.predictions.execution.executor import PredictionExecutor
+            from src.predictions.execution.execution_db import PredictionOrder
+            from src.predictions.prediction_db import Prediction
+            from src.db.database import SessionLocal
+            from config.settings import (
+                PREDICTION_BANKROLL, PREDICTION_MAX_BET_PCT,
+                PREDICTION_KELLY_FRACTION, PREDICTION_MAX_POSITIONS,
+                PREDICTION_EXECUTION_MIN_EDGE,
+            )
+
+            db = SessionLocal()
+            try:
+                # Find predictions that haven't been executed yet
+                executed_ids = {
+                    r[0] for r in db.query(PredictionOrder.prediction_id).all()
+                }
+                unexecuted = (
+                    db.query(Prediction)
+                    .filter(
+                        Prediction.actual_outcome.is_(None),
+                        ~Prediction.id.in_(executed_ids) if executed_ids else True,
+                    )
+                    .order_by(Prediction.created_at.desc())
+                    .limit(20)
+                    .all()
+                )
+                if not unexecuted:
+                    return
+
+                pred_dicts = [
+                    {
+                        "id": p.id, "market_id": p.market_id, "platform": p.platform,
+                        "question": p.question, "predicted_outcome": p.predicted_outcome,
+                        "predicted_probability": p.predicted_probability,
+                        "market_probability": p.market_probability,
+                        "edge": p.edge, "confidence": p.confidence,
+                    }
+                    for p in unexecuted
+                ]
+
+                executor = PredictionExecutor(
+                    mode="paper",
+                    bankroll_config={
+                        "initial_bankroll": PREDICTION_BANKROLL,
+                        "max_bet_pct": PREDICTION_MAX_BET_PCT,
+                        "kelly_fraction": PREDICTION_KELLY_FRACTION,
+                        "max_open_positions": PREDICTION_MAX_POSITIONS,
+                        "min_edge": PREDICTION_EXECUTION_MIN_EDGE,
+                    },
+                    db_session=db,
+                )
+                results = executor.execute_predictions(pred_dicts)
+                db.commit()
+
+                filled = sum(1 for r in results if r["status"] in ("filled", "placed"))
+                logger.info("Execution job: %d/%d predictions executed (paper)", filled, len(pred_dicts))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Autopilot execution job failed")
+
+    scheduler.add_job(
+        execution_job,
+        trigger=IntervalTrigger(minutes=35),
+        id="autopilot_execution",
+        name="Prediction execution (paper)",
+    )
+
     logger.info(
         "Autopilot scheduler: discovery/15m, ingestion/5m, pipeline/5m, feedback/6h, "
-        "predictions/30m, arbitrage/30m, status/1h"
+        "predictions/30m, arbitrage/30m, execution/35m, status/1h"
     )
     try:
         scheduler.start()
@@ -1020,10 +1104,12 @@ def run_prediction_scan(demo: bool = False) -> None:
         matches, simulation_results=sim_results,
     )
 
-    # Store
+    # Store predictions and capture IDs for execution
     tracker = PredictionTracker(db)
+    stored_predictions = []
     for p in predictions:
-        tracker.store_prediction(p)
+        record = tracker.store_prediction(p)
+        stored_predictions.append({**p, "id": record.id})
     db.commit()
 
     # Print
@@ -1042,6 +1128,8 @@ def run_prediction_scan(demo: bool = False) -> None:
             print(f"  Sim estimate: {p['sim_estimated_probability']:.0%}  |  Consensus: {p.get('sim_consensus_strength', 0):.0%}")
         print(f"  Event: {p['matched_event_type']}  Ticker: {p['matched_tickers']}")
         print(f"  {'─'*56}")
+
+    return stored_predictions, db
     print()
 
     # Also run arbitrage scan
@@ -1074,6 +1162,68 @@ def run_prediction_scan(demo: bool = False) -> None:
         print(f"  Skipped arbitrage (poly={len(poly_markets)}, kalshi={len(kalshi_markets)})\n")
 
     db.close()
+
+
+def run_execution(predictions: list[dict], db, execution_mode: str = "paper") -> None:
+    """Execute predictions via the prediction execution engine."""
+    from src.predictions.execution.executor import PredictionExecutor
+    from config.settings import (
+        PREDICTION_BANKROLL, PREDICTION_MAX_BET_PCT, PREDICTION_KELLY_FRACTION,
+        PREDICTION_MAX_POSITIONS, PREDICTION_EXECUTION_MIN_EDGE,
+        KALSHI_API_KEY_ID, KALSHI_PRIVATE_KEY_PATH_EXEC,
+        POLYMARKET_PRIVATE_KEY, POLYMARKET_FUNDER_ADDRESS, POLYMARKET_SIGNATURE_TYPE,
+    )
+
+    bankroll_config = {
+        "initial_bankroll": PREDICTION_BANKROLL,
+        "max_bet_pct": PREDICTION_MAX_BET_PCT,
+        "kelly_fraction": PREDICTION_KELLY_FRACTION,
+        "max_open_positions": PREDICTION_MAX_POSITIONS,
+        "min_edge": PREDICTION_EXECUTION_MIN_EDGE,
+    }
+    kalshi_config = {
+        "api_key_id": KALSHI_API_KEY_ID,
+        "private_key_path": KALSHI_PRIVATE_KEY_PATH_EXEC,
+    }
+    polymarket_config = {
+        "private_key": POLYMARKET_PRIVATE_KEY,
+        "funder_address": POLYMARKET_FUNDER_ADDRESS,
+        "signature_type": POLYMARKET_SIGNATURE_TYPE,
+    }
+
+    executor = PredictionExecutor(
+        mode=execution_mode,
+        bankroll_config=bankroll_config,
+        kalshi_config=kalshi_config if execution_mode.startswith("kalshi") else None,
+        polymarket_config=polymarket_config if execution_mode == "polymarket" else None,
+        db_session=db,
+    )
+
+    results = executor.execute_predictions(predictions)
+    db.commit()
+
+    filled = [r for r in results if r["status"] in ("filled", "placed")]
+    rejected = [r for r in results if r["status"] == "rejected"]
+
+    print(f"\n{'='*60}")
+    print(f"  EXECUTION RESULTS ({execution_mode})")
+    print(f"{'='*60}")
+    print(f"  Filled:   {len(filled)}")
+    print(f"  Rejected: {len(rejected)}")
+
+    for r in filled:
+        print(f"\n  {r['side'].upper()} {r['contracts']} contracts @ ${r['price']:.2f}")
+        print(f"  Market: {r['market_id'][:40]}  Cost: ${r['cost']:.2f}")
+
+    for r in rejected:
+        print(f"\n  SKIP {r['market_id'][:40]}: {r['reason']}")
+
+    summary = executor.get_portfolio_summary()
+    print(f"\n  Bankroll: ${summary['total_bankroll']:.2f}  |  "
+          f"Cash: ${summary['available_cash']:.2f}  |  "
+          f"Deployed: ${summary['deployed_capital']:.2f}  |  "
+          f"Positions: {summary['open_positions']}")
+    print()
 
 
 def run_arbitrage_scan() -> None:
@@ -1391,7 +1541,11 @@ def main() -> None:
         return
 
     if args.predict:
-        run_prediction_scan(demo=args.demo)
+        result = run_prediction_scan(demo=args.demo)
+        if args.execute and result:
+            stored_predictions, db = result
+            if stored_predictions:
+                run_execution(stored_predictions, db, args.execution_mode)
         return
 
     if args.arbitrage:

@@ -54,6 +54,23 @@ PREDICTION_MIN_EDGE = float(os.getenv("PREDICTION_MIN_EDGE", "0.05"))
 PREDICTION_MIN_CONFIDENCE = float(os.getenv("PREDICTION_MIN_CONFIDENCE", "0.4"))
 PREDICTION_MARKET_MIN_VOLUME = float(os.getenv("PREDICTION_MARKET_MIN_VOLUME", "10000"))
 
+# ── Prediction Execution ────────────────────────────────────────────
+PREDICTION_EXECUTION_MODE = os.getenv("PREDICTION_EXECUTION_MODE", "paper")
+PREDICTION_BANKROLL = float(os.getenv("PREDICTION_BANKROLL", "1000.0"))
+PREDICTION_MAX_BET_PCT = float(os.getenv("PREDICTION_MAX_BET_PCT", "0.05"))
+PREDICTION_KELLY_FRACTION = float(os.getenv("PREDICTION_KELLY_FRACTION", "0.25"))
+PREDICTION_MAX_POSITIONS = int(os.getenv("PREDICTION_MAX_POSITIONS", "20"))
+PREDICTION_EXECUTION_MIN_EDGE = float(os.getenv("PREDICTION_EXECUTION_MIN_EDGE", "0.05"))
+
+# Kalshi credentials (for kalshi_demo / kalshi_live modes)
+KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "")
+KALSHI_PRIVATE_KEY_PATH_EXEC = os.getenv("KALSHI_PRIVATE_KEY_PATH", "")
+
+# Polymarket credentials (for polymarket mode)
+POLYMARKET_PRIVATE_KEY = os.getenv("POLYMARKET_PRIVATE_KEY", "")
+POLYMARKET_FUNDER_ADDRESS = os.getenv("POLYMARKET_FUNDER_ADDRESS", "")
+POLYMARKET_SIGNATURE_TYPE = int(os.getenv("POLYMARKET_SIGNATURE_TYPE", "0"))
+
 # FinBERT settings
 FINBERT_MODEL: str = os.getenv("FINBERT_MODEL", "ProsusAI/finbert")
 FINBERT_DEVICE: str | None = os.getenv("FINBERT_DEVICE", None)

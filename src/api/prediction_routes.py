@@ -322,6 +322,171 @@ def get_arbitrage_history(
     }
 
 
+# ── Execution Endpoints ─────────────────────────────────────────────
+
+
+@router.post("/execute")
+def execute_predictions(body: dict, db: Session = Depends(get_db)):
+    """Execute pending predictions (place bets via paper or live mode).
+
+    Body:
+        mode: str ("paper"|"kalshi_demo"|"kalshi_live"|"polymarket") — default "paper"
+        prediction_ids: list[int] (optional) — specific predictions to execute;
+            if omitted, executes all unexecuted predictions from the last 24 hours.
+    """
+    from src.predictions.execution.executor import PredictionExecutor
+    from config.settings import (
+        PREDICTION_EXECUTION_MODE, PREDICTION_BANKROLL, PREDICTION_MAX_BET_PCT,
+        PREDICTION_KELLY_FRACTION, PREDICTION_MAX_POSITIONS, PREDICTION_EXECUTION_MIN_EDGE,
+        KALSHI_API_KEY_ID, KALSHI_PRIVATE_KEY_PATH_EXEC,
+        POLYMARKET_PRIVATE_KEY, POLYMARKET_FUNDER_ADDRESS, POLYMARKET_SIGNATURE_TYPE,
+    )
+    from datetime import timedelta
+
+    mode = body.get("mode", PREDICTION_EXECUTION_MODE)
+    prediction_ids = body.get("prediction_ids")
+
+    # Fetch predictions to execute
+    if prediction_ids:
+        preds = db.query(Prediction).filter(Prediction.id.in_(prediction_ids)).all()
+    else:
+        cutoff = datetime.utcnow() - timedelta(hours=24)
+        preds = (
+            db.query(Prediction)
+            .filter(Prediction.created_at >= cutoff, Prediction.actual_outcome.is_(None))
+            .order_by(Prediction.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+    if not preds:
+        return {"results": [], "count": 0, "message": "No predictions to execute"}
+
+    pred_dicts = [
+        {
+            "id": p.id,
+            "market_id": p.market_id,
+            "platform": p.platform,
+            "question": p.question,
+            "predicted_outcome": p.predicted_outcome,
+            "predicted_probability": p.predicted_probability,
+            "market_probability": p.market_probability,
+            "edge": p.edge,
+            "confidence": p.confidence,
+        }
+        for p in preds
+    ]
+
+    bankroll_config = {
+        "initial_bankroll": body.get("bankroll", PREDICTION_BANKROLL),
+        "max_bet_pct": PREDICTION_MAX_BET_PCT,
+        "kelly_fraction": PREDICTION_KELLY_FRACTION,
+        "max_open_positions": PREDICTION_MAX_POSITIONS,
+        "min_edge": PREDICTION_EXECUTION_MIN_EDGE,
+    }
+    kalshi_config = {
+        "api_key_id": KALSHI_API_KEY_ID,
+        "private_key_path": KALSHI_PRIVATE_KEY_PATH_EXEC,
+    }
+    polymarket_config = {
+        "private_key": POLYMARKET_PRIVATE_KEY,
+        "funder_address": POLYMARKET_FUNDER_ADDRESS,
+        "signature_type": POLYMARKET_SIGNATURE_TYPE,
+    }
+
+    executor = PredictionExecutor(
+        mode=mode,
+        bankroll_config=bankroll_config,
+        kalshi_config=kalshi_config if mode.startswith("kalshi") else None,
+        polymarket_config=polymarket_config if mode == "polymarket" else None,
+        db_session=db,
+    )
+
+    results = executor.execute_predictions(pred_dicts)
+    db.commit()
+    return {"results": results, "count": len(results), "mode": mode}
+
+
+@router.get("/positions")
+def get_positions(mode: str = "paper", db: Session = Depends(get_db)):
+    """Get open prediction market positions."""
+    from src.predictions.execution.execution_db import PredictionPosition
+
+    mode_filter = "paper" if mode == "paper" else "live"
+    positions = (
+        db.query(PredictionPosition)
+        .filter(PredictionPosition.mode == mode_filter)
+        .all()
+    )
+    return {
+        "positions": [
+            {
+                "id": p.id,
+                "market_id": p.market_id,
+                "platform": p.platform,
+                "question": p.question,
+                "side": p.side,
+                "contracts": p.contracts,
+                "avg_price": p.avg_price,
+                "cost_basis": p.cost_basis,
+                "current_price": p.current_price,
+                "unrealized_pnl": p.unrealized_pnl,
+                "mode": p.mode,
+                "opened_at": p.opened_at.isoformat() if p.opened_at else None,
+            }
+            for p in positions
+        ],
+        "count": len(positions),
+    }
+
+
+@router.get("/bankroll")
+def get_bankroll(mode: str = "paper", db: Session = Depends(get_db)):
+    """Get current bankroll state and performance."""
+    from src.predictions.execution.executor import PredictionExecutor
+    from config.settings import PREDICTION_BANKROLL
+
+    executor = PredictionExecutor(
+        mode=mode,
+        bankroll_config={"initial_bankroll": PREDICTION_BANKROLL},
+        db_session=db,
+    )
+    return executor.get_portfolio_summary()
+
+
+@router.post("/resolve")
+def resolve_positions(body: dict, db: Session = Depends(get_db)):
+    """Manually resolve positions.
+
+    Body:
+        market_id: str
+        outcome: "yes" | "no"
+        mode: str (default "paper")
+    """
+    from src.predictions.execution.executor import PredictionExecutor
+    from config.settings import PREDICTION_BANKROLL
+
+    market_id = body.get("market_id")
+    outcome = body.get("outcome")
+    mode = body.get("mode", "paper")
+
+    if not market_id or outcome not in ("yes", "no"):
+        raise HTTPException(status_code=400, detail="market_id and outcome (yes/no) required")
+
+    executor = PredictionExecutor(
+        mode=mode,
+        bankroll_config={"initial_bankroll": PREDICTION_BANKROLL},
+        db_session=db,
+    )
+    results = executor.resolve_markets([{"market_id": market_id, "outcome": outcome}])
+    db.commit()
+
+    if not results:
+        raise HTTPException(status_code=404, detail="No open position found for this market")
+
+    return results[0]
+
+
 @router.patch("/arbitrage/{opp_id}/status")
 def update_arbitrage_status(
     opp_id: int,

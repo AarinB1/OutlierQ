@@ -118,7 +118,15 @@ class PolymarketFetcher:
                 except (ValueError, TypeError):
                     pass
 
-            markets.append({
+            # Extract CLOB token IDs for order placement
+            clob_token_ids = m.get("clobTokenIds", [])
+            if isinstance(clob_token_ids, str):
+                try:
+                    clob_token_ids = json.loads(clob_token_ids)
+                except (json.JSONDecodeError, TypeError):
+                    clob_token_ids = []
+
+            market_dict = {
                 "platform": "polymarket",
                 "market_id": m.get("conditionId") or m.get("id", ""),
                 "slug": m.get("slug", ""),
@@ -129,7 +137,16 @@ class PolymarketFetcher:
                 "volume": vol,
                 "resolution_date": end_date,
                 "status": "open",
-            })
+            }
+
+            # Add token IDs if available (needed for order placement)
+            if clob_token_ids:
+                market_dict["token_ids"] = clob_token_ids
+                # First token is YES, second is NO
+                if len(clob_token_ids) >= 1:
+                    market_dict["token_id"] = clob_token_ids[0]
+
+            markets.append(market_dict)
 
         logger.info("Fetched %d active Polymarket markets (min_volume=%.0f)", len(markets), min_volume)
         return markets
