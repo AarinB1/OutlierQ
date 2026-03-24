@@ -96,12 +96,25 @@ class ArbitrageDetector:
             if poly_vol < self.min_volume or kalshi_vol < self.min_volume:
                 continue
 
+            # Reject arbs where one side has very thin volume (likely stale price)
+            min_side_volume = min(poly_vol, kalshi_vol)
+            if min_side_volume < self.min_volume * 0.5:
+                continue
+
             # Compute spread
             poly_yes = poly_market.get("yes_price", 0.5)
             kalshi_yes = best_match.get("yes_price", 0.5)
             spread = abs(poly_yes - kalshi_yes)
 
             if spread < self.min_spread:
+                continue
+
+            # Skip if the spread is unusually large (likely stale/illiquid)
+            if spread > 0.30:
+                logger.debug(
+                    "Skipping likely-stale arb: %s vs %s (spread=%.0f%%)",
+                    poly_market["question"][:40], best_match["question"][:40], spread * 100,
+                )
                 continue
 
             # Direction: which side is cheaper to buy YES?
