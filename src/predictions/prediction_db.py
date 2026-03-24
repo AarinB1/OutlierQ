@@ -53,3 +53,39 @@ class Prediction(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime)
+
+
+class ArbitrageOpportunity(Base):
+    """Detected price discrepancy between platforms on the same event."""
+    __tablename__ = "arbitrage_opportunities"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Polymarket side
+    poly_market_id = Column(String(255), nullable=False)
+    poly_question = Column(Text)
+    poly_yes_price = Column(Float, nullable=False)
+    poly_volume = Column(Float)
+
+    # Kalshi side
+    kalshi_market_id = Column(String(255), nullable=False)
+    kalshi_question = Column(Text)
+    kalshi_yes_price = Column(Float, nullable=False)
+    kalshi_volume = Column(Float)
+
+    # Arbitrage metrics
+    spread = Column(Float, nullable=False)          # abs(poly_yes - kalshi_yes)
+    spread_pct = Column(Float, nullable=False)       # spread as % of midpoint
+    direction = Column(String(50), nullable=False)   # "buy_poly_yes" | "buy_kalshi_yes"
+    match_score = Column(Float, nullable=False)      # 0.0-1.0, how confident the question match is
+    match_method = Column(String(50))                # "exact" | "fuzzy" | "keyword"
+
+    # Hypothetical P&L
+    theoretical_profit = Column(Float)               # profit per $1 if arb is real and resolves
+
+    # Status
+    status = Column(String(20), default="open")      # open | closed | expired | false_positive
+    notes = Column(Text)
+
+    detected_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime)

@@ -4,6 +4,9 @@ import {
   fetchPredictionHistory,
   fetchPredictionStats,
   scanPredictions,
+  scanArbitrage,
+  fetchArbitrageHistory,
+  updateArbitrageStatus,
 } from '../api'
 
 interface PredMarket {
@@ -48,6 +51,26 @@ interface PredStats {
   by_event_type: Record<string, { total: number; correct: number; accuracy: number }>
 }
 
+interface ArbOpportunity {
+  id: number
+  poly_market_id: string
+  poly_question: string
+  poly_yes_price: number
+  poly_volume: number
+  kalshi_market_id: string
+  kalshi_question: string
+  kalshi_yes_price: number
+  kalshi_volume: number
+  spread: number
+  spread_pct: number
+  direction: string
+  match_score: number
+  match_method: string
+  theoretical_profit: number
+  status: string
+  detected_at: string | null
+}
+
 function pct(v: number): string {
   return `${(v * 100).toFixed(1)}%`
 }
@@ -65,13 +88,15 @@ function outcomePill(outcome: string): string {
 }
 
 export default function PredictionMarkets() {
-  const [tab, setTab] = useState<'markets' | 'predictions' | 'stats'>('markets')
+  const [tab, setTab] = useState<'markets' | 'predictions' | 'arbitrage' | 'stats'>('markets')
   const [platformFilter, setPlatformFilter] = useState<string>('')
   const [markets, setMarkets] = useState<PredMarket[]>([])
   const [predictions, setPredictions] = useState<PredRecord[]>([])
+  const [arbOpps, setArbOpps] = useState<ArbOpportunity[]>([])
   const [stats, setStats] = useState<PredStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [arbScanning, setArbScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanResult, setScanResult] = useState<string | null>(null)
 
@@ -93,6 +118,15 @@ export default function PredictionMarkets() {
       .finally(() => setLoading(false))
   }, [platformFilter])
 
+  const loadArbitrage = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    fetchArbitrageHistory({ limit: 100 })
+      .then((d) => setArbOpps((d.opportunities ?? []) as ArbOpportunity[]))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load arbitrage'))
+      .finally(() => setLoading(false))
+  }, [])
+
   const loadStats = useCallback(() => {
     setLoading(true)
     setError(null)
@@ -105,8 +139,9 @@ export default function PredictionMarkets() {
   useEffect(() => {
     if (tab === 'markets') loadMarkets()
     else if (tab === 'predictions') loadPredictions()
+    else if (tab === 'arbitrage') loadArbitrage()
     else loadStats()
-  }, [tab, loadMarkets, loadPredictions, loadStats])
+  }, [tab, loadMarkets, loadPredictions, loadArbitrage, loadStats])
 
   const handleScan = () => {
     setScanning(true)
@@ -150,6 +185,28 @@ export default function PredictionMarkets() {
         </div>
       </div>
 
+      {tab === 'arbitrage' && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setArbScanning(true)
+              setScanResult(null)
+              scanArbitrage()
+                .then((d) => {
+                  setScanResult(`Found ${d.count} arbitrage opportunit${d.count === 1 ? 'y' : 'ies'}`)
+                  loadArbitrage()
+                })
+                .catch((e: unknown) => setScanResult(e instanceof Error ? e.message : 'Scan failed'))
+                .finally(() => setArbScanning(false))
+            }}
+            disabled={arbScanning}
+            className="px-4 py-2 rounded-lg bg-accent-amber text-white text-sm font-medium hover:bg-accent-amber/90 disabled:opacity-50 transition-colors"
+          >
+            {arbScanning ? 'Scanning...' : 'Scan Arbitrage'}
+          </button>
+        </div>
+      )}
+
       {scanResult && (
         <div className="card border border-accent-blue/20 bg-accent-blue/10 p-3 text-sm text-accent-blue">
           {scanResult}
@@ -158,7 +215,7 @@ export default function PredictionMarkets() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-tertiary rounded-lg p-1 w-fit">
-        {(['markets', 'predictions', 'stats'] as const).map((t) => (
+        {(['markets', 'predictions', 'arbitrage', 'stats'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -168,7 +225,7 @@ export default function PredictionMarkets() {
                 : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            {t === 'markets' ? 'Active Markets' : t === 'predictions' ? 'Bot Predictions' : 'Accuracy'}
+            {t === 'markets' ? 'Active Markets' : t === 'predictions' ? 'Bot Predictions' : t === 'arbitrage' ? 'Arbitrage' : 'Accuracy'}
           </button>
         ))}
       </div>
@@ -301,6 +358,102 @@ export default function PredictionMarkets() {
                         P&L: {p.pnl_if_bet >= 0 ? '+' : ''}{p.pnl_if_bet.toFixed(2)}
                       </p>
                     )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Arbitrage Tab */}
+      {!loading && tab === 'arbitrage' && (
+        <div className="space-y-3">
+          {arbOpps.length === 0 ? (
+            <div className="card p-12 text-center">
+              <p className="text-txt-tertiary text-lg mb-2">No arbitrage opportunities</p>
+              <p className="text-txt-secondary text-sm">Click "Scan Arbitrage" to find cross-platform price discrepancies.</p>
+            </div>
+          ) : (
+            arbOpps.map((opp) => (
+              <div key={opp.id} className="card border-l-4 border-accent-amber p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      opp.spread_pct >= 0.1
+                        ? 'bg-accent-amber/20 text-accent-amber'
+                        : 'bg-surface-tertiary text-txt-secondary'
+                    }`}>
+                      {opp.spread_pct >= 0.1 ? 'HIGH' : 'MODERATE'} SPREAD
+                    </span>
+                    <span className="text-[10px] text-txt-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded">
+                      {opp.match_method} ({(opp.match_score * 100).toFixed(0)}%)
+                    </span>
+                    {opp.status !== 'open' && (
+                      <span className="text-[10px] text-txt-tertiary bg-surface-tertiary px-1.5 py-0.5 rounded uppercase">
+                        {opp.status}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-mono text-lg font-bold text-accent-green">
+                    +{(opp.spread * 100).toFixed(1)}c
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  {/* Polymarket side */}
+                  <div className="p-3 rounded-lg bg-surface-secondary">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${platformBadge('polymarket')}`}>PM</span>
+                      <span className="text-txt-tertiary text-[10px]">Polymarket</span>
+                    </div>
+                    <p className="text-txt-primary text-xs mb-2 leading-snug">{opp.poly_question}</p>
+                    <div className="font-mono font-bold text-lg text-txt-primary">
+                      {(opp.poly_yes_price * 100).toFixed(1)}c
+                      <span className="text-txt-tertiary text-xs ml-1">YES</span>
+                    </div>
+                    <p className="text-txt-tertiary text-[10px] font-mono">
+                      Vol: ${opp.poly_volume >= 1_000_000 ? `${(opp.poly_volume / 1_000_000).toFixed(1)}M` : `${(opp.poly_volume / 1_000).toFixed(0)}K`}
+                    </p>
+                  </div>
+
+                  {/* Kalshi side */}
+                  <div className="p-3 rounded-lg bg-surface-secondary">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${platformBadge('kalshi')}`}>KA</span>
+                      <span className="text-txt-tertiary text-[10px]">Kalshi</span>
+                    </div>
+                    <p className="text-txt-primary text-xs mb-2 leading-snug">{opp.kalshi_question}</p>
+                    <div className="font-mono font-bold text-lg text-txt-primary">
+                      {(opp.kalshi_yes_price * 100).toFixed(1)}c
+                      <span className="text-txt-tertiary text-xs ml-1">YES</span>
+                    </div>
+                    <p className="text-txt-tertiary text-[10px] font-mono">
+                      Vol: ${opp.kalshi_volume >= 1_000_000 ? `${(opp.kalshi_volume / 1_000_000).toFixed(1)}M` : `${(opp.kalshi_volume / 1_000).toFixed(0)}K`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex justify-between items-center text-xs">
+                  <span className="font-mono text-txt-secondary">
+                    {opp.direction === 'buy_poly_yes' ? 'Buy Polymarket YES' : 'Buy Kalshi YES'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {opp.status === 'open' && (
+                      <button
+                        onClick={() => {
+                          updateArbitrageStatus(opp.id, 'false_positive')
+                            .then(() => loadArbitrage())
+                            .catch(() => {})
+                        }}
+                        className="text-[10px] text-txt-tertiary hover:text-accent-red transition-colors"
+                      >
+                        False positive
+                      </button>
+                    )}
+                    <span className="font-mono text-accent-green font-semibold">
+                      +${opp.theoretical_profit.toFixed(3)}/unit
+                    </span>
                   </div>
                 </div>
               </div>

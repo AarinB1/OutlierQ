@@ -171,6 +171,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Scan prediction markets (Polymarket/Kalshi) and generate predictions",
     )
+    parser.add_argument(
+        "--arbitrage",
+        action="store_true",
+        help="Scan for cross-platform prediction market arbitrage opportunities",
+    )
     return parser.parse_args()
 
 
@@ -514,6 +519,16 @@ def _invalidate_active_tickers_cache() -> None:
     _active_tickers_ts = 0
 
 
+def _table_exists(session, table_name: str) -> bool:
+    """Check if a table exists in the database."""
+    from sqlalchemy import inspect
+    try:
+        insp = inspect(session.bind)
+        return table_name in insp.get_table_names()
+    except Exception:
+        return False
+
+
 def run_autopilot(
     demo: bool = False,
     anytime: bool = False,
@@ -607,13 +622,115 @@ def run_autopilot(
                 n_tickers = len(_get_active_tickers_cached(orch))
                 signals_today = s.query(Signal).filter(Signal.created_at >= today_start).count()
                 discoveries_today = s.query(DiscoveredTicker).filter(DiscoveredTicker.discovered_at >= today_start).count()
+                from src.predictions.prediction_db import Prediction, ArbitrageOpportunity
+                predictions_today = (
+                    s.query(Prediction)
+                    .filter(Prediction.created_at >= today_start)
+                    .count()
+                ) if _table_exists(s, "predictions") else 0
+                arb_today = (
+                    s.query(ArbitrageOpportunity)
+                    .filter(ArbitrageOpportunity.detected_at >= today_start)
+                    .count()
+                ) if _table_exists(s, "arbitrage_opportunities") else 0
             logger.info(
-                "AUTOPILOT STATUS: monitoring %d tickers, %d signals generated today, %d discoveries today",
-                n_tickers, signals_today, discoveries_today,
+                "AUTOPILOT STATUS: monitoring %d tickers | %d signals | %d discoveries | %d predictions | %d arb opps today",
+                n_tickers, signals_today, discoveries_today, predictions_today, arb_today,
             )
             _write_heartbeat()
         except Exception:
             logger.exception("Autopilot status job failed")
+
+    # ── Prediction Market Jobs ────────────────────────────────────────
+
+    def prediction_scan_job() -> None:
+        """Fetch prediction markets, match with recent events, generate predictions."""
+        try:
+            from src.predictions.polymarket_fetcher import PolymarketFetcher
+            from src.predictions.kalshi_fetcher import KalshiFetcher
+            from src.predictions.market_matcher import MarketMatcher
+            from src.predictions.prediction_engine import PredictionEngine
+            from src.predictions.prediction_tracker import PredictionTracker
+            from src.db.tables import Event
+            from src.db.database import SessionLocal
+            from src.signals.feedback_tracker import FeedbackTracker
+
+            db = SessionLocal()
+            try:
+                # Fetch markets
+                markets = []
+                markets.extend(PolymarketFetcher().fetch_active_markets(limit=100))
+                markets.extend(KalshiFetcher(demo=demo).fetch_active_markets(limit=100))
+
+                if not markets:
+                    logger.info("Prediction scan: no markets available")
+                    return
+
+                # Get recent events (last 48h)
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+                recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
+                events = [
+                    {
+                        "ticker": e.ticker,
+                        "event_type": e.event_type,
+                        "direction": e.direction,
+                        "confidence": e.confidence,
+                        "headlines": [e.headline] if hasattr(e, "headline") and e.headline else [],
+                    }
+                    for e in recent
+                ]
+
+                if not events:
+                    logger.info("Prediction scan: no recent events to match")
+                    return
+
+                # Match + predict
+                matches = MarketMatcher().match_events_to_markets(events, markets)
+                stats = FeedbackTracker().get_accuracy_stats()
+                predictions = PredictionEngine().generate_predictions(matches, accuracy_stats=stats)
+
+                # Store
+                tracker = PredictionTracker(db)
+                for p in predictions:
+                    tracker.store_prediction(p)
+                db.commit()
+
+                logger.info("Prediction scan: %d markets x %d events -> %d predictions", len(markets), len(events), len(predictions))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Autopilot prediction scan job failed")
+
+    def arbitrage_scan_job() -> None:
+        """Scan for cross-platform arbitrage opportunities."""
+        try:
+            from src.predictions.polymarket_fetcher import PolymarketFetcher
+            from src.predictions.kalshi_fetcher import KalshiFetcher
+            from src.predictions.arbitrage_detector import ArbitrageDetector
+            from src.predictions.prediction_db import ArbitrageOpportunity
+            from src.db.database import SessionLocal
+
+            db = SessionLocal()
+            try:
+                poly = PolymarketFetcher().fetch_active_markets(limit=150, min_volume=5000)
+                kalshi = KalshiFetcher(demo=demo).fetch_active_markets(limit=150, min_volume=1000)
+
+                if not poly or not kalshi:
+                    logger.info("Arbitrage scan: insufficient markets (poly=%d, kalshi=%d)", len(poly), len(kalshi))
+                    return
+
+                detector = ArbitrageDetector(min_spread=0.03, min_match_score=0.55)
+                opportunities = detector.detect(poly, kalshi)
+
+                for opp in opportunities:
+                    db.add(ArbitrageOpportunity(**opp))
+                db.commit()
+
+                logger.info("Arbitrage scan: %d opportunities found", len(opportunities))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Autopilot arbitrage scan job failed")
 
     scheduler.add_job(discovery_job, trigger=IntervalTrigger(minutes=15), id="autopilot_discovery", name="Discovery")
     scheduler.add_job(ingestion_job, trigger=IntervalTrigger(minutes=5), id="autopilot_ingestion", name="News ingestion")
@@ -627,9 +744,22 @@ def run_autopilot(
     )
     scheduler.add_job(feedback_job, trigger=IntervalTrigger(hours=6), id="autopilot_feedback", name="Feedback evaluation")
     scheduler.add_job(status_job, trigger=IntervalTrigger(hours=1), id="autopilot_status", name="Status")
+    scheduler.add_job(
+        prediction_scan_job,
+        trigger=IntervalTrigger(minutes=30),
+        id="autopilot_prediction_scan",
+        name="Prediction market scan",
+    )
+    scheduler.add_job(
+        arbitrage_scan_job,
+        trigger=IntervalTrigger(minutes=30),
+        id="autopilot_arbitrage_scan",
+        name="Cross-platform arbitrage scan",
+    )
 
     logger.info(
-        "Autopilot scheduler: discovery every 15 min, ingestion every 5 min, pipeline every 5 min (offset 1), feedback every 6 h, status every 1 h"
+        "Autopilot scheduler: discovery/15m, ingestion/5m, pipeline/5m, feedback/6h, "
+        "predictions/30m, arbitrage/30m, status/1h"
     )
     try:
         scheduler.start()
@@ -824,6 +954,85 @@ def run_prediction_scan(demo: bool = False) -> None:
         print(f"  {'─'*56}")
     print()
 
+    # Also run arbitrage scan
+    print("Scanning for cross-platform arbitrage...")
+    from src.predictions.arbitrage_detector import ArbitrageDetector
+    from src.predictions.prediction_db import ArbitrageOpportunity
+
+    poly_markets = PolymarketFetcher().fetch_active_markets(limit=150, min_volume=5000)
+    kalshi_markets = KalshiFetcher(demo=demo).fetch_active_markets(limit=150, min_volume=1000)
+
+    if poly_markets and kalshi_markets:
+        detector = ArbitrageDetector(min_spread=0.03)
+        arb_opps = detector.detect(poly_markets, kalshi_markets)
+        for opp in arb_opps:
+            db.add(ArbitrageOpportunity(**opp))
+        db.commit()
+
+        if arb_opps:
+            print(f"\n{'='*60}")
+            print(f"  ARBITRAGE OPPORTUNITIES: {len(arb_opps)}")
+            print(f"{'='*60}")
+            for opp in arb_opps[:10]:  # Show top 10
+                spread_cents = opp["spread"] * 100
+                print(f"\n  SPREAD: {spread_cents:.1f}c  |  {opp['poly_question'][:50]}")
+                print(f"  PM: {opp['poly_yes_price']:.0%}  vs  KA: {opp['kalshi_yes_price']:.0%}")
+            print()
+        else:
+            print("  No arbitrage opportunities above threshold.\n")
+    else:
+        print(f"  Skipped arbitrage (poly={len(poly_markets)}, kalshi={len(kalshi_markets)})\n")
+
+    db.close()
+
+
+def run_arbitrage_scan() -> None:
+    """Scan Polymarket vs Kalshi for price discrepancies."""
+    from src.predictions.polymarket_fetcher import PolymarketFetcher
+    from src.predictions.kalshi_fetcher import KalshiFetcher
+    from src.predictions.arbitrage_detector import ArbitrageDetector
+    from src.predictions.prediction_db import ArbitrageOpportunity
+    from src.db.database import SessionLocal
+
+    db = SessionLocal()
+
+    print("\nScanning for cross-platform arbitrage...")
+    poly = PolymarketFetcher().fetch_active_markets(limit=150, min_volume=5000)
+    kalshi = KalshiFetcher().fetch_active_markets(limit=150, min_volume=1000)
+    print(f"   Polymarket: {len(poly)} markets")
+    print(f"   Kalshi:     {len(kalshi)} markets")
+
+    detector = ArbitrageDetector(min_spread=0.03, min_match_score=0.55)
+    opportunities = detector.detect(poly, kalshi)
+
+    # Store
+    for opp in opportunities:
+        db.add(ArbitrageOpportunity(**opp))
+    db.commit()
+
+    print(f"\n{'='*60}")
+    print(f"  ARBITRAGE OPPORTUNITIES: {len(opportunities)}")
+    print(f"{'='*60}")
+
+    if not opportunities:
+        print("\n  No arbitrage opportunities found above threshold.\n")
+        db.close()
+        return
+
+    for opp in opportunities:
+        spread_cents = opp["spread"] * 100
+        direction_label = (
+            "Buy YES on Polymarket" if opp["direction"] == "buy_poly_yes"
+            else "Buy YES on Kalshi"
+        )
+        print(f"\n  SPREAD: {spread_cents:.1f}c  ({opp['spread_pct']:.0%})")
+        print(f"  PM:  {opp['poly_yes_price']:.0%} YES  |  \"{opp['poly_question'][:60]}\"")
+        print(f"  KA:  {opp['kalshi_yes_price']:.0%} YES  |  \"{opp['kalshi_question'][:60]}\"")
+        print(f"  Action: {direction_label}")
+        print(f"  Match:  {opp['match_method']} ({opp['match_score']:.0%})")
+        print(f"  {'─'*56}")
+
+    print()
     db.close()
 
 
@@ -1093,6 +1302,10 @@ def main() -> None:
 
     if args.predict:
         run_prediction_scan(demo=args.demo)
+        return
+
+    if args.arbitrage:
+        run_arbitrage_scan()
         return
 
     if args.discover_only:

@@ -292,6 +292,41 @@ export async function fetchPredictionStats(): Promise<Record<string, unknown>> {
   return fetchJSON('/predictions/stats');
 }
 
+export async function scanArbitrage(body?: {
+  min_spread?: number;
+  min_volume?: number;
+  min_match_score?: number;
+}): Promise<{ opportunities: unknown[]; count: number }> {
+  return fetchJSON('/predictions/arbitrage/scan', {
+    method: 'POST',
+    body: JSON.stringify(body || {}),
+  });
+}
+
+export async function fetchArbitrageHistory(opts?: {
+  status?: string;
+  min_spread?: number;
+  limit?: number;
+}): Promise<{ opportunities: unknown[]; count: number }> {
+  const sp = new URLSearchParams();
+  if (opts?.status) sp.set('status', opts.status);
+  if (opts?.min_spread) sp.set('min_spread', String(opts.min_spread));
+  if (opts?.limit) sp.set('limit', String(opts.limit));
+  const qs = sp.toString();
+  return fetchJSON(`/predictions/arbitrage/history${qs ? `?${qs}` : ''}`);
+}
+
+export async function updateArbitrageStatus(
+  id: number,
+  status: string,
+  notes?: string,
+): Promise<{ id: number; status: string }> {
+  return fetchJSON(`/predictions/arbitrage/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, notes }),
+  });
+}
+
 // ── Trading API ──────────────────────────────────────────────────
 
 const TRADING_BASE = '/api/trading';

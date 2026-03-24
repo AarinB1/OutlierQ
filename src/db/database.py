@@ -73,7 +73,7 @@ def init_db() -> None:
         ModelCheckpoint, PortfolioState, MarketRegime,
         StrategyConfig, Watchlist, TradeJournal, UserSettings,
     )
-    from src.predictions.prediction_db import PredictionMarket, Prediction  # noqa: F401
+    from src.predictions.prediction_db import PredictionMarket, Prediction, ArbitrageOpportunity  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     migrate_db()
