@@ -108,7 +108,56 @@ def scan_for_predictions(
     # 4. Generate predictions
     tracker_stats = FeedbackTracker().get_accuracy_stats()
     engine = PredictionEngine(min_edge=min_edge)
-    predictions = engine.generate_predictions(matches, accuracy_stats=tracker_stats)
+
+    # 4b. Run MiroFish simulations if enabled
+    sim_results: dict = {}
+    try:
+        from config.runtime import is_mirofish_enabled
+        if is_mirofish_enabled():
+            from src.predictions.prediction_simulator import submit_prediction_simulations
+            from src.simulation.mirofish_client import MirofishClient
+
+            # Build initial predictions without simulation (need them for seeding)
+            initial_predictions = engine.generate_predictions(matches, accuracy_stats=tracker_stats)
+
+            if initial_predictions:
+                # Build event/article maps for seeding
+                events_by_market = {}
+                articles_by_ticker = {}
+                for match in matches:
+                    mid = match["market"]["market_id"]
+                    events_by_market[mid] = match["event"]
+                    ticker = match["event"].get("ticker", "")
+                    if ticker and ticker not in articles_by_ticker:
+                        # Fetch articles for this ticker
+                        from src.db.tables import Article
+                        ticker_articles = (
+                            db.query(Article)
+                            .filter(Article.ticker == ticker)
+                            .order_by(Article.published_at.desc())
+                            .limit(10)
+                            .all()
+                        )
+                        articles_by_ticker[ticker] = [
+                            {"headline": a.headline, "summary": a.summary, "source": a.source}
+                            for a in ticker_articles
+                        ]
+
+                client = MirofishClient()
+                sim_results = submit_prediction_simulations(
+                    initial_predictions,
+                    events_by_match=events_by_market,
+                    articles_by_ticker=articles_by_ticker,
+                    client=client,
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).debug("MiroFish prediction enrichment skipped", exc_info=True)
+
+    # Now generate final predictions with simulation data
+    predictions = engine.generate_predictions(
+        matches, accuracy_stats=tracker_stats, simulation_results=sim_results,
+    )
 
     # 5. Store
     pred_tracker = PredictionTracker(db)
@@ -153,6 +202,9 @@ def get_prediction_history(
                 "actual_outcome": p.actual_outcome,
                 "is_correct": p.is_correct,
                 "pnl_if_bet": p.pnl_if_bet,
+                "simulation_enhanced": p.simulation_enhanced or False,
+                "sim_estimated_probability": p.sim_estimated_probability,
+                "sim_consensus_strength": p.sim_consensus_strength,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "resolved_at": p.resolved_at.isoformat() if p.resolved_at else None,
             }

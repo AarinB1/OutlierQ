@@ -687,7 +687,50 @@ def run_autopilot(
                 # Match + predict
                 matches = MarketMatcher().match_events_to_markets(events, markets)
                 stats = FeedbackTracker().get_accuracy_stats()
-                predictions = PredictionEngine().generate_predictions(matches, accuracy_stats=stats)
+
+                # MiroFish enrichment (if enabled)
+                sim_results = {}
+                try:
+                    from config.runtime import is_mirofish_enabled
+                    if is_mirofish_enabled():
+                        from src.predictions.prediction_simulator import submit_prediction_simulations
+                        from src.simulation.mirofish_client import MirofishClient
+
+                        # Build event/article maps
+                        events_by_market = {
+                            m["market"]["market_id"]: m["event"] for m in matches
+                        }
+                        articles_by_ticker = {}
+                        for m in matches:
+                            ticker = m["event"].get("ticker", "")
+                            if ticker and ticker not in articles_by_ticker:
+                                from src.db.tables import Article
+                                ticker_arts = (
+                                    db.query(Article)
+                                    .filter(Article.ticker == ticker)
+                                    .order_by(Article.published_at.desc())
+                                    .limit(10)
+                                    .all()
+                                )
+                                articles_by_ticker[ticker] = [
+                                    {"headline": a.headline, "summary": a.summary, "source": a.source}
+                                    for a in ticker_arts
+                                ]
+
+                        initial_preds = PredictionEngine().generate_predictions(matches, accuracy_stats=stats)
+                        if initial_preds:
+                            sim_results = submit_prediction_simulations(
+                                initial_preds,
+                                events_by_match=events_by_market,
+                                articles_by_ticker=articles_by_ticker,
+                                client=MirofishClient(),
+                            )
+                except Exception:
+                    logger.debug("Autopilot MiroFish prediction enrichment skipped", exc_info=True)
+
+                predictions = PredictionEngine().generate_predictions(
+                    matches, accuracy_stats=stats, simulation_results=sim_results,
+                )
 
                 # Store
                 tracker = PredictionTracker(db)
@@ -931,7 +974,51 @@ def run_prediction_scan(demo: bool = False) -> None:
 
     # Match + predict
     matches = MarketMatcher().match_events_to_markets(events, markets)
-    predictions = PredictionEngine().generate_predictions(matches)
+
+    # MiroFish enrichment (if enabled)
+    sim_results = {}
+    try:
+        from config.runtime import is_mirofish_enabled
+        if is_mirofish_enabled():
+            from src.predictions.prediction_simulator import submit_prediction_simulations
+            from src.simulation.mirofish_client import MirofishClient
+
+            events_by_market = {
+                m["market"]["market_id"]: m["event"] for m in matches
+            }
+            articles_by_ticker = {}
+            for m in matches:
+                ticker = m["event"].get("ticker", "")
+                if ticker and ticker not in articles_by_ticker:
+                    from src.db.tables import Article
+                    ticker_arts = (
+                        db.query(Article)
+                        .filter(Article.ticker == ticker)
+                        .order_by(Article.published_at.desc())
+                        .limit(10)
+                        .all()
+                    )
+                    articles_by_ticker[ticker] = [
+                        {"headline": a.headline, "summary": a.summary, "source": a.source}
+                        for a in ticker_arts
+                    ]
+
+            initial_preds = PredictionEngine().generate_predictions(matches)
+            if initial_preds:
+                print(f"Running MiroFish simulations on {len(initial_preds)} predictions...")
+                sim_results = submit_prediction_simulations(
+                    initial_preds,
+                    events_by_match=events_by_market,
+                    articles_by_ticker=articles_by_ticker,
+                    client=MirofishClient(),
+                )
+                print(f"  {len(sim_results)}/{len(initial_preds)} simulations completed")
+    except Exception:
+        logger.debug("MiroFish prediction enrichment skipped", exc_info=True)
+
+    predictions = PredictionEngine().generate_predictions(
+        matches, simulation_results=sim_results,
+    )
 
     # Store
     tracker = PredictionTracker(db)
@@ -947,9 +1034,12 @@ def run_prediction_scan(demo: bool = False) -> None:
         outcome = "YES" if p["predicted_outcome"] == "yes" else "NO"
         platform_tag = "PM" if p["platform"] == "polymarket" else "KA"
         edge_pct = p["edge"] * 100
-        print(f"\n  [{platform_tag}] {outcome}  (edge: {edge_pct:+.1f}%)")
+        sim_tag = " [MiroFish]" if p.get("simulation_enhanced") else ""
+        print(f"\n  [{platform_tag}] {outcome}  (edge: {edge_pct:+.1f}%){sim_tag}")
         print(f"  Q: {p['question'][:80]}")
         print(f"  Bot: {p['predicted_probability']:.0%}  |  Market: {p['market_probability']:.0%}")
+        if p.get("simulation_enhanced") and p.get("sim_estimated_probability") is not None:
+            print(f"  Sim estimate: {p['sim_estimated_probability']:.0%}  |  Consensus: {p.get('sim_consensus_strength', 0):.0%}")
         print(f"  Event: {p['matched_event_type']}  Ticker: {p['matched_tickers']}")
         print(f"  {'─'*56}")
     print()

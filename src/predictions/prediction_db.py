@@ -46,6 +46,13 @@ class Prediction(Base):
     matched_tickers = Column(Text)                           # comma-separated tickers
     match_method = Column(String(50))                        # "keyword" | "ticker" | "semantic"
 
+    # MiroFish simulation enrichment
+    simulation_enhanced = Column(Boolean, default=False)
+    sim_estimated_probability = Column(Float)      # MiroFish's probability estimate
+    sim_consensus_strength = Column(Float)          # 0.0–1.0
+    sim_yes_pct = Column(Float)                     # % of agents saying YES
+    sim_narrative = Column(Text)                    # key factors / narrative
+
     # Resolution
     actual_outcome = Column(String(10))                      # "yes" | "no" | null
     is_correct = Column(Boolean)

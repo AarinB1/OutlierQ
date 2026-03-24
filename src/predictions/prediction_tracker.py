@@ -29,6 +29,12 @@ class PredictionTracker:
             matched_event_type=pred.get("matched_event_type"),
             matched_tickers=pred.get("matched_tickers"),
             match_method=pred.get("match_method"),
+            # MiroFish simulation fields
+            simulation_enhanced=pred.get("simulation_enhanced", False),
+            sim_estimated_probability=pred.get("sim_estimated_probability"),
+            sim_consensus_strength=pred.get("sim_consensus_strength"),
+            sim_yes_pct=pred.get("sim_yes_pct"),
+            sim_narrative=pred.get("sim_narrative"),
         )
         self.db.add(record)
         self.db.flush()

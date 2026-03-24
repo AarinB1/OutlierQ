@@ -37,6 +37,9 @@ interface PredRecord {
   actual_outcome: string | null
   is_correct: boolean | null
   pnl_if_bet: number | null
+  simulation_enhanced: boolean
+  sim_estimated_probability: number | null
+  sim_consensus_strength: number | null
   created_at: string | null
   resolved_at: string | null
 }
@@ -322,6 +325,11 @@ export default function PredictionMarkets() {
                       {p.matched_tickers && (
                         <span className="text-[10px] font-mono text-accent-blue">{p.matched_tickers}</span>
                       )}
+                      {p.simulation_enhanced && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400">
+                          MiroFish
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-txt-primary leading-snug">{p.question}</p>
                     {p.created_at && (
@@ -360,6 +368,15 @@ export default function PredictionMarkets() {
                     )}
                   </div>
                 </div>
+                {p.simulation_enhanced && p.sim_estimated_probability != null && (
+                  <div className="mt-2 p-2 rounded bg-surface-tertiary text-xs text-txt-secondary">
+                    <span className="text-txt-tertiary">Sim estimate:</span>{' '}
+                    <span className="font-mono">{(p.sim_estimated_probability * 100).toFixed(1)}%</span>
+                    <span className="mx-2 text-txt-tertiary">|</span>
+                    <span className="text-txt-tertiary">Consensus:</span>{' '}
+                    <span className="font-mono">{((p.sim_consensus_strength ?? 0) * 100).toFixed(0)}%</span>
+                  </div>
+                )}
               </div>
             ))
           )}
