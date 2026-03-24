@@ -43,6 +43,10 @@ app.add_middleware(
 from src.api.trading_routes import router as trading_router
 app.include_router(trading_router)
 
+# Mount prediction market routes
+from src.api.prediction_routes import router as prediction_router
+app.include_router(prediction_router)
+
 # WebSocket manager
 from src.api.websocket_manager import ws_manager
 

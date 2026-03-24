@@ -44,6 +44,16 @@ MIROFISH_MIN_CONFIDENCE: float = float(os.getenv("MIROFISH_MIN_CONFIDENCE", "0.7
 MIROFISH_TIMEOUT: int = int(os.getenv("MIROFISH_TIMEOUT", "30"))
 MIROFISH_WAIT_TIMEOUT: int = int(os.getenv("MIROFISH_WAIT_TIMEOUT", "600"))
 
+# ── Prediction Markets ──────────────────────────────────────────────────
+POLYMARKET_ENABLED = os.getenv("POLYMARKET_ENABLED", "true").lower() == "true"
+KALSHI_ENABLED = os.getenv("KALSHI_ENABLED", "true").lower() == "true"
+KALSHI_DEMO = os.getenv("KALSHI_DEMO", "true").lower() == "true"
+KALSHI_API_KEY = os.getenv("KALSHI_API_KEY", "")
+KALSHI_PRIVATE_KEY_PATH = os.getenv("KALSHI_PRIVATE_KEY_PATH", "")
+PREDICTION_MIN_EDGE = float(os.getenv("PREDICTION_MIN_EDGE", "0.05"))
+PREDICTION_MIN_CONFIDENCE = float(os.getenv("PREDICTION_MIN_CONFIDENCE", "0.4"))
+PREDICTION_MARKET_MIN_VOLUME = float(os.getenv("PREDICTION_MARKET_MIN_VOLUME", "10000"))
+
 # FinBERT settings
 FINBERT_MODEL: str = os.getenv("FINBERT_MODEL", "ProsusAI/finbert")
 FINBERT_DEVICE: str | None = os.getenv("FINBERT_DEVICE", None)

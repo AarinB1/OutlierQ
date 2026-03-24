@@ -22,6 +22,7 @@ const OPTIONS_NAV: { key: OptionsPage; icon: string; label: string }[] = [
   { key: 'accuracy', icon: '\u25CE', label: 'Accuracy' },
   { key: 'tickers', icon: '\u2B21', label: 'Tickers' },
   { key: 'discovery', icon: '\u25C8', label: 'Discovery' },
+  { key: 'predictions', icon: '\u25B2', label: 'Predictions' },
 ]
 
 const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
