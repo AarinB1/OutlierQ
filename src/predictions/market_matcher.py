@@ -23,8 +23,17 @@ EVENT_MARKET_KEYWORDS = {
 class MarketMatcher:
     """Correlates OutlierQ events with prediction market questions."""
 
-    def __init__(self, similarity_threshold: float = 0.35):
+    def __init__(
+        self,
+        similarity_threshold: float = 0.35,
+        method_thresholds: dict[str, float] | None = None,
+    ):
         self.similarity_threshold = similarity_threshold
+        self.method_thresholds = method_thresholds or {
+            "ticker": 0.35,      # ticker mention is strong — low bar is fine
+            "keyword": 0.40,     # need at least 2-3 keyword hits to be meaningful
+            "semantic": 0.55,    # fuzzy matches must be substantially similar
+        }
 
     def match_events_to_markets(
         self,
@@ -58,7 +67,8 @@ class MarketMatcher:
                 question = market.get("question", "")
                 score, method = self._score_match(ticker, event_type, headlines, question)
 
-                if score >= self.similarity_threshold:
+                method_floor = self.method_thresholds.get(method, self.similarity_threshold)
+                if score >= method_floor:
                     matches.append({
                         "market": market,
                         "event": event,
@@ -94,6 +104,25 @@ class MarketMatcher:
         best_score = 0.0
         best_method = "keyword"
 
+        # 0. Ticker conflict check — if the question mentions a DIFFERENT
+        #    ticker, this is almost certainly a wrong match.  Bail early.
+        if ticker and len(ticker) >= 2:
+            # Find all ticker-like tokens (2-5 uppercase letters) in the question
+            mentioned_tickers = set(re.findall(r'\b[A-Z]{2,5}\b', q_upper))
+            # Remove common English words that look like tickers
+            noise = {
+                "THE", "AND", "FOR", "ARE", "NOT", "BUT", "HAS", "HIS",
+                "HER", "WAS", "ALL", "CAN", "HAD", "ONE", "OUR", "OUT",
+                "DAY", "GET", "HIM", "HOW", "ITS", "MAY", "NEW", "NOW",
+                "OLD", "SEE", "WAY", "WHO", "DID", "LET", "SAY", "SHE",
+                "TOO", "USE", "YES", "NO", "WILL", "GDP", "EPS", "FDA",
+                "FED", "CEO", "IPO", "SEC", "ETF", "API",
+            }
+            mentioned_tickers -= noise
+            if mentioned_tickers and ticker not in mentioned_tickers:
+                # Question explicitly mentions other tickers but NOT ours
+                return 0.0, "conflict"
+
         # 1. Direct ticker mention in question (strongest signal)
         if ticker and len(ticker) >= 2:
             # Match ticker as whole word to avoid false positives (e.g. "A" in "A recession")
@@ -102,19 +131,23 @@ class MarketMatcher:
                 best_score = 0.8
                 best_method = "ticker"
 
-        # 2. Event-type keyword overlap
+        # 2. Event-type keyword overlap (require >= 2 hits for a meaningful match)
         keywords = EVENT_MARKET_KEYWORDS.get(event_type, [])
         if keywords:
             q_lower = question.lower()
             keyword_hits = sum(1 for kw in keywords if kw.lower() in q_lower)
-            keyword_score = min(keyword_hits / max(len(keywords), 1) * 0.6, 0.6)
-            if keyword_score > best_score:
-                best_score = keyword_score
-                best_method = "keyword"
+            if keyword_hits >= 2:
+                keyword_score = min(keyword_hits / max(len(keywords), 1) * 0.6, 0.6)
+                if keyword_score > best_score:
+                    best_score = keyword_score
+                    best_method = "keyword"
 
-        # 3. Headline similarity (fuzzy)
-        for headline in headlines[:5]:
+        # 3. Headline similarity (fuzzy) — limit to top 3 headlines,
+        #    require ratio >= 0.5 before scoring to avoid noise matches
+        for headline in headlines[:3]:
             ratio = SequenceMatcher(None, headline.lower(), question.lower()).ratio()
+            if ratio < 0.5:
+                continue  # below noise floor
             semantic_score = ratio * 0.7  # cap contribution
             if semantic_score > best_score:
                 best_score = semantic_score
