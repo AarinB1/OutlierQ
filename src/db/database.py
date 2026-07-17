@@ -62,6 +62,14 @@ def migrate_db() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN simulation_enhanced INTEGER DEFAULT 0 NOT NULL"))
             conn.commit()
             logger.info("Added signals.simulation_enhanced column.")
+        if "entry_price" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN entry_price FLOAT"))
+            conn.commit()
+            logger.info("Added signals.entry_price column.")
+        if "entry_iv" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN entry_iv FLOAT"))
+            conn.commit()
+            logger.info("Added signals.entry_iv column.")
 
 
 def init_db() -> None:

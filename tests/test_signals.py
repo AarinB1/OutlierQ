@@ -488,6 +488,55 @@ class TestGenerateSignals:
         db_session.expire_all()
         record = db_session.query(Signal).filter(Signal.event_id == "evt-store-test").one()
         assert record.direction == "put"
+        # Entry snapshot for later Black-Scholes evaluation must be persisted.
+        assert record.entry_price == 150.0
+        assert record.entry_iv == pytest.approx(0.40)  # put chain IV from mock
+
+    def test_generate_and_store_without_contract_leaves_iv_null(self, db_session):
+        """When no chain contract is found, entry_iv stays NULL (fallback at eval time)."""
+        event = Event(
+            id="evt-no-chain",
+            ticker="XYZ",
+            event_type="scandal",
+            direction="bearish",
+            confidence=0.85,
+        )
+        db_session.add(event)
+        db_session.flush()
+
+        market = MagicMock()
+        market.get_current_price.return_value = 80.0
+        market.fetch_options_chain.return_value = {
+            "calls": pd.DataFrame(),
+            "puts": pd.DataFrame(),
+        }
+        engine = SignalEngine(market_fetcher=market)
+        stored = engine.generate_and_store(
+            [{
+                "ticker": "XYZ",
+                "event_type": "scandal",
+                "event_id": "evt-no-chain",
+                "confidence": 0.85,
+            }],
+            session=db_session,
+        )
+
+        assert len(stored) == 1
+        assert stored[0].entry_price == 80.0
+        assert stored[0].entry_iv is None
+
+    def test_contract_lookup_targets_signal_expiry(self, mock_market):
+        """The chain lookup should request the signal's expiry, not just the front week."""
+        engine = SignalEngine(market_fetcher=mock_market)
+        engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "scandal",
+            "event_id": "evt-expiry",
+            "confidence": 0.85,
+        })
+        _, kwargs = mock_market.fetch_options_chain.call_args
+        assert "target_expiry" in kwargs
+        date.fromisoformat(kwargs["target_expiry"])  # valid YYYY-MM-DD
 
 
 # ── All event profiles produce valid signals ──────────────────────────

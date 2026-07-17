@@ -242,7 +242,7 @@ class SignalEngine:
         Returns contract details dict or None if chain is unavailable.
         """
         try:
-            chain = self.market_fetcher.fetch_options_chain(ticker)
+            chain = self.market_fetcher.fetch_options_chain(ticker, target_expiry=target_expiry)
         except Exception:
             logger.warning("Failed to fetch options chain for %s", ticker)
             return None
@@ -732,6 +732,8 @@ class SignalEngine:
                     logger.warning("Signal for %s has no event_id, skipping store", sig["ticker"])
                     continue
 
+                contract = sig.get("contract") or {}
+                entry_iv = float(contract.get("implied_volatility") or 0.0)
                 record = Signal(
                     ticker=sig["ticker"],
                     event_id=event_id,
@@ -742,6 +744,9 @@ class SignalEngine:
                     exploratory=sig.get("exploratory", False),
                     discovery_source=sig.get("discovery_source"),
                     simulation_enhanced=sig.get("simulation_enhanced", False),
+                    entry_price=sig.get("current_price"),
+                    # Only persist a plausible IV; yfinance reports 0 for stale quotes.
+                    entry_iv=entry_iv if 0.01 <= entry_iv <= 5.0 else None,
                 )
                 s.add(record)
                 stored.append(record)

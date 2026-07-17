@@ -45,6 +45,8 @@ export interface Signal {
   confidence: number;
   outcome: string | null;
   outcome_pnl: number | null;
+  entry_price?: number | null;
+  entry_iv?: number | null;
   created_at: string | null;
   event_id: string;
   event?: EventData;

@@ -2,6 +2,7 @@
 
 import logging
 import time
+from datetime import date, datetime
 
 import pandas as pd
 import yfinance as yf
@@ -26,41 +27,72 @@ class MarketFetcher:
     # ── Price history ─────────────────────────────────────────────────
 
     def fetch_price_history(
-        self, ticker: str, period: str = "1mo"
+        self,
+        ticker: str,
+        period: str = "1mo",
+        start: date | None = None,
+        end: date | None = None,
     ) -> pd.DataFrame:
-        """Return OHLCV price history for *ticker*."""
-        cache_key = f"{ticker}_{period}"
+        """Return OHLCV price history for *ticker*.
+
+        When *start* (and optionally *end*) is given, fetches that explicit
+        date range instead of a trailing period — needed to evaluate signals
+        older than any trailing window.
+        """
+        if start is not None:
+            cache_key = f"{ticker}_{start.isoformat()}_{end.isoformat() if end else 'now'}"
+        else:
+            cache_key = f"{ticker}_{period}"
         cached = self._history_cache.get(cache_key)
         if cached and (time.time() - cached[1]) < CACHE_TTL:
             logger.debug("Cache hit for price history: %s", cache_key)
             return cached[0]
 
-        logger.info("Fetching price history for %s (period=%s)", ticker, period)
         stock = yf.Ticker(ticker)
-        df = stock.history(period=period)
+        if start is not None:
+            logger.info("Fetching price history for %s (%s to %s)", ticker, start, end or "now")
+            df = stock.history(start=start.isoformat(), end=end.isoformat() if end else None)
+        else:
+            logger.info("Fetching price history for %s (period=%s)", ticker, period)
+            df = stock.history(period=period)
         self._history_cache[cache_key] = (df, time.time())
         return df
 
     # ── Options chain ─────────────────────────────────────────────────
 
-    def fetch_options_chain(self, ticker: str) -> dict:
-        """Pull current options chain. Returns dict with 'calls' and 'puts' DataFrames."""
-        cached = self._options_cache.get(ticker)
+    def fetch_options_chain(self, ticker: str, target_expiry: str | None = None) -> dict:
+        """Pull the options chain closest to *target_expiry* (YYYY-MM-DD).
+
+        Defaults to the nearest expiration when no target is given.
+        Returns dict with 'calls'/'puts' DataFrames and the resolved 'expiry'.
+        """
+        cache_key = f"{ticker}_{target_expiry or 'nearest'}"
+        cached = self._options_cache.get(cache_key)
         if cached and (time.time() - cached[1]) < CACHE_TTL:
-            logger.debug("Cache hit for options chain: %s", ticker)
+            logger.debug("Cache hit for options chain: %s", cache_key)
             return cached[0]
 
-        logger.info("Fetching options chain for %s", ticker)
+        logger.info("Fetching options chain for %s (target expiry=%s)", ticker, target_expiry)
         stock = yf.Ticker(ticker)
         expiration_dates = stock.options
         if not expiration_dates:
             logger.warning("No options data available for %s", ticker)
-            return {"calls": pd.DataFrame(), "puts": pd.DataFrame()}
+            return {"calls": pd.DataFrame(), "puts": pd.DataFrame(), "expiry": None}
 
-        # Use the nearest expiration date
-        chain = stock.option_chain(expiration_dates[0])
-        result = {"calls": chain.calls, "puts": chain.puts}
-        self._options_cache[ticker] = (result, time.time())
+        chosen = expiration_dates[0]
+        if target_expiry:
+            try:
+                target = datetime.strptime(target_expiry, "%Y-%m-%d").date()
+                chosen = min(
+                    expiration_dates,
+                    key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - target).days),
+                )
+            except ValueError:
+                pass  # unparsable target — keep nearest expiration
+
+        chain = stock.option_chain(chosen)
+        result = {"calls": chain.calls, "puts": chain.puts, "expiry": chosen}
+        self._options_cache[cache_key] = (result, time.time())
         return result
 
     # ── Current price ─────────────────────────────────────────────────

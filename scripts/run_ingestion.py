@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         help="Evaluate pending signals and print accuracy stats, then exit",
     )
     parser.add_argument(
+        "--reevaluate",
+        action="store_true",
+        help="Clear all signal outcomes and re-evaluate with the Black-Scholes P&L model, then exit",
+    )
+    parser.add_argument(
         "--reclassify",
         action="store_true",
         help="Re-classify all existing events in the database and exit",
@@ -237,17 +242,32 @@ def run_full_pipeline(tickers: list[str], demo: bool = False, use_ml: bool = Fal
     print()
 
 
-def run_evaluate() -> None:
-    """Evaluate pending signals and print accuracy stats."""
+def run_evaluate(reevaluate: bool = False) -> None:
+    """Evaluate pending signals and print accuracy stats.
+
+    With reevaluate=True, clears existing outcomes first so historical
+    accuracy is restated with the Black-Scholes P&L model.
+    """
     from src.signals.feedback_tracker import FeedbackTracker
 
     tracker = FeedbackTracker()
-    results = tracker.evaluate_all_pending()
+    if reevaluate:
+        summary = tracker.reevaluate_all()
+        results = summary["results"]
+        print(
+            f"\nRestated {summary['reevaluated']} of {summary['previously_evaluated']} "
+            "previously evaluated signals with Black-Scholes P&L."
+        )
+    else:
+        results = tracker.evaluate_all_pending()
 
     if results:
         print(f"\nEvaluated {len(results)} signals:")
         for r in results:
-            print(f"  {r['ticker']} {r['direction']}: {r['outcome']} (P&L: {r['estimated_pnl']:+.1f}%)")
+            print(
+                f"  {r['ticker']} {r['direction']}: {r['outcome']} "
+                f"(P&L: {r['estimated_pnl']:+.1f}%, IV={r['iv_used']:.2f} [{r['iv_source']}])"
+            )
 
     stats = tracker.get_accuracy_stats()
     print(f"\n{'='*60}")
@@ -1382,8 +1402,8 @@ def main() -> None:
         run_train_ml()
         return
 
-    if args.evaluate:
-        run_evaluate()
+    if args.evaluate or args.reevaluate:
+        run_evaluate(reevaluate=args.reevaluate)
         return
 
     if args.reclassify:
