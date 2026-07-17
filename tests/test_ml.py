@@ -326,9 +326,48 @@ def test_ensemble_blended():
     ensemble.model = _ModelStub()
     result = ensemble.classify([], {"ticker": "AAPL", "source": "news_pipeline"})
     assert result["event_type"] == "earnings_beat"
+    # Direction always comes from the keyword classifier — the ML model
+    # predicts signal profitability, not market direction.
     assert result["direction"] == "bullish"
+    # profit_prob 0.8 with ml_weight 0.5 -> +0.15 confidence adjustment.
+    assert result["confidence"] == pytest.approx(0.75)
+    assert result["ensemble_method"] == "ml_boost"
     assert "ml_prediction" in result
-    assert "ensemble_method" in result
+
+
+def test_ensemble_low_profit_probability_damps_confidence():
+    ensemble = EnsembleClassifier()
+
+    class _KeywordStub:
+        def classify_event(self, *args, **kwargs):
+            return {
+                "event_type": "scandal",
+                "direction": "bearish",
+                "confidence": 0.7,
+                "article_classifications": [],
+                "vote_distribution": {"scandal": 2},
+                "top_keywords": [],
+            }
+
+    class _ModelStub:
+        is_trained = True
+
+        def predict(self, features):
+            return {
+                "prediction": 0,
+                "confidence": 0.8,
+                "profit_probability": 0.2,
+                "loss_probability": 0.8,
+            }
+
+    ensemble.keyword_classifier = _KeywordStub()
+    ensemble.model = _ModelStub()
+    result = ensemble.classify([], {"ticker": "AAPL", "source": "news_pipeline"})
+    # Direction must NOT flip to bullish/bearish based on profit prediction.
+    assert result["direction"] == "bearish"
+    # profit_prob 0.2 -> -0.15 adjustment.
+    assert result["confidence"] == pytest.approx(0.55)
+    assert result["ensemble_method"] == "ml_damp"
 
 
 def test_readiness_check(db_session):

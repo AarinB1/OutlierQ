@@ -16,10 +16,16 @@ logger.setLevel(logging.INFO)
 
 
 class EnsembleClassifier:
-    """Blend keyword classifier output with ML profit/loss signal."""
+    """Adjust keyword classifier confidence with the ML profit/loss signal.
 
-    def __init__(self, keyword_weight: float = 0.5, ml_weight: float = 0.5) -> None:
-        self.keyword_weight = keyword_weight
+    The ML model is trained on signal outcomes, so it predicts P(the signal
+    generated from this event would have been profitable) — NOT a market
+    direction. A profitable put is a bearish win, so mapping "profit" to
+    "bullish" (the previous behavior) was wrong. Direction always comes from
+    the event classifier; the ML probability only scales confidence.
+    """
+
+    def __init__(self, ml_weight: float = 0.5) -> None:
         self.ml_weight = ml_weight
         self.keyword_classifier = EventClassifier()
         self.extractor = FeatureExtractor()
@@ -56,31 +62,16 @@ class EnsembleClassifier:
             }
         )
         ml_pred = self.model.predict(features)
-        ml_direction = "bullish" if int(ml_pred["prediction"]) == 1 else "bearish"
-        ml_conf = float(ml_pred["confidence"])
+        profit_prob = float(ml_pred["profit_probability"])
         keyword_conf = float(keyword_result.get("confidence", 0.0))
-        keyword_direction = str(keyword_result.get("direction", "neutral"))
 
-        if ml_direction == keyword_direction:
-            confidence = min(max(keyword_conf, ml_conf) + 0.05, 1.0)
-            direction = keyword_direction
-            ensemble_method = "agreement_boost"
-        else:
-            weighted_conf = (self.keyword_weight * keyword_conf) + (self.ml_weight * ml_conf)
-            if ml_conf >= keyword_conf:
-                direction = ml_direction
-                ensemble_method = "ml_override"
-            else:
-                direction = keyword_direction
-                ensemble_method = "keyword_override"
-            confidence = max(0.0, min(1.0, weighted_conf))
+        # Shift confidence by how far the ML profit estimate sits from coin-flip.
+        adjustment = (profit_prob - 0.5) * self.ml_weight
+        confidence = max(0.0, min(1.0, keyword_conf + adjustment))
+        ensemble_method = "ml_boost" if adjustment >= 0 else "ml_damp"
 
         result = dict(keyword_result)
-        result["direction"] = direction
         result["confidence"] = confidence
-        result["ml_prediction"] = {
-            "direction": ml_direction,
-            **ml_pred,
-        }
+        result["ml_prediction"] = dict(ml_pred)
         result["ensemble_method"] = ensemble_method
         return result
