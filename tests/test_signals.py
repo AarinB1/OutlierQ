@@ -584,3 +584,66 @@ class TestAllProfiles:
             assert signal["expected_move_pct"] == profile["expected_move_pct"]
             assert signal["decay_type"] == profile["decay_type"]
             assert 0.1 <= signal["confidence"] <= 0.95
+
+
+# ── ORM results usable after internal session commits ─────────────────
+
+
+class TestResultsUsableAfterCommit:
+    def test_generate_and_store_results_readable_without_session(self, mock_market):
+        """The CLI path calls generate_and_store() without passing a session;
+        the returned Signal rows must stay readable after the internal
+        session commits and closes (expired attributes on detached
+        instances raised DetachedInstanceError when the runner printed
+        them)."""
+        from contextlib import contextmanager
+
+        from src.signals.signal_engine import SignalEngine
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        from src.db.database import SessionLocal as RealSessionLocal
+        Session = sessionmaker(
+            bind=engine,
+            expire_on_commit=RealSessionLocal.kw.get("expire_on_commit", True),
+        )
+
+        @contextmanager
+        def fake_get_session():
+            session = Session()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+
+        event_id = str(uuid.uuid4())
+        seed = Session()
+        seed.add(Event(
+            id=event_id, ticker="AAPL", event_type="fda_approval",
+            direction="bullish", confidence=0.8,
+        ))
+        seed.commit()
+        seed.close()
+
+        sig_engine = SignalEngine(market_fetcher=mock_market)
+        with patch("src.signals.signal_engine.get_session", fake_get_session):
+            stored = sig_engine.generate_and_store([
+                {
+                    "ticker": "AAPL",
+                    "event_type": "fda_approval",
+                    "event_id": event_id,
+                    "direction": "bullish",
+                    "confidence": 0.8,
+                    "metadata": {},
+                }
+            ])
+
+        assert len(stored) == 1
+        # Must not raise DetachedInstanceError:
+        assert stored[0].direction == "call"
+        assert stored[0].ticker == "AAPL"
+        assert stored[0].confidence > 0
