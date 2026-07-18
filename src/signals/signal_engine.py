@@ -175,10 +175,16 @@ class SignalEngine:
         self,
         market_fetcher: MarketFetcher | None = None,
         demo: bool = False,
+        calibrator: "ConfidenceCalibrator | None" = None,
     ) -> None:
+        from src.signals.confidence_calibrator import ConfidenceCalibrator
+
         self.market_fetcher = market_fetcher or MarketFetcher()
         self.technical = TechnicalAnalyzer(self.market_fetcher)
         self.demo = demo
+        # Maps heuristic confidence to realized win rate; identity until
+        # enough evaluated signals exist (see confidence_calibrator.py).
+        self.calibrator = calibrator or ConfidenceCalibrator()
         # In demo mode, include "other" so routine news still produces signals
         if demo:
             self._event_profiles = {**EVENT_PROFILES, "other": dict(DEMO_OTHER_PROFILE)}
@@ -734,13 +740,15 @@ class SignalEngine:
 
                 contract = sig.get("contract") or {}
                 entry_iv = float(contract.get("implied_volatility") or 0.0)
+                raw_confidence = float(sig["confidence"])
                 record = Signal(
                     ticker=sig["ticker"],
                     event_id=event_id,
                     direction=sig["direction"],
                     suggested_strike=sig["suggested_strike"],
                     suggested_expiry=sig["suggested_expiry"],
-                    confidence=sig["confidence"],
+                    confidence=self.calibrator.calibrate(raw_confidence),
+                    raw_confidence=raw_confidence,
                     exploratory=sig.get("exploratory", False),
                     discovery_source=sig.get("discovery_source"),
                     simulation_enhanced=sig.get("simulation_enhanced", False),

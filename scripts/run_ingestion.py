@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         help="Clear all signal outcomes and re-evaluate with the Black-Scholes P&L model, then exit",
     )
     parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="Fit confidence calibration from evaluated signals and print the reliability table, then exit",
+    )
+    parser.add_argument(
         "--reclassify",
         action="store_true",
         help="Re-classify all existing events in the database and exit",
@@ -286,6 +291,36 @@ def run_evaluate(reevaluate: bool = False) -> None:
         for et, data in stats["by_event_type"].items():
             print(f"    {et}: {data['wins']}/{data['count']} wins ({data['win_rate']:.0%})")
 
+    print()
+
+
+def run_calibrate() -> None:
+    """Fit confidence calibration and print the reliability table."""
+    from src.db.database import get_session
+    from src.signals.confidence_calibrator import MIN_SAMPLES, ConfidenceCalibrator
+
+    calibrator = ConfidenceCalibrator()
+    with get_session() as s:
+        result = calibrator.fit(s)
+        table = calibrator.reliability_table(s)
+
+    print(f"\n{'='*60}")
+    print("  CONFIDENCE CALIBRATION")
+    print(f"{'='*60}")
+    if result["calibrated"]:
+        print(f"  Fitted on:         {result['n_samples']} evaluated signals")
+        print(f"  Brier score:       {result['brier_raw']:.4f} raw -> {result['brier_calibrated']:.4f} calibrated")
+        print(f"  Saved to:          {calibrator.path}")
+    else:
+        print(f"  Not calibrated:    {result['reason']}")
+        print(f"  Activation:        automatic once {MIN_SAMPLES}+ evaluated signals exist")
+
+    print("\n  Reliability (stated confidence vs realized win rate):")
+    print(f"  {'bin':>10} {'count':>6} {'stated':>8} {'realized':>9}")
+    for row in table:
+        stated = f"{row['stated']:.3f}" if row["stated"] is not None else "-"
+        realized = f"{row['realized']:.3f}" if row["realized"] is not None else "-"
+        print(f"  {row['bin']:>10} {row['count']:>6} {stated:>8} {realized:>9}")
     print()
 
 
@@ -1404,6 +1439,10 @@ def main() -> None:
 
     if args.evaluate or args.reevaluate:
         run_evaluate(reevaluate=args.reevaluate)
+        return
+
+    if args.calibrate:
+        run_calibrate()
         return
 
     if args.reclassify:

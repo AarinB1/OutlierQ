@@ -70,6 +70,10 @@ def migrate_db() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN entry_iv FLOAT"))
             conn.commit()
             logger.info("Added signals.entry_iv column.")
+        if "raw_confidence" not in cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN raw_confidence FLOAT"))
+            conn.commit()
+            logger.info("Added signals.raw_confidence column.")
 
 
 def init_db() -> None:

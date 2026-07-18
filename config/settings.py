@@ -30,6 +30,18 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_DB_PATH = _PROJECT_ROOT / "outlierq.db"
 DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB_PATH}")
 
+# Relative sqlite paths (e.g. "sqlite:///outlierq.db" from an old .env) would
+# silently create a second database in whatever directory the process was
+# started from. Anchor them to the project root so behavior is cwd-independent.
+if DATABASE_URL.startswith("sqlite:///") and not DATABASE_URL.startswith("sqlite:////"):
+    _rel = DATABASE_URL[len("sqlite:///"):]
+    if _rel != ":memory:" and not Path(_rel).is_absolute():
+        DATABASE_URL = f"sqlite:///{_PROJECT_ROOT / _rel}"
+
+# Cache directory for model artifacts, calibration data, ticker caches, etc.
+# Anchored to the project root so it does not depend on the working directory.
+CACHE_DIR: Path = Path(os.getenv("OUTLIERQ_CACHE_DIR", str(_PROJECT_ROOT / ".cache")))
+
 # Default tickers to track
 DEFAULT_TICKERS: list[str] = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN"]
 

@@ -674,6 +674,7 @@ def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:
         "outcome_pnl": sig.outcome_pnl,
         "entry_price": sig.entry_price,
         "entry_iv": sig.entry_iv,
+        "raw_confidence": sig.raw_confidence,
         "created_at": sig.created_at.isoformat() if sig.created_at else None,
         "event_id": sig.event_id,
         "exploratory": getattr(sig, "exploratory", False) or False,

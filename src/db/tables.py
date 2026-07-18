@@ -70,6 +70,7 @@ class Signal(Base):
     outcome_pnl = Column(Float, nullable=True)
     entry_price = Column(Float, nullable=True)       # underlying price at signal time
     entry_iv = Column(Float, nullable=True)          # implied volatility at signal time (from chain)
+    raw_confidence = Column(Float, nullable=True)    # pre-calibration confidence (audit trail)
     exploratory = Column(Boolean, default=False, nullable=False)
     discovery_source = Column(String, nullable=True)  # "manual", "news_scanner", "volume_screener", "both", or null
     simulation_enhanced = Column(Boolean, default=False, nullable=False)

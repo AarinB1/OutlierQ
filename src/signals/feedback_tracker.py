@@ -163,6 +163,12 @@ class FeedbackTracker:
 
             s.flush()
             logger.info("Evaluated %d/%d pending signals.", len(results), len(pending))
+
+            if results:
+                # New outcomes may unlock or improve confidence calibration.
+                from src.signals.confidence_calibrator import ConfidenceCalibrator
+                ConfidenceCalibrator().maybe_refit(s)
+
             return results
 
         if session is not None:
