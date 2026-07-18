@@ -134,12 +134,26 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
       {/* Confidence bar */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1.5">
-          <span className="text-txt-secondary text-xs">Confidence</span>
+          <span
+            className="text-txt-secondary text-xs cursor-help"
+            title="Blend of event, contract-liquidity, and technical scores; once enough signals resolve it is calibrated so N% means signals like this won about N% of the time. Tick marks the 50% coin-flip baseline."
+          >
+            Confidence
+          </span>
           <span className="font-mono text-xs text-txt-secondary">
             {confidencePct}%
+            {signal.raw_confidence != null &&
+              Math.round(signal.raw_confidence * 100) !== confidencePct && (
+                <span
+                  className="text-txt-tertiary ml-1.5"
+                  title="Pre-calibration heuristic score"
+                >
+                  raw {Math.round(signal.raw_confidence * 100)}%
+                </span>
+              )}
           </span>
         </div>
-        <div className="h-[5px] w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
+        <div className="relative h-[5px] w-full rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}>
           <div
             className="confidence-bar h-full rounded-full"
             style={{
@@ -147,6 +161,11 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
               background: confidenceFill,
               boxShadow: signal.confidence >= 0.7 ? '0 0 8px rgba(0, 214, 143, 0.4)' : undefined,
             }}
+          />
+          <div
+            className="absolute top-[-2px] h-[9px] w-px bg-white/25"
+            style={{ left: '50%' }}
+            aria-hidden="true"
           />
         </div>
       </div>

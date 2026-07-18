@@ -104,7 +104,7 @@ export default function PredictionMarkets() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-xl font-sans font-semibold text-txt-primary">Prediction Markets</h2>
+          <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Prediction Markets</h2>
           <p className="text-sm text-txt-secondary mt-1">
             Polymarket & Kalshi markets matched to OutlierQ events
           </p>
@@ -409,9 +409,18 @@ export default function PredictionMarkets() {
                         False positive
                       </button>
                     )}
-                    <span className="font-mono text-accent-green font-semibold">
-                      +${opp.theoretical_profit.toFixed(3)}/unit
-                    </span>
+                    {opp.profit_after_fees != null ? (
+                      <span
+                        className={`font-mono font-semibold ${opp.profit_after_fees > 0 ? 'text-accent-green' : 'text-txt-tertiary'}`}
+                        title={`Raw spread $${opp.theoretical_profit.toFixed(3)} minus ~$${(opp.estimated_fees ?? 0).toFixed(3)} Kalshi fees`}
+                      >
+                        {opp.profit_after_fees > 0 ? '+' : ''}${opp.profit_after_fees.toFixed(3)}/unit after fees
+                      </span>
+                    ) : (
+                      <span className="font-mono text-accent-green font-semibold">
+                        +${opp.theoretical_profit.toFixed(3)}/unit
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

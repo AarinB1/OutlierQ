@@ -143,17 +143,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="card opacity-70 space-y-2">
-        <h3 className="font-mono font-semibold text-sm">Email Notifications (Coming Soon)</h3>
-        <input
-          disabled
-          value={draft.email ?? ''}
-          placeholder="you@example.com"
-          className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
-        />
-        <p className="text-xs text-txt-tertiary">Email alerts will be available in a future update.</p>
-      </div>
-
       <button className="btn-primary" onClick={handleSave}>
         Save Settings
       </button>

@@ -78,7 +78,7 @@ export default function TradeReplay() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Trade Replay</h2>
+      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Trade Replay</h2>
 
       {/* Config */}
       <div className="card p-4">
@@ -125,6 +125,19 @@ export default function TradeReplay() {
           </button>
         </div>
       </div>
+
+      {bars.length === 0 && !loading && (
+        <div className="card">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-txt-tertiary text-3xl mb-4" aria-hidden="true">{'\u21BB'}</div>
+            <p className="text-sm font-sans font-medium text-txt-primary">No replay loaded</p>
+            <p className="text-xs text-txt-secondary mt-1 max-w-sm">
+              Choose a ticker, strategy, and period, then Load Replay to step
+              through the backtest bar by bar.
+            </p>
+          </div>
+        </div>
+      )}
 
       {bars.length > 0 && (
         <>

@@ -178,7 +178,7 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
                     <span className={`pill text-[10px] py-0.5 px-2 ${badge.bg} ${badge.text}`}>
                       {ev.event_type.replace(/_/g, ' ')}
                     </span>
-                    <span className={`text-xs font-sans font-medium ${ev.direction === 'bullish' ? 'text-accent-green' : 'text-accent-red'}`}>
+                    <span className={`text-xs font-sans font-medium ${ev.direction === 'bullish' ? 'text-accent-green' : ev.direction === 'bearish' ? 'text-accent-red' : 'text-txt-tertiary'}`}>
                       {ev.direction}
                     </span>
                     <div className="ml-auto flex items-center gap-2" title={`Confidence: ${confidencePct}% — This event's sentiment certainty score`}>

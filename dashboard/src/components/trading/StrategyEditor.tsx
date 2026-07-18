@@ -77,7 +77,7 @@ export default function StrategyEditor() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Custom Strategy Editor (DSL)</h2>
+        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Strategy Editor (DSL)</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -141,7 +141,7 @@ export default function StrategyEditor() {
               <h3 className="label mb-3">Equity Curve</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={equityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                   <YAxis
                     tick={{ fontSize: 10 }}
@@ -149,13 +149,13 @@ export default function StrategyEditor() {
                   />
                   <Tooltip
                     formatter={(v) => [formatCurrency(Number(v)), 'Equity']}
-                    contentStyle={{ background: '#1a1a2e', border: '1px solid #333' }}
+                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#3b82f6"
-                    fill="#3b82f620"
+                    stroke="#448aff"
+                    fill="rgba(68,138,255,0.13)"
                   />
                 </AreaChart>
               </ResponsiveContainer>

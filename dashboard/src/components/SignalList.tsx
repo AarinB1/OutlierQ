@@ -227,7 +227,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
               {'\u2190'} Prev
             </button>
             <span className="text-txt-tertiary text-xs font-mono">
-              Showing {page * limit + 1}\u2013{page * limit + signals.length}
+              Showing {page * limit + 1}&ndash;{page * limit + signals.length}
             </span>
             <button
               disabled={signals.length < limit}
