@@ -168,7 +168,13 @@ class FinBERTAnalyzer:
     def analyze(self, text: str) -> dict[str, Any]:
         """Analyze one text and return probabilities + compatibility fields."""
         if not text:
-            return self._result_from_probs([0.0, 0.0, 1.0])
+            # All-neutral vector, built through the label map so a permuted
+            # checkpoint order can't turn empty text into a negative score.
+            probs = [0.0, 0.0, 0.0]
+            for idx, label in self.label_map.items():
+                if label == "neutral":
+                    probs[idx] = 1.0
+            return self._result_from_probs(probs)
 
         if self.fallback:
             self._warn_fallback()

@@ -218,6 +218,14 @@ class TestLabelMapping:
         mapped = FinBERTAnalyzer._label_map_from_config(FakeModel(), default)
         assert mapped == default
 
+    def test_empty_text_neutral_under_permuted_map(self):
+        analyzer = self._bare_analyzer({0: "neutral", 1: "positive", 2: "negative"})
+        result = analyzer.analyze("")
+        assert result["label"] == "neutral"
+        assert result["neutral"] == 1.0
+        assert result["compound"] == 0.0
+        assert result["is_extreme"] is False
+
     def test_loaded_model_config_matches_map(self):
         analyzer = FinBERTAnalyzer()
         _require_finbert(analyzer)
