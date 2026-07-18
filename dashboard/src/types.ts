@@ -101,6 +101,7 @@ export interface ConfusionMatrix {
 export interface TickerSummary {
   ticker: string;
   total_signals: number;
+  evaluated: number;
   win_rate: number;
   last_signal_date: string | null;
 }
