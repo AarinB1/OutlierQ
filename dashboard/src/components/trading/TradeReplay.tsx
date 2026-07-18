@@ -43,9 +43,9 @@ export default function TradeReplay() {
       setBars(replayBars)
       setCurrentIdx(0)
       setPlaying(false)
-      addToast(`Loaded ${replayBars.length} bars`, 'success')
+      addToast('success', `Loaded ${replayBars.length} bars`)
     } catch (e: unknown) {
-      addToast(e instanceof Error ? e.message : 'Failed to load replay', 'error')
+      addToast('error', e instanceof Error ? e.message : 'Failed to load replay')
     } finally {
       setLoading(false)
     }

@@ -8,71 +8,12 @@ import {
   fetchArbitrageHistory,
   updateArbitrageStatus,
 } from '../api'
-
-interface PredMarket {
-  platform: string
-  market_id: string
-  slug: string
-  question: string
-  category: string
-  yes_price: number
-  no_price: number
-  volume: number
-  resolution_date: string | null
-  status: string
-}
-
-interface PredRecord {
-  id: number
-  market_id: string
-  platform: string
-  question: string
-  predicted_outcome: string
-  predicted_probability: number
-  market_probability: number
-  edge: number
-  confidence: number
-  matched_event_type: string
-  matched_tickers: string
-  actual_outcome: string | null
-  is_correct: boolean | null
-  pnl_if_bet: number | null
-  simulation_enhanced: boolean
-  sim_estimated_probability: number | null
-  sim_consensus_strength: number | null
-  created_at: string | null
-  resolved_at: string | null
-}
-
-interface PredStats {
-  total: number
-  correct: number
-  accuracy: number
-  avg_edge: number
-  avg_pnl: number
-  by_platform: Record<string, { total: number; correct: number; accuracy: number }>
-  by_event_type: Record<string, { total: number; correct: number; accuracy: number }>
-}
-
-interface ArbOpportunity {
-  id: number
-  poly_market_id: string
-  poly_question: string
-  poly_yes_price: number
-  poly_volume: number
-  kalshi_market_id: string
-  kalshi_question: string
-  kalshi_yes_price: number
-  kalshi_volume: number
-  spread: number
-  spread_pct: number
-  direction: string
-  match_score: number
-  match_method: string
-  theoretical_profit: number
-  status: string
-  detected_at: string | null
-}
+import type {
+  PredictionMarket as PredMarket,
+  PredictionRecord as PredRecord,
+  PredictionStats as PredStats,
+  ArbitrageOpportunity as ArbOpportunity,
+} from '../types'
 
 function pct(v: number): string {
   return `${(v * 100).toFixed(1)}%`
@@ -125,7 +66,7 @@ export default function PredictionMarkets() {
     setLoading(true)
     setError(null)
     fetchArbitrageHistory({ limit: 100 })
-      .then((d) => setArbOpps((d.opportunities ?? []) as ArbOpportunity[]))
+      .then((d) => setArbOpps(d.opportunities ?? []))
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load arbitrage'))
       .finally(() => setLoading(false))
   }, [])

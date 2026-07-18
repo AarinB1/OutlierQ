@@ -34,7 +34,7 @@ export default function GreeksCalculator() {
       })
       setResult(data as unknown as GreeksResult)
     } catch (e: unknown) {
-      addToast(e instanceof Error ? e.message : 'Computation failed', 'error')
+      addToast('error', e instanceof Error ? e.message : 'Computation failed')
     } finally {
       setLoading(false)
     }
