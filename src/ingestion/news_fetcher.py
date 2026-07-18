@@ -109,14 +109,16 @@ class NewsFetcher:
                 if existing:
                     continue
 
+                # Savepoint per insert: a full session.rollback() here would
+                # also discard every article already flushed in this batch.
                 row = Article(**article.model_dump())
-                session.add(row)
                 try:
-                    session.flush()
+                    with session.begin_nested():
+                        session.add(row)
+                        session.flush()
                     inserted += 1
                 except IntegrityError:
-                    session.rollback()
-                    logger.debug("Duplicate URL skipped: %s", article.url)
+                    logger.debug("Insert skipped for URL: %s", article.url)
 
         logger.info("Stored %d new articles (skipped %d duplicates)",
                      inserted, len(articles) - inserted)

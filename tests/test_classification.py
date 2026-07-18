@@ -126,6 +126,17 @@ class TestClassifyArticle:
 
         assert weak["confidence"] < strong["confidence"]
 
+    def test_below_threshold_other_has_capped_confidence(self):
+        """A below-threshold classification is rejected as 'other' — its
+        confidence must not inherit a high dominance ratio computed from the
+        very scores that were too weak to accept ('Company probe' scores 1.5
+        for two classes, yielding a bogus 0.5 dominance confidence)."""
+        clf = EventClassifier()
+        result = clf.classify_article("Company probe")
+
+        assert result["event_type"] == "other"
+        assert result["confidence"] <= 0.3
+
 
 # ── Multi-article event classification ───────────────────────────────
 
