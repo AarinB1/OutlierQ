@@ -75,6 +75,18 @@ def migrate_db() -> None:
             conn.commit()
             logger.info("Added signals.raw_confidence column.")
 
+    if "arbitrage_opportunities" in insp.get_table_names():
+        arb_cols = {c["name"] for c in insp.get_columns("arbitrage_opportunities")}
+        with engine.connect() as conn:
+            if "estimated_fees" not in arb_cols:
+                conn.execute(text("ALTER TABLE arbitrage_opportunities ADD COLUMN estimated_fees FLOAT"))
+                conn.commit()
+                logger.info("Added arbitrage_opportunities.estimated_fees column.")
+            if "profit_after_fees" not in arb_cols:
+                conn.execute(text("ALTER TABLE arbitrage_opportunities ADD COLUMN profit_after_fees FLOAT"))
+                conn.commit()
+                logger.info("Added arbitrage_opportunities.profit_after_fees column.")
+
 
 def init_db() -> None:
     """Create all tables. Safe to call multiple times — existing tables are skipped."""

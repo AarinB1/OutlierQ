@@ -128,6 +128,13 @@ class ArbitrageDetector:
 
             spread_pct = spread / max(midpoint, 0.01)
 
+            # Kalshi charges a trading fee of ~0.07 * P * (1-P) per contract
+            # on the traded leg (Polymarket has no trading fee), so the raw
+            # spread overstates the realizable edge. P*(1-P) is symmetric,
+            # so the fee is the same whether the Kalshi leg is YES or NO.
+            estimated_fees = 0.07 * kalshi_yes * (1.0 - kalshi_yes)
+            profit_after_fees = theoretical_profit - estimated_fees
+
             opportunities.append({
                 "poly_market_id": poly_market["market_id"],
                 "poly_question": poly_market["question"],
@@ -143,6 +150,8 @@ class ArbitrageDetector:
                 "match_score": round(best_score, 4),
                 "match_method": best_method,
                 "theoretical_profit": round(theoretical_profit, 4),
+                "estimated_fees": round(estimated_fees, 4),
+                "profit_after_fees": round(profit_after_fees, 4),
                 "status": "open",
             })
 
