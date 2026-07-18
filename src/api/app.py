@@ -182,7 +182,10 @@ async def stream_signals() -> StreamingResponse:
                         payload = _signal_to_dict(sig, event)
                         yield f"event: signal\ndata: {json.dumps(payload)}\n\n"
                         if sig.created_at:
-                            last_seen = max(last_seen, sig.created_at + timedelta(microseconds=1))
+                            # SQLite returns naive datetimes; comparing them to the
+                            # aware last_seen raised TypeError and killed the stream.
+                            created = _as_utc(sig.created_at)
+                            last_seen = max(last_seen, created + timedelta(microseconds=1))
                 yield ": keepalive\n\n"
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
@@ -460,7 +463,6 @@ def status(db: Session = Depends(get_db)) -> dict:
     # Active ticker count (same logic as active-tickers)
     events_cutoff = now - timedelta(hours=48)
     discovered_cutoff = now - timedelta(hours=24)
-    from_events = db.query(Event.ticker).filter(Event.detected_at >= events_cutoff).distinct().count()
     from_disc = db.query(DiscoveredTicker.ticker).filter(
         DiscoveredTicker.discovered_at >= discovered_cutoff
     ).distinct().all()
@@ -660,6 +662,11 @@ def mirofish_status():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Interpret naive datetimes (as returned by SQLite) as UTC."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:

@@ -259,3 +259,24 @@ class TestEvaluateEndpoint:
         data = resp.json()
         assert "evaluated" in data
         assert data["evaluated"] == 0
+
+
+class TestDatetimeNormalization:
+    def test_naive_datetime_interpreted_as_utc(self):
+        """SQLite returns naive datetimes; the SSE stream compares them to
+        aware timestamps, which raised TypeError and killed the stream."""
+        from datetime import datetime, timezone
+        from src.api.app import _as_utc
+
+        naive = datetime(2026, 7, 17, 12, 0, 0)
+        aware = _as_utc(naive)
+        assert aware.tzinfo == timezone.utc
+        # Comparison with aware datetimes must now work.
+        assert aware < datetime.now(timezone.utc)
+
+    def test_aware_datetime_unchanged(self):
+        from datetime import datetime, timezone
+        from src.api.app import _as_utc
+
+        original = datetime(2026, 7, 17, 12, 0, 0, tzinfo=timezone.utc)
+        assert _as_utc(original) is original

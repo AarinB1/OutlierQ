@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from config.settings import LOG_FORMAT
+from config.settings import CACHE_DIR, LOG_FORMAT
 from src.trading.data.data_preprocessor import DataPreprocessor, WindowedDataset
 from src.trading.features.feature_pipeline import FeaturePipeline
 from src.trading.models.hybrid_model import create_hybrid_model
@@ -23,7 +23,7 @@ logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MODEL_DIR = Path(".cache/trading_models")
+MODEL_DIR = CACHE_DIR / "trading_models"
 
 
 class TradingTrainer:

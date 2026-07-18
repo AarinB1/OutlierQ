@@ -16,14 +16,14 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
-from config.settings import LOG_FORMAT
+from config.settings import CACHE_DIR, LOG_FORMAT
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 REGIME_LABELS = ["bull_trend", "bear_trend", "sideways", "high_vol"]
-MODEL_PATH = Path(".cache/regime_detector.pkl")
+MODEL_PATH = CACHE_DIR / "regime_detector.pkl"
 
 
 class RegimeDetector:

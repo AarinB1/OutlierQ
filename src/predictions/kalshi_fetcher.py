@@ -48,6 +48,7 @@ class KalshiFetcher:
         all_markets: list[dict] = []
         cursor: str | None = None
         fetched = 0
+        rate_limit_retries = 0
         max_per_page = min(limit, 200)  # Kalshi max is 200 per page
 
         while fetched < limit:
@@ -64,8 +65,12 @@ class KalshiFetcher:
                 data = resp.json()
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
-                    logger.warning("Kalshi rate limited, backing off")
-                    time.sleep(1)
+                    rate_limit_retries += 1
+                    if rate_limit_retries > 3:
+                        logger.warning("Kalshi rate limit persisted after 3 retries — giving up")
+                        break
+                    logger.warning("Kalshi rate limited, backing off (retry %d/3)", rate_limit_retries)
+                    time.sleep(rate_limit_retries)
                     continue
                 logger.exception("Failed to fetch Kalshi markets")
                 break
@@ -78,11 +83,11 @@ class KalshiFetcher:
                 break
 
             for m in raw_markets:
-                # Volume: parse volume_fp (string) to float
-                try:
-                    vol = float(m.get("volume_fp", "0") or "0")
-                except (ValueError, TypeError):
-                    vol = 0.0
+                # Volume: volume_fp is a fixed-point STRING; older payloads
+                # carry an integer contract count under "volume" instead.
+                vol = _safe_float(m.get("volume_fp"))
+                if vol is None:
+                    vol = _safe_float(m.get("volume")) or 0.0
 
                 if vol < min_volume:
                     continue

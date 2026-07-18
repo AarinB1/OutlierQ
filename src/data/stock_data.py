@@ -52,13 +52,16 @@ class StockDataService:
 
         records = []
         for ts, row in df.iterrows():
+            if row[["Open", "High", "Low", "Close"]].isna().any():
+                continue  # yfinance emits partial bars (e.g. current intraday bar)
+            volume = row["Volume"]
             records.append({
                 "date": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
                 "open": round(float(row["Open"]), 2),
                 "high": round(float(row["High"]), 2),
                 "low": round(float(row["Low"]), 2),
                 "close": round(float(row["Close"]), 2),
-                "volume": int(row["Volume"]),
+                "volume": 0 if pd.isna(volume) else int(volume),
             })
 
         self._set_cached(cache_key, records)

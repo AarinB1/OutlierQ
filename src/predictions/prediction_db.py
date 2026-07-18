@@ -1,8 +1,13 @@
 """SQLAlchemy models for prediction market data."""
 
-from datetime import datetime
+from datetime import datetime, timezone
+
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text, Boolean
 from src.db.database import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class PredictionMarket(Base):
@@ -21,8 +26,8 @@ class PredictionMarket(Base):
     volume = Column(Float)
     resolution_date = Column(DateTime)
     outcome = Column(String(10))                           # "yes" | "no" | null
-    last_fetched = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    last_fetched = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Prediction(Base):
@@ -58,7 +63,7 @@ class Prediction(Base):
     is_correct = Column(Boolean)
     pnl_if_bet = Column(Float)                               # hypothetical $ P&L on $1 YES/NO bet
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
     resolved_at = Column(DateTime)
 
 
@@ -94,5 +99,5 @@ class ArbitrageOpportunity(Base):
     status = Column(String(20), default="open")      # open | closed | expired | false_positive
     notes = Column(Text)
 
-    detected_at = Column(DateTime, default=datetime.utcnow)
+    detected_at = Column(DateTime, default=_utcnow)
     closed_at = Column(DateTime)

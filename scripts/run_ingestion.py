@@ -722,18 +722,10 @@ def run_autopilot(
                     return
 
                 # Get recent events (last 48h)
+                from src.predictions.market_matcher import build_event_dicts
                 cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
                 recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
-                events = [
-                    {
-                        "ticker": e.ticker,
-                        "event_type": e.event_type,
-                        "direction": e.direction,
-                        "confidence": e.confidence,
-                        "headlines": [e.headline] if hasattr(e, "headline") and e.headline else [],
-                    }
-                    for e in recent
-                ]
+                events = build_event_dicts(recent, db)
 
                 if not events:
                     logger.info("Prediction scan: no recent events to match")
@@ -999,7 +991,7 @@ def run_scheduled(
 
 def run_prediction_scan(demo: bool = False) -> None:
     """Fetch prediction markets, match with events, generate predictions."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from src.predictions.polymarket_fetcher import PolymarketFetcher
     from src.predictions.kalshi_fetcher import KalshiFetcher
     from src.predictions.market_matcher import MarketMatcher
@@ -1017,14 +1009,10 @@ def run_prediction_scan(demo: bool = False) -> None:
     print(f"\nFetched {len(markets)} active prediction markets")
 
     # Get recent events
-    cutoff = datetime.utcnow() - timedelta(hours=48)
+    from src.predictions.market_matcher import build_event_dicts
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
     recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
-    events = [
-        {"ticker": e.ticker, "event_type": e.event_type,
-         "direction": e.direction, "confidence": e.confidence,
-         "headlines": [e.headline] if hasattr(e, "headline") and e.headline else []}
-        for e in recent
-    ]
+    events = build_event_dicts(recent, db)
     print(f"Found {len(events)} recent events")
 
     # Match + predict
@@ -1256,13 +1244,13 @@ def run_backtest_trading(ticker: str, strategy_name: str) -> None:
 
 def run_trading_status() -> None:
     """Print trading model and system status."""
-    from pathlib import Path
+    from config.settings import CACHE_DIR
 
     print(f"\n{'='*60}")
     print("  TRADING MODULE STATUS")
     print(f"{'='*60}")
 
-    model_dir = Path(".cache/trading_models")
+    model_dir = CACHE_DIR / "trading_models"
     if model_dir.exists():
         models = list(model_dir.glob("*_model.pt"))
         print(f"\n  Saved models: {len(models)}")

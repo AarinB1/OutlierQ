@@ -12,7 +12,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 
-from config.settings import LOG_FORMAT
+from config.settings import CACHE_DIR, LOG_FORMAT
 
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class OutlierQModel:
         self.feature_names: list[str] = []
         self.is_trained: bool = False
         self.training_metrics: dict[str, Any] = {}
-        self.model_path: Path = Path(".cache/ml_model.pkl")
+        self.model_path: Path = CACHE_DIR / "ml_model.pkl"
 
     def train(self, X: list[list[float]], y: list[int], feature_names: list[str]) -> dict[str, Any]:
         """Train and evaluate the selected model."""

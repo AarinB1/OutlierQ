@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import finnhub
 from sqlalchemy.exc import IntegrityError
@@ -80,7 +80,7 @@ class NewsFetcher:
     def fetch_batch(self, tickers: list[str]) -> list[ArticleCreate]:
         """Fetch news for multiple tickers with rate limiting."""
         today = date.today()
-        from_date = date(today.year, today.month, max(today.day - 7, 1))
+        from_date = today - timedelta(days=7)
         all_articles: list[ArticleCreate] = []
 
         for ticker in tickers:
@@ -131,6 +131,8 @@ class NewsFetcher:
             try:
                 return fn()
             except Exception as exc:
+                if attempt == retries - 1:
+                    break
                 wait = 2 ** attempt
                 logger.warning(
                     "Attempt %d/%d failed: %s — retrying in %ds",

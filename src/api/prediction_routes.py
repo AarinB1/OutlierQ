@@ -1,6 +1,6 @@
 """FastAPI routes for the prediction market module."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -78,7 +78,7 @@ def scan_for_predictions(
 
     # 2. Get recent events from DB (last 48 hours)
     from datetime import timedelta
-    cutoff = datetime.utcnow() - timedelta(hours=48)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
     recent_events = (
         db.query(Event)
         .filter(Event.detected_at >= cutoff)
@@ -87,16 +87,8 @@ def scan_for_predictions(
         .all()
     )
 
-    events = [
-        {
-            "ticker": e.ticker,
-            "event_type": e.event_type,
-            "direction": e.direction,
-            "confidence": e.confidence,
-            "headlines": [e.headline] if hasattr(e, "headline") and e.headline else [],
-        }
-        for e in recent_events
-    ]
+    from src.predictions.market_matcher import build_event_dicts
+    events = build_event_dicts(recent_events, db)
 
     if not events:
         return {"predictions": [], "count": 0, "message": "No recent events detected"}
@@ -339,7 +331,7 @@ def update_arbitrage_status(
 
     opp.status = new_status
     if new_status in ("closed", "expired", "false_positive"):
-        opp.closed_at = datetime.utcnow()
+        opp.closed_at = datetime.now(timezone.utc)
     opp.notes = body.get("notes", opp.notes)
     db.commit()
     return {"id": opp.id, "status": opp.status}
