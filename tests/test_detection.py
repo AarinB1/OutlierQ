@@ -148,6 +148,57 @@ class TestVolumeDetector:
         assert mean == 3.0
         assert std == 2.0
 
+    def test_baseline_counts_zero_article_days(self, db_session):
+        """Quiet days must count as zeros in the baseline, not be dropped.
+
+        Ingestion ran every day (another ticker has daily articles), but AAPL
+        was only covered on 5 of those days. Averaging only the 5 active days
+        would state a baseline of 4/day; the honest baseline over the observed
+        day grid (13 days land inside the rolling cutoff) is 20/13 ≈ 1.54,
+        which makes today's coverage spike detectable instead of invisible.
+        """
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Ingestion active every day: MSFT has 1 article/day for 14 days.
+        for day_offset in range(1, 15):
+            day = today_start - timedelta(days=day_offset)
+            db_session.add(_make_article(ticker="MSFT", ingested_at=day))
+
+        # AAPL covered on only 5 of those days, 4 articles each.
+        for day_offset in (2, 4, 6, 8, 10):
+            day = today_start - timedelta(days=day_offset)
+            for i in range(4):
+                db_session.add(
+                    _make_article(ticker="AAPL", ingested_at=day + timedelta(hours=i))
+                )
+        db_session.commit()
+
+        detector = VolumeDetector(threshold=3.0)
+        mean, std = detector.compute_baseline("AAPL", session=db_session)
+
+        assert mean == pytest.approx(20 / 13, rel=1e-6)
+        assert std > 0
+
+    def test_baseline_defaults_when_few_observed_days(self, db_session):
+        """The cold-start guard keys on observed ingestion days, not on how
+        many days this ticker happened to have articles."""
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # Ingestion has only run on 3 days in the window.
+        for day_offset in range(1, 4):
+            day = today_start - timedelta(days=day_offset)
+            db_session.add(_make_article(ticker="MSFT", ingested_at=day))
+            db_session.add(_make_article(ticker="AAPL", ingested_at=day))
+        db_session.commit()
+
+        detector = VolumeDetector()
+        mean, std = detector.compute_baseline("AAPL", session=db_session)
+
+        assert mean == 3.0
+        assert std == 2.0
+
 
 # ── SentimentFilter tests ────────────────────────────────────────────
 
