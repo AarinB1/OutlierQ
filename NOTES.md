@@ -39,6 +39,18 @@ things git history does not record.
   reach scipy before torch finishes**, and scipy's array-API probe of
   `sys.modules['torch'].Tensor` then errors. Only visible running a single test
   file; `tests/conftest.py` imports torch first as the guard.
+- **`npm run build` had never passed for the dashboard** (15 TypeScript errors)
+  because everyone ran `npm run dev`, which skips typechecking. Four components
+  called `addToast(message, type)` with the arguments swapped — a class of bug
+  the runtime never surfaces loudly. Run the real build in CI or before
+  claiming the frontend works.
+- **The `addToast`-in-deps footgun is only a footgun when the callback identity
+  is unstable.** Toast's addToast is wrapped in useCallback with stable deps,
+  so listing it in effect dependency arrays is safe; check identity stability
+  before "fixing" dependency arrays.
+- **Base-layer CSS defaults for `input`/`select`/`textarea`** fix an entire
+  class of "this page came from a different app" white-control bugs at once,
+  and utility classes still win — cheaper and safer than restyling each field.
 - **This sandbox has a writable-disk allowance that `df` does not show** — the
   pip cache alone was 2.7G and its exhaustion surfaced as SQLite "disk I/O
   error" and OperationalError test failures, not as a clear disk-full signal.
