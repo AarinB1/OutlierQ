@@ -126,8 +126,12 @@ class PredictionEngine:
             else:
                 base_prob = 0.5
 
-            # Adjust by match quality
-            adjusted_prob = base_prob * (0.7 + 0.3 * match_score)
+            # Attenuate by match quality: a weak match carries less
+            # information, so shrink the deviation from 0.5 toward 0.5.
+            # (Scaling the raw probability instead pushed bearish estimates
+            # FURTHER from 0.5 the weaker the match was.)
+            match_factor = 0.7 + 0.3 * match_score
+            adjusted_prob = 0.5 + (base_prob - 0.5) * match_factor
 
             # Adjust by historical event-type accuracy if available
             if accuracy_stats and accuracy_stats.get("by_event_type"):
