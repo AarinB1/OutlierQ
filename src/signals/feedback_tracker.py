@@ -163,18 +163,25 @@ class FeedbackTracker:
 
             s.flush()
             logger.info("Evaluated %d/%d pending signals.", len(results), len(pending))
-
-            if results:
-                # New outcomes may unlock or improve confidence calibration.
-                from src.signals.confidence_calibrator import ConfidenceCalibrator
-                ConfidenceCalibrator().maybe_refit(s)
-
             return results
 
         if session is not None:
             return _run(session)
         with get_session() as s:
-            return _run(s)
+            results = _run(s)
+        if results:
+            self.refit_calibration()
+        return results
+
+    @staticmethod
+    def refit_calibration(session: Session | None = None) -> dict:
+        """Refit calibration after outcome changes have been committed."""
+        from src.signals.confidence_calibrator import ConfidenceCalibrator
+
+        if session is not None:
+            return ConfidenceCalibrator().maybe_refit(session)
+        with get_session() as s:
+            return ConfidenceCalibrator().maybe_refit(s)
 
     def reevaluate_all(self, session: Session | None = None) -> dict:
         """Clear existing outcomes and re-evaluate every expired signal.
@@ -201,7 +208,10 @@ class FeedbackTracker:
         if session is not None:
             return _run(session)
         with get_session() as s:
-            return _run(s)
+            summary = _run(s)
+        if summary["reevaluated"]:
+            self.refit_calibration()
+        return summary
 
     def get_accuracy_stats(self, session: Session | None = None) -> dict:
         """Compute overall accuracy metrics from all evaluated signals."""

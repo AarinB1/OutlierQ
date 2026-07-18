@@ -25,7 +25,12 @@ def db_session():
     session.close()
 
 
-def _add_signal(session, confidence: float, outcome: str | None) -> None:
+def _add_signal(
+    session,
+    confidence: float,
+    outcome: str | None,
+    raw_confidence: float | None = None,
+) -> None:
     event = Event(
         id=f"evt-{uuid.uuid4()}",
         ticker="AAPL",
@@ -42,6 +47,7 @@ def _add_signal(session, confidence: float, outcome: str | None) -> None:
         suggested_strike=100.0,
         suggested_expiry="2026-01-16",
         confidence=confidence,
+        raw_confidence=raw_confidence,
         outcome=outcome,
         outcome_pnl=50.0 if outcome == "profit" else -100.0 if outcome else None,
     ))
@@ -82,6 +88,24 @@ class TestActivationThreshold:
 
 
 class TestFitting:
+    def test_uses_raw_confidence_for_calibrated_rows(self, db_session, tmp_path):
+        for raw, calibrated, wins in [(0.9, 0.2, 10), (0.3, 0.8, 2)]:
+            for i in range(20):
+                _add_signal(
+                    db_session,
+                    calibrated,
+                    "profit" if i < wins else "loss",
+                    raw_confidence=raw,
+                )
+
+        cal = ConfidenceCalibrator(path=tmp_path / "cal.json")
+        cal.fit(db_session)
+
+        assert cal.calibrate(0.9) == pytest.approx(0.5, abs=0.1)
+        top_bin = cal.reliability_table(db_session, bins=5)[4]
+        assert top_bin["count"] == 20
+        assert top_bin["stated"] == pytest.approx(0.9)
+
     def test_overconfident_scores_mapped_down(self, db_session, tmp_path):
         _seed_overconfident(db_session, n_per_level=20)
 

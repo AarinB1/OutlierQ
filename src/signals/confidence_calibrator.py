@@ -24,6 +24,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from config.settings import CACHE_DIR, LOG_FORMAT
@@ -59,9 +60,10 @@ class ConfidenceCalibrator:
         Returns a status dict. Does not fit (and clears nothing) when below
         the activation threshold.
         """
+        raw_score = func.coalesce(Signal.raw_confidence, Signal.confidence)
         rows = (
-            session.query(Signal.confidence, Signal.outcome)
-            .filter(Signal.outcome.isnot(None), Signal.confidence.isnot(None))
+            session.query(raw_score, Signal.outcome)
+            .filter(Signal.outcome.isnot(None), raw_score.isnot(None))
             .all()
         )
         samples = [(float(c), 1.0 if outcome == "profit" else 0.0) for c, outcome in rows]
@@ -132,9 +134,10 @@ class ConfidenceCalibrator:
 
     def reliability_table(self, session: Session, bins: int = 5) -> list[dict]:
         """Stated-confidence bins vs realized win rate, for reporting."""
+        raw_score = func.coalesce(Signal.raw_confidence, Signal.confidence)
         rows = (
-            session.query(Signal.confidence, Signal.outcome)
-            .filter(Signal.outcome.isnot(None), Signal.confidence.isnot(None))
+            session.query(raw_score, Signal.outcome)
+            .filter(Signal.outcome.isnot(None), raw_score.isnot(None))
             .all()
         )
         table = []

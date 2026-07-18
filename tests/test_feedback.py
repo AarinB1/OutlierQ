@@ -4,7 +4,7 @@ import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -363,6 +363,18 @@ class TestEvaluateAllPending:
         db_session.refresh(signal)
         assert signal.outcome == "profit"
         assert signal.outcome_pnl == pytest.approx(results[0]["estimated_pnl"])
+
+    @patch("src.signals.confidence_calibrator.ConfidenceCalibrator.maybe_refit")
+    def test_external_session_does_not_refit_before_commit(self, maybe_refit, db_session):
+        _make_signal(db_session, direction="call", strike=105.0, entry_iv=0.30)
+        tracker = FeedbackTracker(
+            market_fetcher=_mock_market(entry_price=100.0, exit_price=120.0)
+        )
+
+        results = tracker.evaluate_all_pending(session=db_session)
+
+        assert len(results) == 1
+        maybe_refit.assert_not_called()
 
     def test_unevaluable_signal_left_pending(self, db_session):
         """Signals that can't be honestly evaluated keep outcome=None."""

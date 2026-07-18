@@ -174,6 +174,15 @@ class TestFindBestContract:
         assert contract is not None
         assert contract["strike"] == 142.5
 
+    def test_uses_resolved_chain_expiry(self, mock_market):
+        mock_market.fetch_options_chain.return_value["expiry"] = "2026-03-27"
+        engine = SignalEngine(market_fetcher=mock_market)
+
+        contract = engine.find_best_contract("AAPL", "call", 155.0, "2026-03-20")
+
+        assert contract is not None
+        assert contract["expiry"] == "2026-03-27"
+
     def test_returns_none_on_empty_chain(self):
         market = MagicMock()
         market.fetch_options_chain.return_value = {
@@ -537,6 +546,21 @@ class TestGenerateSignals:
         _, kwargs = mock_market.fetch_options_chain.call_args
         assert "target_expiry" in kwargs
         date.fromisoformat(kwargs["target_expiry"])  # valid YYYY-MM-DD
+
+    def test_signal_uses_resolved_contract_expiry(self, mock_market):
+        mock_market.fetch_options_chain.return_value["expiry"] = "2026-08-21"
+        engine = SignalEngine(market_fetcher=mock_market)
+        engine.technical.get_ticker_indicators = MagicMock(return_value=None)
+
+        signal = engine.generate_signal({
+            "ticker": "AAPL",
+            "event_type": "scandal",
+            "event_id": "evt-resolved-expiry",
+            "confidence": 0.85,
+        })
+
+        assert signal is not None
+        assert signal["suggested_expiry"] == "2026-08-21"
 
 
 # ── All event profiles produce valid signals ──────────────────────────

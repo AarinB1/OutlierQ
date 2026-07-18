@@ -399,6 +399,8 @@ def evaluate(db: Session = Depends(get_db)) -> dict:
     tracker = FeedbackTracker()
     results = tracker.evaluate_all_pending(session=db)
     db.commit()
+    if results:
+        tracker.refit_calibration(session=db)
     return {"evaluated": len(results), "results": results}
 
 

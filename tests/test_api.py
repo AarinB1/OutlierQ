@@ -260,6 +260,22 @@ class TestEvaluateEndpoint:
         assert "evaluated" in data
         assert data["evaluated"] == 0
 
+    @patch("src.api.app.FeedbackTracker")
+    def test_calibration_refits_after_commit(self, tracker_cls):
+        from src.api.app import evaluate
+
+        order = []
+        db = MagicMock()
+        db.commit.side_effect = lambda: order.append("commit")
+        tracker = tracker_cls.return_value
+        tracker.evaluate_all_pending.return_value = [{"signal_id": "sig-1"}]
+        tracker.refit_calibration.side_effect = lambda **kwargs: order.append("refit")
+
+        result = evaluate(db)
+
+        assert result["evaluated"] == 1
+        assert order == ["commit", "refit"]
+
 
 class TestDatetimeNormalization:
     def test_naive_datetime_interpreted_as_utc(self):

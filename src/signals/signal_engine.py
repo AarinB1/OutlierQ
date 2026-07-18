@@ -271,7 +271,7 @@ class SignalEngine:
         return {
             "contract_symbol": str(best.get("contractSymbol", "")),
             "strike": float(best["strike"]),
-            "expiry": target_expiry,
+            "expiry": chain.get("expiry") or target_expiry,
             "bid": float(best.get("bid", 0)),
             "ask": float(best.get("ask", 0)),
             "volume": int(best.get("volume", 0)) if not _is_nan(best.get("volume")) else 0,
@@ -436,6 +436,7 @@ class SignalEngine:
         contract = self.find_best_contract(ticker, direction, strike, expiry)
         if contract is not None:
             strike = contract["strike"]
+            expiry = contract["expiry"]
         confidence = self.compute_confidence(
             detection_confidence, EXPLORATORY_PROFILE["base_confidence"], contract
         )
@@ -539,6 +540,7 @@ class SignalEngine:
         # Use the real contract's strike if found
         if contract is not None:
             strike = contract["strike"]
+            expiry = contract["expiry"]
 
         event_confidence = event.get("confidence", event.get("confidence_score", 0.5))
         confidence = self.compute_confidence(

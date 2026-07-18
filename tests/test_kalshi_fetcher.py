@@ -56,6 +56,28 @@ def test_persistent_rate_limit_terminates(mock_sleep):
     assert fetcher.session.get.call_count == 4
 
 
+@patch("src.predictions.kalshi_fetcher.time.sleep")
+def test_rate_limit_retries_reset_after_success(mock_sleep):
+    """Each page gets its own retry budget after a successful response."""
+    fetcher = KalshiFetcher()
+    rate_limited = MagicMock()
+    rate_limited.raise_for_status.side_effect = _http_error(429)
+    fetcher.session = MagicMock()
+    fetcher.session.get.side_effect = [
+        rate_limited,
+        _response([_market("PAGE-1")], cursor="next"),
+        rate_limited,
+        rate_limited,
+        rate_limited,
+        _response([_market("PAGE-2")]),
+    ]
+
+    markets = fetcher.fetch_active_markets(limit=10, min_volume=0)
+
+    assert [m["market_id"] for m in markets] == ["PAGE-1", "PAGE-2"]
+    assert fetcher.session.get.call_count == 6
+
+
 def test_volume_falls_back_to_contract_count():
     """Payloads without volume_fp still filter on the integer volume field."""
     fetcher = KalshiFetcher()

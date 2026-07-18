@@ -78,6 +78,7 @@ class KalshiFetcher:
                 logger.exception("Failed to fetch Kalshi markets")
                 break
 
+            rate_limit_retries = 0
             raw_markets = data.get("markets", [])
             if not raw_markets:
                 break
