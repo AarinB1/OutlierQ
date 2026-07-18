@@ -134,8 +134,11 @@ class AnomalyPipeline:
                     sentiment_passed.append(ticker)
                     sentiment_map[ticker] = sentiment_result
 
-                    # Write sentiment scores back to DB
-                    self.sentiment_filter.update_article_scores(articles, session=s)
+                    # Write sentiment scores back to DB, reusing the scores
+                    # score_batch just computed (no second inference pass).
+                    self.sentiment_filter.update_article_scores(
+                        articles, scores=sentiment_result.get("scores"), session=s
+                    )
 
             # Stage 3: Cross-source validation
             outliers: list[dict] = []

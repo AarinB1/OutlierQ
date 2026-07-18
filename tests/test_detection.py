@@ -52,6 +52,36 @@ def _make_article(
     )
 
 
+def _stub_score(compound: float, extreme: bool) -> dict:
+    """Build a FinBERT-shaped result dict for the stub analyzer."""
+    pos = max(compound, 0.0)
+    neg = max(-compound, 0.0)
+    return {
+        "label": "positive" if compound > 0.2 else "negative" if compound < -0.2 else "neutral",
+        "positive": pos,
+        "negative": neg,
+        "neutral": max(1.0 - pos - neg, 0.0),
+        "compound": compound,
+        "confidence": max(pos, neg, 1.0 - pos - neg),
+        "is_extreme": extreme,
+    }
+
+
+class _StubAnalyzer:
+    """Deterministic FinBERTAnalyzer stand-in keyed by headline text."""
+
+    def __init__(self, scores_by_text: dict[str, dict]):
+        self.scores_by_text = scores_by_text
+        self.batch_calls = 0
+
+    def analyze(self, text: str) -> dict:
+        return self.scores_by_text[text]
+
+    def analyze_batch(self, texts: list[str], batch_size: int = 16) -> list[dict]:
+        self.batch_calls += 1
+        return [self.scores_by_text[t] for t in texts]
+
+
 # ── VolumeDetector tests ─────────────────────────────────────────────
 
 
@@ -258,21 +288,89 @@ class TestSentimentFilter:
         assert result["direction"] == "bearish"
 
     def test_score_batch_fails(self, db_session):
-        """Batch with mostly mild headlines should not pass the filter."""
+        """Batch with mostly mild headlines should not pass the filter.
+
+        Uses a deterministic stub analyzer: the aggregation/threshold logic
+        is what's under test here, and pinning it to live FinBERT output on
+        borderline headlines broke on a transformers upgrade.
+        """
         articles = [
-            _make_article(headline="Company releases quarterly report"),
-            _make_article(headline="Market closes slightly higher today"),
-            _make_article(headline="Board meeting scheduled for next week"),
-            _make_article(headline="Terrible scandal rocks the company"),
+            _make_article(headline="mild one"),
+            _make_article(headline="mild two"),
+            _make_article(headline="mild three"),
+            _make_article(headline="extreme one"),
         ]
         for a in articles:
             db_session.add(a)
         db_session.flush()
 
-        sf = SentimentFilter(extreme_threshold=0.6, extreme_ratio_threshold=0.5)
+        stub = _StubAnalyzer(
+            {
+                "mild one": _stub_score(0.05, extreme=False),
+                "mild two": _stub_score(0.0, extreme=False),
+                "mild three": _stub_score(-0.05, extreme=False),
+                "extreme one": _stub_score(-0.9, extreme=True),
+            }
+        )
+        sf = SentimentFilter(
+            extreme_threshold=0.6, extreme_ratio_threshold=0.5, analyzer=stub
+        )
         result = sf.score_batch(articles)
 
+        # 1 of 4 extreme -> ratio 0.25 < 0.5
+        assert result["extreme_ratio"] == pytest.approx(0.25)
         assert result["passes_filter"] is False
+
+    def test_score_batch_boundary_ratio_passes(self, db_session):
+        """extreme_ratio exactly at the threshold passes (>= semantics)."""
+        articles = [
+            _make_article(headline="a"),
+            _make_article(headline="b"),
+        ]
+        for a in articles:
+            db_session.add(a)
+        db_session.flush()
+
+        stub = _StubAnalyzer(
+            {
+                "a": _stub_score(0.9, extreme=True),
+                "b": _stub_score(0.0, extreme=False),
+            }
+        )
+        sf = SentimentFilter(
+            extreme_threshold=0.6, extreme_ratio_threshold=0.5, analyzer=stub
+        )
+        result = sf.score_batch(articles)
+
+        assert result["extreme_ratio"] == pytest.approx(0.5)
+        assert result["passes_filter"] is True
+
+    def test_no_second_inference_when_scores_reused(self, db_session):
+        """update_article_scores must reuse score_batch results, not re-run
+        FinBERT on the same headlines."""
+        articles = [
+            _make_article(headline="h1"),
+            _make_article(headline="h2"),
+        ]
+        for a in articles:
+            db_session.add(a)
+        db_session.flush()
+
+        stub = _StubAnalyzer(
+            {
+                "h1": _stub_score(0.8, extreme=True),
+                "h2": _stub_score(-0.4, extreme=False),
+            }
+        )
+        sf = SentimentFilter(analyzer=stub)
+        result = sf.score_batch(articles)
+        sf.update_article_scores(articles, scores=result["scores"], session=db_session)
+        db_session.flush()
+
+        assert stub.batch_calls == 1
+        assert articles[0].sentiment_score == pytest.approx(0.8)
+        assert articles[1].sentiment_score == pytest.approx(-0.4)
+        assert articles[1].sentiment_magnitude == pytest.approx(0.4)
 
 
 # ── CrossSourceValidator tests ────────────────────────────────────────
@@ -509,7 +607,9 @@ class TestAnomalyPipeline:
             "passes_filter": True,
             "scores": [],
         }
-        pipeline.sentiment_filter.update_article_scores = lambda _articles, session=None: None
+        pipeline.sentiment_filter.update_article_scores = (
+            lambda _articles, scores=None, session=None: None
+        )
         pipeline.edgar.scan_batch = lambda _tickers: []
         pipeline.options_flow.scan_batch = lambda _tickers: []
 
