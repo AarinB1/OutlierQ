@@ -67,7 +67,11 @@ class AnomalyPipeline:
             batch_size=FINBERT_BATCH_SIZE,
         )
         self.cross_source = CrossSourceValidator(min_sources=min_sources)
-        self.options_flow = OptionsFlowDetector(market_fetcher=MarketFetcher())
+        # One shared fetcher: its price/chain caches serve options-flow
+        # detection AND signal generation, instead of each stage re-hitting
+        # yfinance through a private cold cache.
+        self.market_fetcher = MarketFetcher()
+        self.options_flow = OptionsFlowDetector(market_fetcher=self.market_fetcher)
         self.edgar = EdgarMonitor()
         if use_ml:
             try:
@@ -541,7 +545,7 @@ class AnomalyPipeline:
             except Exception:
                 logger.debug("MiroFish enrichment skipped", exc_info=True)
 
-            engine = SignalEngine(market_fetcher=MarketFetcher(), demo=self.demo)
+            engine = SignalEngine(market_fetcher=self.market_fetcher, demo=self.demo)
             signals = engine.generate_and_store(
                 event_dicts, session=s, simulation_results=sim_results_map,
             )

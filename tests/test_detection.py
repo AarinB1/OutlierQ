@@ -407,8 +407,11 @@ class TestAnomalyPipeline:
                 )
                 db_session.add(article)
 
-        # Insert 15 extreme articles within the scan window (after today_start).
-        recent = today_start + timedelta(hours=2)
+        # Insert 15 extreme articles within the scan window. The pipeline only
+        # looks at articles from the last 6 hours, so seed them relative to
+        # *now* (clamped inside today for the volume counter) — a fixed
+        # today_start offset made this test fail after 08:00 UTC.
+        recent = max(today_start + timedelta(minutes=5), now - timedelta(hours=1))
         extreme_headlines = [
             ("CEO arrested in massive fraud scandal", "Reuters"),
             ("Tesla faces devastating class action lawsuit", "Bloomberg"),
@@ -508,3 +511,12 @@ class TestAnomalyPipeline:
 
         # Should not detect because volume didn't spike
         assert len(results) == 0
+
+
+def test_pipeline_shares_one_market_fetcher():
+    """All pipeline stages must share one fetcher so its price/chain caches
+    are reused instead of each stage re-hitting yfinance cold."""
+    from src.detection import AnomalyPipeline
+
+    pipeline = AnomalyPipeline(demo=True)
+    assert pipeline.options_flow.market_fetcher is pipeline.market_fetcher

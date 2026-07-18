@@ -129,11 +129,13 @@ def list_signals(
         query = query.filter(Signal.direction == direction)
     signals = query.offset(offset).limit(limit).all()
 
-    results = []
-    for sig in signals:
-        event = db.query(Event).filter(Event.id == sig.event_id).first()
-        results.append(_signal_to_dict(sig, event))
-    return results
+    # Batch-fetch linked events in one query instead of one per signal.
+    event_ids = {sig.event_id for sig in signals if sig.event_id}
+    events_by_id = {
+        e.id: e
+        for e in db.query(Event).filter(Event.id.in_(event_ids)).all()
+    } if event_ids else {}
+    return [_signal_to_dict(sig, events_by_id.get(sig.event_id)) for sig in signals]
 
 
 @app.get("/api/signals/{signal_id}")
@@ -294,23 +296,28 @@ def ml_status(db: Session = Depends(get_db)) -> dict:
 
 @app.get("/api/tickers")
 def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
-    tickers = db.query(Signal.ticker).distinct().all()
-    results = []
-    for (ticker,) in tickers:
-        signals = db.query(Signal).filter(Signal.ticker == ticker).all()
-        wins = sum(1 for s in signals if s.outcome == "profit")
-        total_eval = sum(1 for s in signals if s.outcome is not None)
-        last_sig = max(
-            (s.created_at for s in signals if s.created_at),
-            default=None,
+    from sqlalchemy import case, func
+
+    rows = (
+        db.query(
+            Signal.ticker,
+            func.count(Signal.id),
+            func.sum(case((Signal.outcome == "profit", 1), else_=0)),
+            func.sum(case((Signal.outcome.isnot(None), 1), else_=0)),
+            func.max(Signal.created_at),
         )
-        results.append({
+        .group_by(Signal.ticker)
+        .all()
+    )
+    return [
+        {
             "ticker": ticker,
-            "total_signals": len(signals),
-            "win_rate": wins / total_eval if total_eval > 0 else 0.0,
+            "total_signals": total,
+            "win_rate": (wins or 0) / total_eval if total_eval else 0.0,
             "last_signal_date": last_sig.isoformat() if last_sig else None,
-        })
-    return results
+        }
+        for ticker, total, wins, total_eval, last_sig in rows
+    ]
 
 
 # ── Ticker data (per-ticker endpoints) ────────────────────────────────
