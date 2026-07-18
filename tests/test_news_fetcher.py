@@ -96,3 +96,48 @@ def test_fetch_finnhub_news_handles_empty_response(mock_client_cls):
 
     articles = fetcher.fetch_finnhub_news("XYZ", date(2023, 11, 1), date(2023, 11, 15))
     assert articles == []
+
+
+@patch("src.ingestion.news_fetcher.time.sleep")
+@patch("src.ingestion.news_fetcher.finnhub.Client")
+def test_fetch_batch_window_spans_month_boundary(mock_client_cls, mock_sleep):
+    """The 7-day window must use real date arithmetic, not day-of-month math.
+
+    The old code computed date(year, month, max(day-7, 1)), which collapsed
+    the window to as little as 1 day in the first week of a month.
+    """
+    from datetime import timedelta
+
+    mock_client = MagicMock()
+    mock_client.company_news.return_value = []
+    mock_client_cls.return_value = mock_client
+
+    from src.ingestion.news_fetcher import NewsFetcher
+
+    fetcher = NewsFetcher(api_key="test-key")
+    fetcher.client = mock_client
+    fetcher.fetch_batch(["AAPL"])
+
+    _, kwargs = mock_client.company_news.call_args
+    from_date = date.fromisoformat(kwargs["_from"])
+    to_date = date.fromisoformat(kwargs["to"])
+    assert (to_date - from_date) == timedelta(days=7)
+
+
+@patch("src.ingestion.news_fetcher.time.sleep")
+def test_retry_returns_empty_after_exhaustion_without_final_sleep(mock_sleep):
+    """After the last failed attempt there is nothing to wait for."""
+    from src.ingestion.news_fetcher import NewsFetcher
+
+    calls = []
+
+    def _always_fails():
+        calls.append(1)
+        raise RuntimeError("boom")
+
+    result = NewsFetcher._call_with_retry(_always_fails, retries=3)
+
+    assert result == []
+    assert len(calls) == 3
+    # Sleeps happen between attempts only: 2 sleeps for 3 attempts.
+    assert mock_sleep.call_count == 2

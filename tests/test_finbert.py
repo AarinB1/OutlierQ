@@ -161,3 +161,63 @@ class TestFinBERTAnalyzer:
 
         assert finbert_correct >= 8
         assert finbert_correct >= vader_correct
+
+
+class TestFinanceLexiconFallback:
+    """The VADER fallback must carry finance-domain lexicon corrections.
+
+    These run everywhere (no FinBERT required) and pin down the analyzer the
+    pipeline actually uses when transformers/torch are unavailable.
+    """
+
+    def _fallback_analyzer(self) -> FinBERTAnalyzer:
+        analyzer = FinBERTAnalyzer.__new__(FinBERTAnalyzer)
+        analyzer.fallback = True
+        analyzer._fallback_analyzer = None
+        analyzer.extreme_threshold = 0.6
+        analyzer.label_map = {0: "positive", 1: "negative", 2: "neutral"}
+        return analyzer
+
+    def test_earnings_beat_scores_positive(self):
+        """Stock VADER reads 'beats' as violence; the fallback must not."""
+        result = self._fallback_analyzer().analyze(
+            "Company beats earnings expectations, raises guidance"
+        )
+        assert result["compound"] > 0.05
+
+    def test_regulatory_fine_scores_negative(self):
+        """Stock VADER reads 'fines' as 'fine' (+0.8); a penalty is bearish."""
+        result = self._fallback_analyzer().analyze(
+            "Regulator fines company $2 billion over compliance failures"
+        )
+        assert result["compound"] < -0.05
+
+    def test_sec_probe_scores_negative(self):
+        result = self._fallback_analyzer().analyze(
+            "SEC opens probe into accounting practices"
+        )
+        assert result["compound"] < -0.05
+
+    def test_fda_approval_scores_positive(self):
+        """'cancer' (-3.4 in stock VADER) must not flip drug approvals negative."""
+        result = self._fallback_analyzer().analyze(
+            "FDA approves company's breakthrough cancer drug"
+        )
+        assert result["compound"] > 0.05
+
+    def test_benchmark_recall_and_skew(self):
+        """Directional recall and net skew bounds on the labeled benchmark."""
+        from scripts.audit_sentiment_bias import BEARISH_HEADLINES, BULLISH_HEADLINES
+
+        analyzer = self._fallback_analyzer()
+        bearish = [analyzer.analyze(h)["compound"] for h in BEARISH_HEADLINES]
+        bullish = [analyzer.analyze(h)["compound"] for h in BULLISH_HEADLINES]
+
+        bear_recall = sum(1 for c in bearish if c < -0.05) / len(bearish)
+        bull_recall = sum(1 for c in bullish if c > 0.05) / len(bullish)
+        net_skew = (sum(bearish) + sum(bullish)) / (len(bearish) + len(bullish))
+
+        assert bear_recall >= 0.9
+        assert bull_recall >= 0.8
+        # Balanced benchmark: mean should sit near zero (no call/put bias).
+        assert abs(net_skew) < 0.10

@@ -21,9 +21,18 @@ except ImportError:  # pragma: no cover - covered via fallback behavior tests
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+from src.detection.finance_lexicon import FINANCE_LEXICON
+
 logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def _make_finance_vader() -> SentimentIntensityAnalyzer:
+    """VADER with finance-domain lexicon corrections (see finance_lexicon.py)."""
+    analyzer = SentimentIntensityAnalyzer()
+    analyzer.lexicon.update(FINANCE_LEXICON)
+    return analyzer
 
 
 class FinBERTAnalyzer:
@@ -70,7 +79,7 @@ class FinBERTAnalyzer:
             logger.info("FinBERT loaded on %s in %.2fs", self.device, elapsed)
         except Exception as exc:
             self.fallback = True
-            self._fallback_analyzer = SentimentIntensityAnalyzer()
+            self._fallback_analyzer = _make_finance_vader()
             logger.error(
                 "Failed to load FinBERT model. Falling back to VADER. Error: %s",
                 exc,
@@ -99,7 +108,7 @@ class FinBERTAnalyzer:
 
     def _analyze_vader(self, text: str) -> dict[str, Any]:
         if self._fallback_analyzer is None:
-            self._fallback_analyzer = SentimentIntensityAnalyzer()
+            self._fallback_analyzer = _make_finance_vader()
         scores = self._fallback_analyzer.polarity_scores(text)
         positive = float(scores["pos"])
         negative = float(scores["neg"])

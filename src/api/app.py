@@ -129,11 +129,13 @@ def list_signals(
         query = query.filter(Signal.direction == direction)
     signals = query.offset(offset).limit(limit).all()
 
-    results = []
-    for sig in signals:
-        event = db.query(Event).filter(Event.id == sig.event_id).first()
-        results.append(_signal_to_dict(sig, event))
-    return results
+    # Batch-fetch linked events in one query instead of one per signal.
+    event_ids = {sig.event_id for sig in signals if sig.event_id}
+    events_by_id = {
+        e.id: e
+        for e in db.query(Event).filter(Event.id.in_(event_ids)).all()
+    } if event_ids else {}
+    return [_signal_to_dict(sig, events_by_id.get(sig.event_id)) for sig in signals]
 
 
 @app.get("/api/signals/{signal_id}")
@@ -182,7 +184,10 @@ async def stream_signals() -> StreamingResponse:
                         payload = _signal_to_dict(sig, event)
                         yield f"event: signal\ndata: {json.dumps(payload)}\n\n"
                         if sig.created_at:
-                            last_seen = max(last_seen, sig.created_at + timedelta(microseconds=1))
+                            # SQLite returns naive datetimes; comparing them to the
+                            # aware last_seen raised TypeError and killed the stream.
+                            created = _as_utc(sig.created_at)
+                            last_seen = max(last_seen, created + timedelta(microseconds=1))
                 yield ": keepalive\n\n"
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
@@ -291,23 +296,28 @@ def ml_status(db: Session = Depends(get_db)) -> dict:
 
 @app.get("/api/tickers")
 def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
-    tickers = db.query(Signal.ticker).distinct().all()
-    results = []
-    for (ticker,) in tickers:
-        signals = db.query(Signal).filter(Signal.ticker == ticker).all()
-        wins = sum(1 for s in signals if s.outcome == "profit")
-        total_eval = sum(1 for s in signals if s.outcome is not None)
-        last_sig = max(
-            (s.created_at for s in signals if s.created_at),
-            default=None,
+    from sqlalchemy import case, func
+
+    rows = (
+        db.query(
+            Signal.ticker,
+            func.count(Signal.id),
+            func.sum(case((Signal.outcome == "profit", 1), else_=0)),
+            func.sum(case((Signal.outcome.isnot(None), 1), else_=0)),
+            func.max(Signal.created_at),
         )
-        results.append({
+        .group_by(Signal.ticker)
+        .all()
+    )
+    return [
+        {
             "ticker": ticker,
-            "total_signals": len(signals),
-            "win_rate": wins / total_eval if total_eval > 0 else 0.0,
+            "total_signals": total,
+            "win_rate": (wins or 0) / total_eval if total_eval else 0.0,
             "last_signal_date": last_sig.isoformat() if last_sig else None,
-        })
-    return results
+        }
+        for ticker, total, wins, total_eval, last_sig in rows
+    ]
 
 
 # ── Ticker data (per-ticker endpoints) ────────────────────────────────
@@ -389,6 +399,8 @@ def evaluate(db: Session = Depends(get_db)) -> dict:
     tracker = FeedbackTracker()
     results = tracker.evaluate_all_pending(session=db)
     db.commit()
+    if results:
+        tracker.refit_calibration(session=db)
     return {"evaluated": len(results), "results": results}
 
 
@@ -460,7 +472,6 @@ def status(db: Session = Depends(get_db)) -> dict:
     # Active ticker count (same logic as active-tickers)
     events_cutoff = now - timedelta(hours=48)
     discovered_cutoff = now - timedelta(hours=24)
-    from_events = db.query(Event.ticker).filter(Event.detected_at >= events_cutoff).distinct().count()
     from_disc = db.query(DiscoveredTicker.ticker).filter(
         DiscoveredTicker.discovered_at >= discovered_cutoff
     ).distinct().all()
@@ -662,6 +673,11 @@ def mirofish_status():
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Interpret naive datetimes (as returned by SQLite) as UTC."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:
     d = {
         "id": sig.id,
@@ -672,6 +688,9 @@ def _signal_to_dict(sig: Signal, event: Event | None = None) -> dict:
         "confidence": sig.confidence,
         "outcome": sig.outcome,
         "outcome_pnl": sig.outcome_pnl,
+        "entry_price": sig.entry_price,
+        "entry_iv": sig.entry_iv,
+        "raw_confidence": sig.raw_confidence,
         "created_at": sig.created_at.isoformat() if sig.created_at else None,
         "event_id": sig.event_id,
         "exploratory": getattr(sig, "exploratory", False) or False,

@@ -259,3 +259,40 @@ class TestEvaluateEndpoint:
         data = resp.json()
         assert "evaluated" in data
         assert data["evaluated"] == 0
+
+    @patch("src.api.app.FeedbackTracker")
+    def test_calibration_refits_after_commit(self, tracker_cls):
+        from src.api.app import evaluate
+
+        order = []
+        db = MagicMock()
+        db.commit.side_effect = lambda: order.append("commit")
+        tracker = tracker_cls.return_value
+        tracker.evaluate_all_pending.return_value = [{"signal_id": "sig-1"}]
+        tracker.refit_calibration.side_effect = lambda **kwargs: order.append("refit")
+
+        result = evaluate(db)
+
+        assert result["evaluated"] == 1
+        assert order == ["commit", "refit"]
+
+
+class TestDatetimeNormalization:
+    def test_naive_datetime_interpreted_as_utc(self):
+        """SQLite returns naive datetimes; the SSE stream compares them to
+        aware timestamps, which raised TypeError and killed the stream."""
+        from datetime import datetime, timezone
+        from src.api.app import _as_utc
+
+        naive = datetime(2026, 7, 17, 12, 0, 0)
+        aware = _as_utc(naive)
+        assert aware.tzinfo == timezone.utc
+        # Comparison with aware datetimes must now work.
+        assert aware < datetime.now(timezone.utc)
+
+    def test_aware_datetime_unchanged(self):
+        from datetime import datetime, timezone
+        from src.api.app import _as_utc
+
+        original = datetime(2026, 7, 17, 12, 0, 0, tzinfo=timezone.utc)
+        assert _as_utc(original) is original

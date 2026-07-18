@@ -164,3 +164,25 @@ class TestOverlays:
         assert len(result) == 1
         assert result[0]["event_type"] == "scandal"
         assert result[0]["direction"] == "bearish"
+
+
+class TestPartialBars:
+    def test_nan_volume_bar_does_not_crash(self, service):
+        """yfinance intraday data includes partial bars with NaN volume."""
+        df = _make_price_df(5)
+        df.iloc[-1, df.columns.get_loc("Volume")] = float("nan")
+        with patch("src.data.stock_data.yf.Ticker") as mock_ticker:
+            mock_ticker.return_value.history.return_value = df
+            result = service.get_price_history("AAPL", period="1d")
+
+        assert len(result) == 5
+        assert result[-1]["volume"] == 0
+
+    def test_all_nan_row_skipped(self, service):
+        df = _make_price_df(5)
+        df.iloc[-1] = float("nan")
+        with patch("src.data.stock_data.yf.Ticker") as mock_ticker:
+            mock_ticker.return_value.history.return_value = df
+            result = service.get_price_history("AAPL", period="5d")
+
+        assert len(result) == 4

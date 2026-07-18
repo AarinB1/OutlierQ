@@ -7,6 +7,37 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def build_event_dicts(events: list, session) -> list[dict]:
+    """Convert Event ORM rows into matcher input dicts.
+
+    Pulls real headlines from each event's linked articles — Event rows have
+    no ``headline`` attribute, so the previous ``hasattr(e, "headline")``
+    pattern always produced empty headline lists and silently disabled the
+    matcher's semantic (headline-similarity) tier.
+    """
+    from src.db.tables import Article
+
+    out = []
+    for e in events:
+        headlines: list[str] = []
+        if e.article_ids:
+            headlines = [
+                h for (h,) in
+                session.query(Article.headline)
+                .filter(Article.id.in_(e.article_ids))
+                .limit(3)
+                .all()
+            ]
+        out.append({
+            "ticker": e.ticker,
+            "event_type": e.event_type,
+            "direction": e.direction,
+            "confidence": e.confidence,
+            "headlines": headlines,
+        })
+    return out
+
 # Keywords that map OutlierQ event types to prediction market categories
 EVENT_MARKET_KEYWORDS = {
     "earnings_beat": ["earnings", "revenue", "profit", "EPS", "quarterly"],
@@ -107,8 +138,11 @@ class MarketMatcher:
         # 0. Ticker conflict check — if the question mentions a DIFFERENT
         #    ticker, this is almost certainly a wrong match.  Bail early.
         if ticker and len(ticker) >= 2:
-            # Find all ticker-like tokens (2-5 uppercase letters) in the question
-            mentioned_tickers = set(re.findall(r'\b[A-Z]{2,5}\b', q_upper))
+            # Ticker-like tokens must be extracted from the ORIGINAL question:
+            # uppercasing first made every short English word look like a
+            # ticker, so this check returned "conflict" for nearly all
+            # questions and dead-ended the keyword/semantic tiers.
+            mentioned_tickers = set(re.findall(r'\b[A-Z]{2,5}\b', question))
             # Remove common English words that look like tickers
             noise = {
                 "THE", "AND", "FOR", "ARE", "NOT", "BUT", "HAS", "HIS",

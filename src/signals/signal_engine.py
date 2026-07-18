@@ -175,10 +175,16 @@ class SignalEngine:
         self,
         market_fetcher: MarketFetcher | None = None,
         demo: bool = False,
+        calibrator: "ConfidenceCalibrator | None" = None,
     ) -> None:
+        from src.signals.confidence_calibrator import ConfidenceCalibrator
+
         self.market_fetcher = market_fetcher or MarketFetcher()
         self.technical = TechnicalAnalyzer(self.market_fetcher)
         self.demo = demo
+        # Maps heuristic confidence to realized win rate; identity until
+        # enough evaluated signals exist (see confidence_calibrator.py).
+        self.calibrator = calibrator or ConfidenceCalibrator()
         # In demo mode, include "other" so routine news still produces signals
         if demo:
             self._event_profiles = {**EVENT_PROFILES, "other": dict(DEMO_OTHER_PROFILE)}
@@ -242,7 +248,7 @@ class SignalEngine:
         Returns contract details dict or None if chain is unavailable.
         """
         try:
-            chain = self.market_fetcher.fetch_options_chain(ticker)
+            chain = self.market_fetcher.fetch_options_chain(ticker, target_expiry=target_expiry)
         except Exception:
             logger.warning("Failed to fetch options chain for %s", ticker)
             return None
@@ -265,7 +271,7 @@ class SignalEngine:
         return {
             "contract_symbol": str(best.get("contractSymbol", "")),
             "strike": float(best["strike"]),
-            "expiry": target_expiry,
+            "expiry": chain.get("expiry") or target_expiry,
             "bid": float(best.get("bid", 0)),
             "ask": float(best.get("ask", 0)),
             "volume": int(best.get("volume", 0)) if not _is_nan(best.get("volume")) else 0,
@@ -430,6 +436,7 @@ class SignalEngine:
         contract = self.find_best_contract(ticker, direction, strike, expiry)
         if contract is not None:
             strike = contract["strike"]
+            expiry = contract["expiry"]
         confidence = self.compute_confidence(
             detection_confidence, EXPLORATORY_PROFILE["base_confidence"], contract
         )
@@ -533,6 +540,7 @@ class SignalEngine:
         # Use the real contract's strike if found
         if contract is not None:
             strike = contract["strike"]
+            expiry = contract["expiry"]
 
         event_confidence = event.get("confidence", event.get("confidence_score", 0.5))
         confidence = self.compute_confidence(
@@ -732,16 +740,23 @@ class SignalEngine:
                     logger.warning("Signal for %s has no event_id, skipping store", sig["ticker"])
                     continue
 
+                contract = sig.get("contract") or {}
+                entry_iv = float(contract.get("implied_volatility") or 0.0)
+                raw_confidence = float(sig["confidence"])
                 record = Signal(
                     ticker=sig["ticker"],
                     event_id=event_id,
                     direction=sig["direction"],
                     suggested_strike=sig["suggested_strike"],
                     suggested_expiry=sig["suggested_expiry"],
-                    confidence=sig["confidence"],
+                    confidence=self.calibrator.calibrate(raw_confidence),
+                    raw_confidence=raw_confidence,
                     exploratory=sig.get("exploratory", False),
                     discovery_source=sig.get("discovery_source"),
                     simulation_enhanced=sig.get("simulation_enhanced", False),
+                    entry_price=sig.get("current_price"),
+                    # Only persist a plausible IV; yfinance reports 0 for stale quotes.
+                    entry_iv=entry_iv if 0.01 <= entry_iv <= 5.0 else None,
                 )
                 s.add(record)
                 stored.append(record)

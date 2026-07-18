@@ -1,7 +1,7 @@
 """Track prediction outcomes and compute accuracy statistics."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from src.predictions.prediction_db import Prediction, PredictionMarket
@@ -66,7 +66,7 @@ class PredictionTracker:
             for pred in preds:
                 pred.actual_outcome = actual
                 pred.is_correct = pred.predicted_outcome == actual
-                pred.resolved_at = datetime.utcnow()
+                pred.resolved_at = datetime.now(timezone.utc)
 
                 # Hypothetical P&L on a $1 bet
                 if pred.predicted_outcome == "yes":

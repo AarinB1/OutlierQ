@@ -80,6 +80,16 @@ def parse_args() -> argparse.Namespace:
         help="Evaluate pending signals and print accuracy stats, then exit",
     )
     parser.add_argument(
+        "--reevaluate",
+        action="store_true",
+        help="Clear all signal outcomes and re-evaluate with the Black-Scholes P&L model, then exit",
+    )
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="Fit confidence calibration from evaluated signals and print the reliability table, then exit",
+    )
+    parser.add_argument(
         "--reclassify",
         action="store_true",
         help="Re-classify all existing events in the database and exit",
@@ -237,17 +247,32 @@ def run_full_pipeline(tickers: list[str], demo: bool = False, use_ml: bool = Fal
     print()
 
 
-def run_evaluate() -> None:
-    """Evaluate pending signals and print accuracy stats."""
+def run_evaluate(reevaluate: bool = False) -> None:
+    """Evaluate pending signals and print accuracy stats.
+
+    With reevaluate=True, clears existing outcomes first so historical
+    accuracy is restated with the Black-Scholes P&L model.
+    """
     from src.signals.feedback_tracker import FeedbackTracker
 
     tracker = FeedbackTracker()
-    results = tracker.evaluate_all_pending()
+    if reevaluate:
+        summary = tracker.reevaluate_all()
+        results = summary["results"]
+        print(
+            f"\nRestated {summary['reevaluated']} of {summary['previously_evaluated']} "
+            "previously evaluated signals with Black-Scholes P&L."
+        )
+    else:
+        results = tracker.evaluate_all_pending()
 
     if results:
         print(f"\nEvaluated {len(results)} signals:")
         for r in results:
-            print(f"  {r['ticker']} {r['direction']}: {r['outcome']} (P&L: {r['estimated_pnl']:+.1f}%)")
+            print(
+                f"  {r['ticker']} {r['direction']}: {r['outcome']} "
+                f"(P&L: {r['estimated_pnl']:+.1f}%, IV={r['iv_used']:.2f} [{r['iv_source']}])"
+            )
 
     stats = tracker.get_accuracy_stats()
     print(f"\n{'='*60}")
@@ -266,6 +291,36 @@ def run_evaluate() -> None:
         for et, data in stats["by_event_type"].items():
             print(f"    {et}: {data['wins']}/{data['count']} wins ({data['win_rate']:.0%})")
 
+    print()
+
+
+def run_calibrate() -> None:
+    """Fit confidence calibration and print the reliability table."""
+    from src.db.database import get_session
+    from src.signals.confidence_calibrator import MIN_SAMPLES, ConfidenceCalibrator
+
+    calibrator = ConfidenceCalibrator()
+    with get_session() as s:
+        result = calibrator.fit(s)
+        table = calibrator.reliability_table(s)
+
+    print(f"\n{'='*60}")
+    print("  CONFIDENCE CALIBRATION")
+    print(f"{'='*60}")
+    if result["calibrated"]:
+        print(f"  Fitted on:         {result['n_samples']} evaluated signals")
+        print(f"  Brier score:       {result['brier_raw']:.4f} raw -> {result['brier_calibrated']:.4f} calibrated")
+        print(f"  Saved to:          {calibrator.path}")
+    else:
+        print(f"  Not calibrated:    {result['reason']}")
+        print(f"  Activation:        automatic once {MIN_SAMPLES}+ evaluated signals exist")
+
+    print("\n  Reliability (stated confidence vs realized win rate):")
+    print(f"  {'bin':>10} {'count':>6} {'stated':>8} {'realized':>9}")
+    for row in table:
+        stated = f"{row['stated']:.3f}" if row["stated"] is not None else "-"
+        realized = f"{row['realized']:.3f}" if row["realized"] is not None else "-"
+        print(f"  {row['bin']:>10} {row['count']:>6} {stated:>8} {realized:>9}")
     print()
 
 
@@ -667,18 +722,10 @@ def run_autopilot(
                     return
 
                 # Get recent events (last 48h)
+                from src.predictions.market_matcher import build_event_dicts
                 cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
                 recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
-                events = [
-                    {
-                        "ticker": e.ticker,
-                        "event_type": e.event_type,
-                        "direction": e.direction,
-                        "confidence": e.confidence,
-                        "headlines": [e.headline] if hasattr(e, "headline") and e.headline else [],
-                    }
-                    for e in recent
-                ]
+                events = build_event_dicts(recent, db)
 
                 if not events:
                     logger.info("Prediction scan: no recent events to match")
@@ -944,7 +991,7 @@ def run_scheduled(
 
 def run_prediction_scan(demo: bool = False) -> None:
     """Fetch prediction markets, match with events, generate predictions."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from src.predictions.polymarket_fetcher import PolymarketFetcher
     from src.predictions.kalshi_fetcher import KalshiFetcher
     from src.predictions.market_matcher import MarketMatcher
@@ -962,14 +1009,10 @@ def run_prediction_scan(demo: bool = False) -> None:
     print(f"\nFetched {len(markets)} active prediction markets")
 
     # Get recent events
-    cutoff = datetime.utcnow() - timedelta(hours=48)
+    from src.predictions.market_matcher import build_event_dicts
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
     recent = db.query(Event).filter(Event.detected_at >= cutoff).all()
-    events = [
-        {"ticker": e.ticker, "event_type": e.event_type,
-         "direction": e.direction, "confidence": e.confidence,
-         "headlines": [e.headline] if hasattr(e, "headline") and e.headline else []}
-        for e in recent
-    ]
+    events = build_event_dicts(recent, db)
     print(f"Found {len(events)} recent events")
 
     # Match + predict
@@ -1201,13 +1244,13 @@ def run_backtest_trading(ticker: str, strategy_name: str) -> None:
 
 def run_trading_status() -> None:
     """Print trading model and system status."""
-    from pathlib import Path
+    from config.settings import CACHE_DIR
 
     print(f"\n{'='*60}")
     print("  TRADING MODULE STATUS")
     print(f"{'='*60}")
 
-    model_dir = Path(".cache/trading_models")
+    model_dir = CACHE_DIR / "trading_models"
     if model_dir.exists():
         models = list(model_dir.glob("*_model.pt"))
         print(f"\n  Saved models: {len(models)}")
@@ -1382,8 +1425,12 @@ def main() -> None:
         run_train_ml()
         return
 
-    if args.evaluate:
-        run_evaluate()
+    if args.evaluate or args.reevaluate:
+        run_evaluate(reevaluate=args.reevaluate)
+        return
+
+    if args.calibrate:
+        run_calibrate()
         return
 
     if args.reclassify:

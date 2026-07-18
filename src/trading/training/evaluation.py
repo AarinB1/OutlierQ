@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from config.settings import LOG_FORMAT
+from config.settings import CACHE_DIR, LOG_FORMAT
 from src.trading.data.data_preprocessor import DataPreprocessor
 from src.trading.features.feature_pipeline import FeaturePipeline
 from src.trading.models.hybrid_model import HybridLSTMTransformer
@@ -21,7 +21,7 @@ logging.basicConfig(format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-MODEL_DIR = Path(".cache/trading_models")
+MODEL_DIR = CACHE_DIR / "trading_models"
 
 
 @dataclass
