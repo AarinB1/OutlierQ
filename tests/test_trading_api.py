@@ -1,17 +1,52 @@
-"""Tests for trading API endpoints."""
+"""Tests for trading API endpoints.
+
+Uses an isolated in-memory database via dependency override — the previous
+setup bound create_all/drop_all to the REAL project engine, so running the
+test suite dropped every table in outlierq.db.
+"""
+
+from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from src.api.app import app
-from src.db.database import Base, engine
+from src.db.database import Base
+
+_test_engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+_TestSession = sessionmaker(bind=_test_engine)
+
+
+def _override_get_db():
+    db = _TestSession()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# Keep the startup event away from the real database
+_patcher = patch("src.api.app.init_db")
+_patcher.start()
+
+from src.api.app import app  # noqa: E402
+from src.api.trading_routes import get_db as trading_get_db  # noqa: E402
+
+app.dependency_overrides[trading_get_db] = _override_get_db
+
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-  Base.metadata.create_all(bind=engine)
+  Base.metadata.create_all(bind=_test_engine)
   yield
-  Base.metadata.drop_all(bind=engine)
+  Base.metadata.drop_all(bind=_test_engine)
 
 
 client = TestClient(app)
