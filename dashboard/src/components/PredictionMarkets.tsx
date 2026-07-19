@@ -417,8 +417,11 @@ export default function PredictionMarkets() {
                         {opp.profit_after_fees > 0 ? '+' : ''}${opp.profit_after_fees.toFixed(3)}/unit after fees
                       </span>
                     ) : (
-                      <span className="font-mono text-accent-green font-semibold">
-                        +${opp.theoretical_profit.toFixed(3)}/unit
+                      <span
+                        className="font-mono text-txt-tertiary"
+                        title="Fee estimate unavailable for this legacy opportunity"
+                      >
+                        ${opp.theoretical_profit.toFixed(3)}/unit gross (fees unavailable)
                       </span>
                     )}
                   </div>

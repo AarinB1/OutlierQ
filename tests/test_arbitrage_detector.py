@@ -95,6 +95,32 @@ class TestFeeAwareEdge:
             opp["spread"] - 0.07 * 0.515 * 0.485, abs=1e-4
         )
 
+    @pytest.mark.parametrize("poly_yes", [0.50, 0.492497])
+    def test_nonpositive_persisted_after_fee_profit_is_skipped(self, poly_yes):
+        opps = ArbitrageDetector(min_spread=0).detect(
+            [_poly(QUESTION, poly_yes)], [_kalshi(QUESTION, 0.51)]
+        )
+        assert opps == []
+
+    def test_opportunities_are_sorted_by_after_fee_profit(self):
+        high_fee_question = "Will the Fed cut interest rates?"
+        low_fee_question = "Will bitcoin exceed $100,000?"
+        opps = ArbitrageDetector(min_spread=0.03).detect(
+            [
+                _poly(high_fee_question, 0.44),
+                _poly(low_fee_question, 0.845),
+            ],
+            [
+                _kalshi(high_fee_question, 0.50),
+                _kalshi(low_fee_question, 0.90),
+            ],
+        )
+
+        assert len(opps) == 2
+        assert opps[0]["poly_question"] == low_fee_question
+        assert opps[0]["spread"] < opps[1]["spread"]
+        assert opps[0]["profit_after_fees"] > opps[1]["profit_after_fees"]
+
     def test_detect_output_round_trips_into_orm(self):
         """Every key detect() emits must map to an ArbitrageOpportunity
         column — the pipeline stores rows via ArbitrageOpportunity(**opp)."""
