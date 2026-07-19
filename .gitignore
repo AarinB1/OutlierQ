@@ -18,10 +18,9 @@ build/
 .pytest_cache/
 htmlcov/
 .coverage
-.cache/huggingface/
-.cache/company_tickers.json
-.cache/ml_model.pkl
-.cache/autopilot_status.json
+
+# Runtime caches and generated artifacts (model checkpoints, heartbeats, API caches)
+.cache/
 
 # IDE
 .vscode/
