@@ -251,7 +251,7 @@ export default function TradeJournal() {
       ) : entries.length === 0 ? (
         <div className="card">
           <EmptyState
-            icon="📓"
+            icon="✎&#xFE0E;"
             title="No journal entries yet"
             subtitle="Track your trades with notes, ratings, and tags to identify patterns and improve your strategy over time."
           />

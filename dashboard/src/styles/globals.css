@@ -47,6 +47,12 @@
 }
 
 @layer base {
+  :root {
+    /* Native widgets (unchecked checkboxes, scrollbars, select menus)
+       render in their dark variants instead of browser-white. */
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
   }
