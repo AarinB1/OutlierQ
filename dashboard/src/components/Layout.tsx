@@ -33,12 +33,12 @@ const TRADING_NAV: { key: TradingPage; icon: string; label: string }[] = [
   { key: 'performance', icon: '\u25CE', label: 'Performance' },
   { key: 'risk', icon: '\u26A0', label: 'Risk' },
   { key: 'strategies', icon: '\u2630', label: 'Strategies' },
-  { key: 'charts', icon: '\u2E0F', label: 'Charts' },
+  { key: 'charts', icon: '\u223F', label: 'Charts' },
   { key: 'watchlists', icon: '\u2606', label: 'Watchlists' },
-  { key: 'journal', icon: '\u270E', label: 'Journal' },
-  { key: 'dsl-editor', icon: '\u2328', label: 'DSL Editor' },
+  { key: 'journal', icon: '\u270E\uFE0E', label: 'Journal' },
+  { key: 'dsl-editor', icon: '</>', label: 'DSL Editor' },
   { key: 'portfolio-backtest', icon: '\u25A6', label: 'Portfolio BT' },
-  { key: 'trade-replay', icon: '\u23EF', label: 'Replay' },
+  { key: 'trade-replay', icon: '\u21BB', label: 'Replay' },
   { key: 'greeks', icon: '\u0394', label: 'Greeks' },
 ]
 
@@ -61,8 +61,7 @@ function LayoutStatus() {
   return (
     <div className="px-3 pb-3 max-md:hidden border-t border-border pt-3 mt-auto">
       <div className="space-y-1.5 text-txt-tertiary text-xs font-mono">
-        <p>Monitoring {status.tickers_monitored} tickers</p>
-        <p>{status.signals_today} signals today</p>
+        <p>{status.tickers_monitored} tickers · {status.signals_today} signals today</p>
         {status.is_autopilot_running && (
           <p className="flex items-center gap-1.5 text-accent-green">
             <span className="relative flex h-2 w-2">
@@ -86,7 +85,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
       <aside className="fixed left-0 top-0 h-full w-60 bg-surface-primary border-r border-border flex flex-col z-50
                          max-lg:w-12 max-md:w-full max-md:h-14 max-md:flex-row max-md:border-b max-md:border-r-0">
         {/* Logo */}
-        <div className="px-6 py-6 max-lg:px-3 max-md:py-3 max-md:px-4 flex items-center gap-3 shrink-0">
+        <div className="px-6 py-4 max-lg:px-3 max-md:py-3 max-md:px-4 flex items-center gap-3 shrink-0">
           <div className="relative">
             <span className={`absolute -right-1 -top-1 w-2 h-2 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
             <span className={`absolute -right-1 -top-1 w-2 h-2 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'} ${connected ? 'animate-ping' : ''}`} style={{ animationDuration: '2s' }} />
@@ -124,7 +123,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-2 space-y-1 max-md:flex max-md:items-center max-md:space-y-0 max-md:gap-1 max-md:px-2 max-md:py-0 overflow-y-auto">
+        <nav className="flex-1 px-3 py-2 space-y-0.5 max-md:flex max-md:items-center max-md:space-y-0 max-md:gap-1 max-md:px-2 max-md:py-0 overflow-y-auto">
           <div className="hidden max-md:flex items-center gap-1 pr-1 shrink-0">
             <button
               onClick={() => setSection('options')}
@@ -151,31 +150,31 @@ export default function Layout({ section, setSection, page, setPage, connected, 
             <button
               key={n.key}
               onClick={() => setPage(n.key)}
-              className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+              className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
                 max-lg:justify-center max-lg:px-0 max-md:px-3
                 ${page === n.key
                   ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                   : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                 }`}
             >
-              <span className="text-base">{n.icon}</span>
+              <span className="text-sm w-5 text-center">{n.icon}</span>
               <span className="max-lg:hidden">{n.label}</span>
             </button>
           ))}
           {section === 'trading' && (
-            <div className="pt-3 mt-3 border-t border-border/50 space-y-1">
+            <div className="pt-2 mt-2 border-t border-border/50 space-y-0.5">
               {TRADING_FOOTER_NAV.map((n) => (
                 <button
                   key={n.key}
                   onClick={() => setPage(n.key)}
-                  className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+                  className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
                     max-lg:justify-center max-lg:px-0 max-md:px-3
                     ${page === n.key
                       ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                       : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                     }`}
                 >
-                  <span className="text-base">{n.icon}</span>
+                  <span className="text-sm w-5 text-center">{n.icon}</span>
                   <span className="max-lg:hidden">{n.label}</span>
                 </button>
               ))}
@@ -185,12 +184,12 @@ export default function Layout({ section, setSection, page, setPage, connected, 
 
         {section === 'trading' && (
           <div className="px-3 pb-3 max-md:hidden space-y-3">
-            <div className="card border border-accent-amber/20 bg-accent-amber/10 p-4">
+            <div className="card border border-accent-amber/20 bg-accent-amber/10 p-3">
               <p className="text-xs text-accent-amber font-medium uppercase tracking-wider mb-1">Paper Trading Only</p>
               <p className="text-xs text-txt-secondary">
-                Research environment only. Not financial advice. No live brokerage execution.
+                Research tool — not financial advice. No live execution.
               </p>
-              <label className="mt-3 flex items-center justify-between gap-3 text-xs text-txt-secondary">
+              <label className="mt-2 flex items-center justify-between gap-3 text-xs text-txt-secondary">
                 <span>Demo Mode</span>
                 <input
                   type="checkbox"

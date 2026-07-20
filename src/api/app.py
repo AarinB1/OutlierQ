@@ -313,6 +313,7 @@ def list_tickers(db: Session = Depends(get_db)) -> list[dict]:
         {
             "ticker": ticker,
             "total_signals": total,
+            "evaluated": total_eval or 0,
             "win_rate": (wins or 0) / total_eval if total_eval else 0.0,
             "last_signal_date": last_sig.isoformat() if last_sig else None,
         }

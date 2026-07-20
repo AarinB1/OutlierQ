@@ -34,7 +34,7 @@ export default function GreeksCalculator() {
       })
       setResult(data as unknown as GreeksResult)
     } catch (e: unknown) {
-      addToast(e instanceof Error ? e.message : 'Computation failed', 'error')
+      addToast('error', e instanceof Error ? e.message : 'Computation failed')
     } finally {
       setLoading(false)
     }
@@ -42,7 +42,7 @@ export default function GreeksCalculator() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Options Greeks Calculator</h2>
+      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Greeks Calculator</h2>
 
       <div className="card p-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

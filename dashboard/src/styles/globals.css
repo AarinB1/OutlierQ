@@ -47,12 +47,49 @@
 }
 
 @layer base {
+  :root {
+    /* Native widgets (unchecked checkboxes, scrollbars, select menus)
+       render in their dark variants instead of browser-white. */
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
   }
 
   #root {
     min-height: 100vh;
+  }
+
+  /* Form controls: dark-theme defaults so no page ships browser-white
+     inputs. Component-level utility classes still override these. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    @apply bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-sm text-txt-primary font-sans;
+  }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply outline-none border-accent-blue/60;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-txt-tertiary;
+  }
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  select option {
+    background-color: #12121a;
+    color: #e8e8ed;
+  }
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='range'] {
+    accent-color: #448aff;
   }
 
   /* Scrollbar */

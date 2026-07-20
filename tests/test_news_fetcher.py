@@ -141,3 +141,83 @@ def test_retry_returns_empty_after_exhaustion_without_final_sleep(mock_sleep):
     assert len(calls) == 3
     # Sleeps happen between attempts only: 2 sleeps for 3 attempts.
     assert mock_sleep.call_count == 2
+
+
+# ── store_articles robustness ─────────────────────────────────────────
+
+
+def _article_create(url: str, ticker: str = "AAPL", headline: str = "Headline") -> ArticleCreate:
+    return ArticleCreate(
+        ticker=ticker,
+        headline=headline,
+        summary=None,
+        source="TestSource",
+        url=url,
+        published_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        raw_json=None,
+    )
+
+
+class _BadArticle:
+    """Stand-in whose row violates a NOT NULL constraint at flush time,
+    modeling any IntegrityError mid-batch (e.g. a concurrent writer
+    inserting the same URL between the pre-check and the flush)."""
+
+    url = "https://example.com/bad"
+
+    def model_dump(self) -> dict:
+        return {
+            "ticker": "AAPL",
+            "headline": None,  # NOT NULL column -> IntegrityError on flush
+            "summary": None,
+            "source": "TestSource",
+            "url": self.url,
+            "published_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "raw_json": None,
+        }
+
+
+def test_store_articles_failed_insert_does_not_discard_batch():
+    """One failing insert must not roll back previously stored articles or
+    inflate the inserted count."""
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from src.db.database import Base
+    from src.db.tables import Article
+    from src.ingestion.news_fetcher import NewsFetcher
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    @contextmanager
+    def fake_get_session():
+        session = Session()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    fetcher = NewsFetcher(api_key="test-key")
+    batch = [
+        _article_create("https://example.com/a"),
+        _BadArticle(),
+        _article_create("https://example.com/b"),
+    ]
+
+    with patch("src.ingestion.news_fetcher.get_session", fake_get_session):
+        inserted = fetcher.store_articles(batch)
+
+    session = Session()
+    stored_urls = {row.url for row in session.query(Article).all()}
+    session.close()
+
+    assert stored_urls == {"https://example.com/a", "https://example.com/b"}
+    assert inserted == 2

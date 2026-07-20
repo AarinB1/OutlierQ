@@ -168,14 +168,14 @@ export default function PortfolioView() {
           <div className="card">
             <div className="label mb-1">Daily P&amp;L</div>
             <div className={`font-mono font-bold text-2xl flex items-center gap-1 ${colorForPnl(dailyPnl)}`}>
-              <span aria-hidden="true">{dailyPnl > 0 ? '▲' : dailyPnl < 0 ? '▼' : '■'}</span>
+              <span aria-hidden="true">{dailyPnl > 0 ? '▲' : dailyPnl < 0 ? '▼' : ''}</span>
               <span>{formatCurrency(dailyPnl)}</span>
             </div>
           </div>
           <div className="card">
             <div className="label mb-1">Cumulative P&amp;L</div>
             <div className={`font-mono font-bold text-2xl flex items-center gap-1 ${colorForPnl(cumulativePnl)}`}>
-              <span aria-hidden="true">{cumulativePnl > 0 ? '▲' : cumulativePnl < 0 ? '▼' : '■'}</span>
+              <span aria-hidden="true">{cumulativePnl > 0 ? '▲' : cumulativePnl < 0 ? '▼' : ''}</span>
               <span>{formatCurrency(cumulativePnl)}</span>
             </div>
           </div>

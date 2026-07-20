@@ -82,12 +82,15 @@ export default function PerformanceAttributionPage() {
 
   if (!data || data.total_executions === 0) {
     return (
-      <div className="card">
-        <EmptyState
-          icon="◈"
-          title="No performance data yet"
-          subtitle="Run backtests or execute paper trades to see strategy attribution, win rates, and rolling accuracy."
-        />
+      <div className="space-y-4">
+        <h2 className="font-mono font-bold text-lg">Performance</h2>
+        <div className="card">
+          <EmptyState
+            icon="◈"
+            title="No performance data yet"
+            subtitle="Run backtests or execute paper trades to see strategy attribution, win rates, and rolling accuracy."
+          />
+        </div>
       </div>
     )
   }

@@ -305,6 +305,8 @@ def get_arbitrage_history(
                 "match_score": o.match_score,
                 "match_method": o.match_method,
                 "theoretical_profit": o.theoretical_profit,
+                "estimated_fees": o.estimated_fees,
+                "profit_after_fees": o.profit_after_fees,
                 "status": o.status,
                 "detected_at": o.detected_at.isoformat() if o.detected_at else None,
             }

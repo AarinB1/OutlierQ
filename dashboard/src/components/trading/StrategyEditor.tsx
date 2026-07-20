@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { runDSLBacktest } from '../../api'
 import { useToast } from '../../hooks/useToast'
+import type { DslBacktestResult } from '../../types'
 
 const EXAMPLE_RULES = `BUY WHEN rsi_14 < 30 AND close > sma_200
 SELL WHEN rsi_14 > 70 OR close < sma_200
@@ -39,11 +40,6 @@ const formatCurrency = (v: number) =>
 
 const formatPct = (v: number, digits = 1) => `${v.toFixed(digits)}%`
 
-interface BacktestResult {
-  metrics: Record<string, number>
-  equity_curve: { dates: string[]; values: number[] }
-  trades: Array<Record<string, unknown>>
-}
 
 export default function StrategyEditor() {
   const { addToast } = useToast()
@@ -52,7 +48,7 @@ export default function StrategyEditor() {
   const [period, setPeriod] = useState('1y')
   const [capital, setCapital] = useState(100000)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<BacktestResult | null>(null)
+  const [result, setResult] = useState<DslBacktestResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleRun = async () => {
@@ -60,12 +56,12 @@ export default function StrategyEditor() {
     setError(null)
     try {
       const data = await runDSLBacktest({ rules, ticker, period, initial_capital: capital })
-      setResult(data as BacktestResult)
-      addToast('DSL backtest complete', 'success')
+      setResult(data)
+      addToast('success', 'DSL backtest complete')
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Backtest failed'
       setError(msg)
-      addToast(msg, 'error')
+      addToast('error', msg)
     } finally {
       setLoading(false)
     }
@@ -81,7 +77,7 @@ export default function StrategyEditor() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Custom Strategy Editor (DSL)</h2>
+        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Strategy Editor (DSL)</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -145,21 +141,21 @@ export default function StrategyEditor() {
               <h3 className="label mb-3">Equity Curve</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={equityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                   <YAxis
                     tick={{ fontSize: 10 }}
                     tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrency(v), 'Equity']}
-                    contentStyle={{ background: '#1a1a2e', border: '1px solid #333' }}
+                    formatter={(v) => [formatCurrency(Number(v)), 'Equity']}
+                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#3b82f6"
-                    fill="#3b82f620"
+                    stroke="#448aff"
+                    fill="rgba(68,138,255,0.13)"
                   />
                 </AreaChart>
               </ResponsiveContainer>

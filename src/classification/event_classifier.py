@@ -198,21 +198,19 @@ class EventClassifier:
         top_type, top_score = sorted_types[0]
         _, second_score = sorted_types[1] if len(sorted_types) > 1 else ("", 0.0)
 
-        # Determine event type
+        # Determine event type and confidence. A below-threshold top score is
+        # rejected as "other" — its confidence must not inherit a dominance
+        # ratio computed from the very scores that were too weak to accept.
         if top_score < _MIN_SCORE_THRESHOLD:
             event_type = "other"
+            confidence = 0.3 if top_score > 0 else 0.0
         else:
             event_type = top_type
-
-        # Compute confidence — how dominant the top score is
-        if top_score > 0 and second_score > 0:
-            confidence = top_score / (top_score + second_score)
-        elif top_score >= _MIN_SCORE_THRESHOLD:
-            confidence = min(0.5 + (top_score / 20.0), 0.9)
-        elif top_score > 0:
-            confidence = 0.3
-        else:
-            confidence = 0.0
+            if second_score > 0:
+                # How dominant the top score is over the runner-up
+                confidence = top_score / (top_score + second_score)
+            else:
+                confidence = min(0.5 + (top_score / 20.0), 0.9)
 
         direction = self.direction_map.get(event_type, "neutral")
 

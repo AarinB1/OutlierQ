@@ -23,11 +23,12 @@ class SentimentFilter:
         extreme_threshold: float = 0.6,
         extreme_ratio_threshold: float = 0.5,
         batch_size: int = FINBERT_BATCH_SIZE,
+        analyzer: FinBERTAnalyzer | None = None,
     ) -> None:
         self.extreme_threshold = extreme_threshold
         self.extreme_ratio_threshold = extreme_ratio_threshold
         self.batch_size = max(1, batch_size)
-        self.finbert = FinBERTAnalyzer(
+        self.finbert = analyzer or FinBERTAnalyzer(
             device=FINBERT_DEVICE,
             extreme_threshold=extreme_threshold,
         )
@@ -134,13 +135,20 @@ class SentimentFilter:
         }
 
     def update_article_scores(
-        self, articles: list, session: Session | None = None
+        self, articles: list, scores: list[dict] | None = None, session: Session | None = None
     ) -> None:
-        """Write sentiment_score and sentiment_magnitude back to the articles table."""
+        """Write sentiment_score and sentiment_magnitude back to the articles table.
+
+        Pass the ``scores`` list from a prior :meth:`score_batch` call to
+        reuse those results — re-running FinBERT inference on the same
+        headlines doubles the most expensive step of the pipeline.
+        """
         def _update(s: Session) -> None:
-            headlines = [article.headline for article in articles]
-            scores = self.finbert.analyze_batch(headlines, batch_size=self.batch_size)
-            for article, result in zip(articles, scores, strict=False):
+            results = scores
+            if results is None:
+                headlines = [article.headline for article in articles]
+                results = self.finbert.analyze_batch(headlines, batch_size=self.batch_size)
+            for article, result in zip(articles, results, strict=False):
                 compound = float(result["compound"])
                 article.sentiment_score = compound
                 article.sentiment_magnitude = abs(compound)

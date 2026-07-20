@@ -23,7 +23,11 @@ if DATABASE_URL.startswith("sqlite"):
     _connect_args["check_same_thread"] = False
 
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
-SessionLocal = sessionmaker(bind=engine)
+# expire_on_commit=False: pipeline entry points (generate_and_store,
+# scan_and_store, full_pipeline) return ORM rows out of a get_session()
+# block that commits and closes — with expiry enabled every attribute
+# access on those rows raised DetachedInstanceError in the CLI path.
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 
@@ -74,6 +78,18 @@ def migrate_db() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN raw_confidence FLOAT"))
             conn.commit()
             logger.info("Added signals.raw_confidence column.")
+
+    if "arbitrage_opportunities" in insp.get_table_names():
+        arb_cols = {c["name"] for c in insp.get_columns("arbitrage_opportunities")}
+        with engine.connect() as conn:
+            if "estimated_fees" not in arb_cols:
+                conn.execute(text("ALTER TABLE arbitrage_opportunities ADD COLUMN estimated_fees FLOAT"))
+                conn.commit()
+                logger.info("Added arbitrage_opportunities.estimated_fees column.")
+            if "profit_after_fees" not in arb_cols:
+                conn.execute(text("ALTER TABLE arbitrage_opportunities ADD COLUMN profit_after_fees FLOAT"))
+                conn.commit()
+                logger.info("Added arbitrage_opportunities.profit_after_fees column.")
 
 
 def init_db() -> None:

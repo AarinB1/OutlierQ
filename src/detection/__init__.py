@@ -134,8 +134,11 @@ class AnomalyPipeline:
                     sentiment_passed.append(ticker)
                     sentiment_map[ticker] = sentiment_result
 
-                    # Write sentiment scores back to DB
-                    self.sentiment_filter.update_article_scores(articles, session=s)
+                    # Write sentiment scores back to DB, reusing the scores
+                    # score_batch just computed (no second inference pass).
+                    self.sentiment_filter.update_article_scores(
+                        articles, scores=sentiment_result.get("scores"), session=s
+                    )
 
             # Stage 3: Cross-source validation
             outliers: list[dict] = []
@@ -475,15 +478,24 @@ class AnomalyPipeline:
         if not futures:
             return {}
 
-        # Wait for all futures up to the timeout
+        # Wait for all futures up to the timeout. as_completed raises
+        # TimeoutError when the deadline passes with futures still pending —
+        # keep whatever completed by then instead of discarding everything.
         done_ids: set = set()
-        for future in as_completed(futures, timeout=wait_timeout):
-            try:
-                future.result()  # raise any exception
-                done_ids.add(futures[future])
-            except Exception as exc:
-                event_id = futures[future]
-                logger.warning("Simulation for event %s failed: %s", event_id, exc)
+        try:
+            for future in as_completed(futures, timeout=wait_timeout):
+                try:
+                    future.result()  # raise any exception
+                    done_ids.add(futures[future])
+                except Exception as exc:
+                    event_id = futures[future]
+                    logger.warning("Simulation for event %s failed: %s", event_id, exc)
+        except TimeoutError:
+            pending = len(futures) - len(done_ids)
+            logger.warning(
+                "Simulation wait timed out after %ds with %d still running — "
+                "keeping %d completed result(s)", wait_timeout, pending, len(done_ids),
+            )
 
         # Query completed SimulationResults from DB
         completed_event_ids = list(done_ids)

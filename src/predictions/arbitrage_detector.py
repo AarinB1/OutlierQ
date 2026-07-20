@@ -63,7 +63,7 @@ class ArbitrageDetector:
             kalshi_markets: Normalized markets from KalshiFetcher.
 
         Returns:
-            List of arbitrage opportunity dicts sorted by spread descending.
+            List of profitable arbitrage opportunity dicts sorted by after-fee profit.
         """
         if not poly_markets or not kalshi_markets:
             logger.info("Arbitrage scan skipped: poly=%d, kalshi=%d", len(poly_markets), len(kalshi_markets))
@@ -128,6 +128,17 @@ class ArbitrageDetector:
 
             spread_pct = spread / max(midpoint, 0.01)
 
+            # Kalshi charges a trading fee of ~0.07 * P * (1-P) per contract
+            # on the traded leg (Polymarket has no trading fee), so the raw
+            # spread overstates the realizable edge. P*(1-P) is symmetric,
+            # so the fee is the same whether the Kalshi leg is YES or NO.
+            estimated_fees = 0.07 * kalshi_yes * (1.0 - kalshi_yes)
+            profit_after_fees = theoretical_profit - estimated_fees
+            rounded_profit_after_fees = round(profit_after_fees, 4)
+
+            if rounded_profit_after_fees <= 0:
+                continue
+
             opportunities.append({
                 "poly_market_id": poly_market["market_id"],
                 "poly_question": poly_market["question"],
@@ -143,11 +154,13 @@ class ArbitrageDetector:
                 "match_score": round(best_score, 4),
                 "match_method": best_method,
                 "theoretical_profit": round(theoretical_profit, 4),
+                "estimated_fees": round(estimated_fees, 4),
+                "profit_after_fees": rounded_profit_after_fees,
                 "status": "open",
             })
 
-        # Sort by spread descending (juiciest arbs first)
-        opportunities.sort(key=lambda o: o["spread"], reverse=True)
+        # Rank by the realizable edge rather than the raw price discrepancy.
+        opportunities.sort(key=lambda o: o["profit_after_fees"], reverse=True)
         logger.info(
             "Arbitrage scan: %d poly x %d kalshi -> %d opportunities (spread >= %.0f%%)",
             len(poly_markets), len(kalshi_markets), len(opportunities), self.min_spread * 100,

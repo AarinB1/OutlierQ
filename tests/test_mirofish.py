@@ -660,3 +660,52 @@ class TestMirofishAPI:
         # Verify via GET
         resp = self.client.get("/api/mirofish/status")
         assert resp.json()["mirofish_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
+# Simulation wait-timeout salvage
+# ---------------------------------------------------------------------------
+
+
+class TestSimulationTimeoutSalvage:
+    def test_completed_results_survive_timeout(self, db_session):
+        """When the wait deadline passes with some simulations still running,
+        the results that DID finish must be returned, not discarded."""
+        from concurrent.futures import Future
+
+        from src.detection import AnomalyPipeline
+
+        fast_event = _make_event(ticker="AAPL", confidence=0.9)
+        slow_event = _make_event(ticker="TSLA", confidence=0.9)
+        db_session.add_all([fast_event, slow_event])
+        db_session.flush()
+
+        sim_row = SimulationResult(
+            event_id=fast_event.id,
+            direction="bullish",
+            consensus_strength=0.8,
+        )
+        db_session.add(sim_row)
+        db_session.flush()
+
+        done_future: Future = Future()
+        done_future.set_result(None)
+        hung_future: Future = Future()  # never resolves
+
+        futures_by_event = {fast_event.id: done_future, slow_event.id: hung_future}
+
+        pipeline = AnomalyPipeline.__new__(AnomalyPipeline)  # skip heavy init
+
+        with patch("src.simulation.mirofish_client.MirofishClient.is_available", return_value=True), \
+             patch(
+                 "src.simulation.runner.submit_simulation_sync",
+                 side_effect=lambda event, articles, client=None: futures_by_event[event.id],
+             ):
+            result_map = pipeline._run_simulations_sync(
+                [fast_event, slow_event], db_session,
+                min_confidence=0.7, wait_timeout=1,
+            )
+
+        assert fast_event.id in result_map
+        assert result_map[fast_event.id].direction == "bullish"
+        assert slow_event.id not in result_map

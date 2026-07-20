@@ -531,12 +531,18 @@ def run_once(
     use_ml: bool = False,
 ) -> None:
     """Fetch news + market data for all tickers once, then exit."""
-    news = NewsFetcher()
     market = MarketFetcher()
 
-    logger.info("Fetching news for %s", tickers)
-    articles = news.fetch_batch(tickers)
-    news.store_articles(articles)
+    # News ingestion is best-effort: without a Finnhub key (or on fetch
+    # failure) the run continues — detection still works on already-stored
+    # articles plus the key-free stages (options flow, EDGAR).
+    try:
+        news = NewsFetcher()
+        logger.info("Fetching news for %s", tickers)
+        articles = news.fetch_batch(tickers)
+        news.store_articles(articles)
+    except Exception as exc:
+        logger.warning("Skipping news ingestion: %s", exc)
 
     for ticker in tickers:
         try:

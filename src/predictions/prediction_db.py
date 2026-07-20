@@ -94,6 +94,8 @@ class ArbitrageOpportunity(Base):
 
     # Hypothetical P&L
     theoretical_profit = Column(Float)               # profit per $1 if arb is real and resolves
+    estimated_fees = Column(Float)                   # Kalshi trading fee estimate (0.07 * P * (1-P))
+    profit_after_fees = Column(Float)                # theoretical_profit - estimated_fees
 
     # Status
     status = Column(String(20), default="open")      # open | closed | expired | false_positive

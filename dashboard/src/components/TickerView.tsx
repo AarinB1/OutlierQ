@@ -461,8 +461,11 @@ function TickerMiniCard({
         <span className="text-txt-tertiary">Signals</span>
         <span className="font-mono text-right text-txt-primary">{summary.total_signals}</span>
         <span className="text-txt-tertiary">Win rate</span>
-        <span className={`font-mono text-right ${summary.win_rate >= 0.5 ? 'text-accent-green' : summary.win_rate > 0 ? 'text-accent-red' : 'text-txt-secondary'}`}>
-          {(summary.win_rate * 100).toFixed(0)}%
+        <span
+          className={`font-mono text-right ${summary.evaluated === 0 ? 'text-txt-tertiary' : summary.win_rate >= 0.5 ? 'text-accent-green' : 'text-accent-red'}`}
+          title={summary.evaluated === 0 ? 'No signals evaluated yet' : `${summary.evaluated} evaluated signals`}
+        >
+          {summary.evaluated === 0 ? '\u2014' : `${(summary.win_rate * 100).toFixed(0)}%`}
         </span>
       </div>
     </button>

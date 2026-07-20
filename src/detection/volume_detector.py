@@ -35,7 +35,13 @@ class VolumeDetector:
     def compute_baseline(self, ticker: str, session: Session | None = None) -> tuple[float, float]:
         """Return (mean, std_dev) of daily article counts over the rolling window.
 
-        If fewer than 7 days of history exist, returns default baseline values.
+        Days on which ingestion ran but this ticker had no articles count as
+        zeros — dropping them would condition the baseline on "days with
+        coverage" and hide genuine coverage spikes for sporadically covered
+        tickers. The set of observed days is taken from article ingestion
+        across ALL tickers, so days before ingestion started are not treated
+        as zeros. If ingestion ran on fewer than 7 days in the window,
+        returns default baseline values.
         """
         def _query(s: Session) -> tuple[float, float]:
             cutoff = datetime.now(timezone.utc) - timedelta(days=_ROLLING_WINDOW_DAYS)
@@ -43,8 +49,27 @@ class VolumeDetector:
                 hour=0, minute=0, second=0, microsecond=0
             )
 
-            # Get daily article counts for this ticker over the rolling window,
-            # excluding today (today is what we're measuring against the baseline)
+            # Days on which ingestion ran at all (any ticker), excluding today
+            # (today is what we're measuring against the baseline).
+            observed_days = {
+                row.day
+                for row in s.query(func.date(Article.ingested_at).label("day"))
+                .filter(
+                    Article.ingested_at >= cutoff,
+                    Article.ingested_at < today_start,
+                )
+                .distinct()
+                .all()
+            }
+
+            if len(observed_days) < _MIN_HISTORY_DAYS:
+                logger.debug(
+                    "%s: only %d observed ingestion days — using default baseline (mean=%.1f, std=%.1f)",
+                    ticker, len(observed_days), _DEFAULT_BASELINE_MEAN, _DEFAULT_BASELINE_STD,
+                )
+                return _DEFAULT_BASELINE_MEAN, _DEFAULT_BASELINE_STD
+
+            # Daily article counts for this ticker over the same window.
             rows = (
                 s.query(
                     func.date(Article.ingested_at).label("day"),
@@ -58,15 +83,8 @@ class VolumeDetector:
                 .group_by(func.date(Article.ingested_at))
                 .all()
             )
-
-            if len(rows) < _MIN_HISTORY_DAYS:
-                logger.debug(
-                    "%s: only %d days of history — using default baseline (mean=%.1f, std=%.1f)",
-                    ticker, len(rows), _DEFAULT_BASELINE_MEAN, _DEFAULT_BASELINE_STD,
-                )
-                return _DEFAULT_BASELINE_MEAN, _DEFAULT_BASELINE_STD
-
-            counts = [r.cnt for r in rows]
+            counts_by_day = {r.day: r.cnt for r in rows}
+            counts = [counts_by_day.get(day, 0) for day in observed_days]
             n = len(counts)
             mean = sum(counts) / n
             variance = sum((c - mean) ** 2 for c in counts) / n

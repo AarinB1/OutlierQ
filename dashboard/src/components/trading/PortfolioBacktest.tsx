@@ -10,22 +10,13 @@ import {
 } from 'recharts'
 import { runPortfolioBacktest } from '../../api'
 import { useToast } from '../../hooks/useToast'
+import type { PortfolioBacktestResult } from '../../types'
 
 const formatCurrency = (v: number) =>
   v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
 const formatPct = (v: number, digits = 1) => `${v.toFixed(digits)}%`
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
-
-interface PortfolioResult {
-  metrics: Record<string, number>
-  equity_curve: { dates: string[]; values: number[] }
-  per_ticker_metrics: Record<string, Record<string, number>>
-  per_ticker_equity: Record<string, { dates: string[]; values: number[] }>
-  correlation_matrix: Record<string, Record<string, number>>
-  trades: Array<Record<string, unknown>>
-}
 
 export default function PortfolioBacktest() {
   const { addToast } = useToast()
@@ -35,7 +26,7 @@ export default function PortfolioBacktest() {
   const [capital, setCapital] = useState(100000)
   const [maxPositions, setMaxPositions] = useState(10)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<PortfolioResult | null>(null)
+  const [result, setResult] = useState<PortfolioBacktestResult | null>(null)
 
   const handleRun = async () => {
     const tickers = tickersInput.split(',').map(t => t.trim().toUpperCase()).filter(Boolean)
@@ -49,10 +40,10 @@ export default function PortfolioBacktest() {
         initial_capital: capital,
         max_positions: maxPositions,
       })
-      setResult(data as PortfolioResult)
-      addToast(`Portfolio backtest complete (${tickers.length} tickers)`, 'success')
+      setResult(data)
+      addToast('success', `Portfolio backtest complete (${tickers.length} tickers)`)
     } catch (e: unknown) {
-      addToast(e instanceof Error ? e.message : 'Portfolio backtest failed', 'error')
+      addToast('error', e instanceof Error ? e.message : 'Portfolio backtest failed')
     } finally {
       setLoading(false)
     }
@@ -69,7 +60,7 @@ export default function PortfolioBacktest() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Portfolio Backtest</h2>
+      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Portfolio Backtest</h2>
 
       {/* Config */}
       <div className="card p-4">
@@ -170,14 +161,14 @@ export default function PortfolioBacktest() {
               <h3 className="label mb-3">Portfolio Equity Curve</h3>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={equityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
-                    formatter={(v: number) => [formatCurrency(v), 'Portfolio']}
-                    contentStyle={{ background: '#1a1a2e', border: '1px solid #333' }}
+                    formatter={(v) => [formatCurrency(Number(v)), 'Portfolio']}
+                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
-                  <Area type="monotone" dataKey="portfolio" stroke="#3b82f6" fill="#3b82f620" />
+                  <Area type="monotone" dataKey="portfolio" stroke="#448aff" fill="rgba(68,138,255,0.13)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

@@ -47,6 +47,14 @@ import type {
   TradingSettings,
   PerformanceAttribution,
 } from './types';
+import type {
+  PredictionMarket,
+  PredictionRecord,
+  PredictionStats,
+  ArbitrageOpportunity,
+  DslBacktestResult,
+  PortfolioBacktestResult,
+} from './types';
 
 const BASE_URL = '/api';
 const SPARKLINE_TTL_MS = 5 * 60 * 1000;
@@ -261,7 +269,7 @@ export async function triggerMlTrain(): Promise<MlTrainingMetrics | { error: str
 
 // ── Prediction Markets API ───────────────────────────────────────
 
-export async function fetchPredictionMarkets(platform?: string): Promise<{ markets: unknown[]; count: number }> {
+export async function fetchPredictionMarkets(platform?: string): Promise<{ markets: PredictionMarket[]; count: number }> {
   const sp = new URLSearchParams();
   if (platform) sp.set('platform', platform);
   const qs = sp.toString();
@@ -279,7 +287,7 @@ export async function fetchPredictionHistory(opts?: {
   limit?: number;
   platform?: string;
   resolved_only?: boolean;
-}): Promise<{ predictions: unknown[]; count: number }> {
+}): Promise<{ predictions: PredictionRecord[]; count: number }> {
   const sp = new URLSearchParams();
   if (opts?.limit) sp.set('limit', String(opts.limit));
   if (opts?.platform) sp.set('platform', opts.platform);
@@ -288,7 +296,7 @@ export async function fetchPredictionHistory(opts?: {
   return fetchJSON(`/predictions/history${qs ? `?${qs}` : ''}`);
 }
 
-export async function fetchPredictionStats(): Promise<Record<string, unknown>> {
+export async function fetchPredictionStats(): Promise<PredictionStats> {
   return fetchJSON('/predictions/stats');
 }
 
@@ -307,7 +315,7 @@ export async function fetchArbitrageHistory(opts?: {
   status?: string;
   min_spread?: number;
   limit?: number;
-}): Promise<{ opportunities: unknown[]; count: number }> {
+}): Promise<{ opportunities: ArbitrageOpportunity[]; count: number }> {
   const sp = new URLSearchParams();
   if (opts?.status) sp.set('status', opts.status);
   if (opts?.min_spread) sp.set('min_spread', String(opts.min_spread));
@@ -660,7 +668,7 @@ export async function runPortfolioBacktest(body: {
   period?: string;
   initial_capital?: number;
   max_positions?: number;
-}): Promise<Record<string, unknown>> {
+}): Promise<PortfolioBacktestResult> {
   const res = await fetch(`${TRADING_BASE}/backtest/portfolio`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -675,7 +683,7 @@ export async function runDSLBacktest(body: {
   ticker?: string;
   period?: string;
   initial_capital?: number;
-}): Promise<Record<string, unknown>> {
+}): Promise<DslBacktestResult> {
   const res = await fetch(`${TRADING_BASE}/backtest/dsl`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

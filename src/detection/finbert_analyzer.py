@@ -75,8 +75,13 @@ class FinBERTAnalyzer:
             self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
+            self.label_map = self._label_map_from_config(self.model, self.label_map)
             elapsed = time.perf_counter() - load_start
-            logger.info("FinBERT loaded on %s in %.2fs", self.device, elapsed)
+            logger.info(
+                "FinBERT loaded on %s in %.2fs (label order: %s)",
+                self.device, elapsed,
+                [self.label_map[i] for i in sorted(self.label_map)],
+            )
         except Exception as exc:
             self.fallback = True
             self._fallback_analyzer = _make_finance_vader()
@@ -89,10 +94,35 @@ class FinBERTAnalyzer:
         if self.fallback:
             logger.warning("Using VADER fallback — FinBERT unavailable")
 
+    @staticmethod
+    def _label_map_from_config(model: Any, default: dict[int, str]) -> dict[int, str]:
+        """Read the class-index -> label order from the model's own config.
+
+        Different sentiment checkpoints order their heads differently
+        (ProsusAI/finbert is positive/negative/neutral; finbert-tone is
+        neutral/positive/negative). Hardcoding an order silently mis-maps
+        every score when FINBERT_MODEL is changed, so trust the config
+        whenever it names exactly our three classes.
+        """
+        try:
+            id2label = {int(k): str(v).lower() for k, v in model.config.id2label.items()}
+        except (AttributeError, TypeError, ValueError):
+            return default
+        if sorted(id2label) == [0, 1, 2] and set(id2label.values()) == {
+            "positive", "negative", "neutral"
+        }:
+            return id2label
+        logger.warning(
+            "Model config id2label %s does not name positive/negative/neutral — "
+            "keeping default label order", getattr(model.config, "id2label", None),
+        )
+        return default
+
     def _result_from_probs(self, probs: list[float]) -> dict[str, Any]:
-        positive = float(probs[0])
-        negative = float(probs[1])
-        neutral = float(probs[2])
+        by_label = {self.label_map[i]: float(probs[i]) for i in range(3)}
+        positive = by_label["positive"]
+        negative = by_label["negative"]
+        neutral = by_label["neutral"]
         confidence = max(positive, negative, neutral)
         best_idx = max(range(3), key=lambda i: probs[i])
 
@@ -138,7 +168,13 @@ class FinBERTAnalyzer:
     def analyze(self, text: str) -> dict[str, Any]:
         """Analyze one text and return probabilities + compatibility fields."""
         if not text:
-            return self._result_from_probs([0.0, 0.0, 1.0])
+            # All-neutral vector, built through the label map so a permuted
+            # checkpoint order can't turn empty text into a negative score.
+            probs = [0.0, 0.0, 0.0]
+            for idx, label in self.label_map.items():
+                if label == "neutral":
+                    probs[idx] = 1.0
+            return self._result_from_probs(probs)
 
         if self.fallback:
             self._warn_fallback()

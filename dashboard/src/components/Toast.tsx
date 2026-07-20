@@ -1,6 +1,6 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react'
 
-export type ToastType = 'signal' | 'event' | 'error' | 'info' | 'trade'
+export type ToastType = 'signal' | 'event' | 'error' | 'info' | 'trade' | 'success'
 
 export interface ToastMessage {
   id: string
@@ -27,7 +27,8 @@ const TOAST_META: Record<
   event: { icon: '◉', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
   error: { icon: '⨯', border: 'border-l-accent-red', iconClass: 'text-accent-red' },
   info: { icon: 'i', border: 'border-l-accent-amber', iconClass: 'text-accent-amber' },
-  trade: { icon: '📊', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
+  trade: { icon: '⇄', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
+  success: { icon: '✓', border: 'border-l-accent-green', iconClass: 'text-accent-green' },
 }
 
 export function ToastProvider({ children }: ProviderProps) {

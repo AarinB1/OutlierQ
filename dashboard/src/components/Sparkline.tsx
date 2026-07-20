@@ -37,18 +37,18 @@ export default function Sparkline({
   height = 32,
   color = '#00d68f',
 }: SparklineProps) {
-  // Guard: need at least 2 points to draw a line
-  if (!data || data.length < 2) return null
-
   const svgWidth = 100
 
-  const { points, line, area, id, length } = useMemo(() => {
+  // Hooks must run unconditionally — the too-few-points guard comes after.
+  const { line, area, id, length } = useMemo(() => {
+    if (!data || data.length < 2) {
+      return { line: '', area: '', id: '', length: 0 }
+    }
     const pts = normalizePoints(data, svgWidth, height)
     const linePath = pts.map((p, idx) => `${idx === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
     const areaPath = `${linePath} L ${svgWidth},${height} L 0,${height} Z`
     const gradientId = `sparkline-${Math.random().toString(36).slice(2, 8)}`
     return {
-      points: pts,
       line: linePath,
       area: areaPath,
       id: gradientId,
@@ -56,7 +56,8 @@ export default function Sparkline({
     }
   }, [data, height])
 
-  if (points.length < 2) return null
+  // Need at least 2 points to draw a line
+  if (!line) return null
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${svgWidth} ${height}`} preserveAspectRatio="none">

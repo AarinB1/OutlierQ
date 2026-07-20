@@ -176,7 +176,6 @@ class DiscoveryOrchestrator:
             return []
 
         def _run(s: Session) -> list[Any]:
-            news_fetcher = NewsFetcher()
             discovery_rows: list[Any] = []
             for d in discoveries:
                 method = discovery_by_ticker[d["ticker"].upper()]
@@ -194,7 +193,11 @@ class DiscoveryOrchestrator:
                 discovery_rows.append(row)
             s.flush()
 
+            # News ingestion is best-effort: a missing API key or a fetch
+            # failure must not abort the pipeline, which can still detect
+            # from already-stored articles, options flow, and EDGAR.
             try:
+                news_fetcher = NewsFetcher()
                 articles = news_fetcher.fetch_batch(all_tickers)
                 news_fetcher.store_articles(articles)
             except Exception as e:
