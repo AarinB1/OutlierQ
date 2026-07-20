@@ -55,9 +55,6 @@
 
   body {
     @apply bg-surface-primary text-txt-primary font-sans antialiased;
-    /* Faint dot grid over the near-black canvas. */
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-    background-size: 28px 28px;
   }
 
   #root {
@@ -74,7 +71,7 @@
   input:focus,
   select:focus,
   textarea:focus {
-    @apply outline-none border-white/40;
+    @apply outline-none border-accent-blue/60;
   }
   input::placeholder,
   textarea::placeholder {
@@ -86,13 +83,13 @@
     @apply opacity-50 cursor-not-allowed;
   }
   select option {
-    background-color: #0e0e0e;
-    color: #f5f5f5;
+    background-color: #12121a;
+    color: #e8e8ed;
   }
   input[type='checkbox'],
   input[type='radio'],
   input[type='range'] {
-    accent-color: #f5f5f5;
+    accent-color: #448aff;
   }
 
   /* Scrollbar */
@@ -100,7 +97,7 @@
     width: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #070707;
+    background: #0a0a0f;
   }
   ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.08);
@@ -127,11 +124,11 @@
   }
 
   .btn-primary {
-    @apply px-5 py-2.5 rounded-md bg-white text-black font-mono font-bold text-sm tracking-wide uppercase;
+    @apply px-5 py-2.5 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm tracking-wide;
     transition: box-shadow 150ms ease, transform 150ms ease;
   }
   .btn-primary:hover {
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 20px rgba(68, 138, 255, 0.3);
     transform: translateY(-1px);
   }
   .btn-primary:active {
@@ -144,7 +141,7 @@
   }
 
   .skeleton {
-    background: linear-gradient(90deg, #0e0e0e 25%, #181818 50%, #0e0e0e 75%);
+    background: linear-gradient(90deg, #12121a 25%, #1a1a28 50%, #12121a 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
     border-radius: 6px;
@@ -164,7 +161,7 @@
   }
 
   .label {
-    @apply text-txt-secondary text-[11px] font-mono font-medium uppercase tracking-[0.15em];
+    @apply text-txt-secondary text-xs font-sans font-medium uppercase tracking-wider;
   }
 
   /* Count-up animation helper */

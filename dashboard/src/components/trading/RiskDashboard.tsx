@@ -27,7 +27,7 @@ const regimeBorderClass = (regime: string | undefined) => {
     case 'bear_trend':
       return 'border-l-4 border-l-accent-red'
     case 'high_vol':
-      return 'border-l-4 border-l-[#6f6f6f]'
+      return 'border-l-4 border-l-[#a855f7]'
     case 'sideways':
     default:
       return 'border-l-4 border-l-accent-amber'
@@ -41,14 +41,14 @@ const regimeColor = (regime: string) => {
     case 'bear_trend':
       return 'bg-accent-red'
     case 'high_vol':
-      return 'bg-[#6f6f6f]'
+      return 'bg-[#a855f7]'
     case 'sideways':
     default:
       return 'bg-accent-amber'
   }
 }
 
-const palette = ['#ffffff', '#c4c4c4', '#9c9c9c', '#6f6f6f', '#4a4a4a']
+const palette = ['#448aff', '#00d68f', '#ffab00', '#ff3d5a', '#a855f7']
 
 function formatSectorName(key: string): string {
   return key

@@ -220,8 +220,8 @@ export default function PortfolioView() {
               <AreaChart data={historyChartData}>
                 <defs>
                   <linearGradient id="equityTimelineFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#e0e0e0" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#e0e0e0" stopOpacity={0.08} />
+                    <stop offset="0%" stopColor="#448aff" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#448aff" stopOpacity={0.08} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" />
@@ -242,7 +242,7 @@ export default function PortfolioView() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0e0e0e',
+                    backgroundColor: '#12121a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -266,7 +266,7 @@ export default function PortfolioView() {
                 <Area
                   type="monotone"
                   dataKey="total_value"
-                  stroke="#e0e0e0"
+                  stroke="#448aff"
                   fill="url(#equityTimelineFill)"
                   strokeWidth={2}
                   dot={false}

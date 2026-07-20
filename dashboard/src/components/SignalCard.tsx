@@ -9,9 +9,9 @@ interface Props {
 }
 
 function confidenceGradient(c: number): string {
-  if (c >= 0.7) return 'linear-gradient(90deg, #ffffff, #ffffff)'
-  if (c >= 0.4) return 'linear-gradient(90deg, #c4c4c4, #ffffff)'
-  return 'linear-gradient(90deg, #8a8a8a, #c4c4c4)'
+  if (c >= 0.7) return 'linear-gradient(90deg, #00d68f, #00d68f)'
+  if (c >= 0.4) return 'linear-gradient(90deg, #ffab00, #00d68f)'
+  return 'linear-gradient(90deg, #ff3d5a, #ffab00)'
 }
 
 export default function SignalCard({ signal, onTickerClick }: Props) {
@@ -31,8 +31,8 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
   const confidencePct = Math.round(signal.confidence * 100)
   const confidenceFill = useMemo(() => confidenceGradient(signal.confidence), [signal.confidence])
   const cardShadow = isCall
-    ? '0 4px 20px rgba(255, 255, 255, 0.08)'
-    : '0 4px 20px rgba(138, 138, 138, 0.10)'
+    ? '0 4px 20px rgba(0, 214, 143, 0.08)'
+    : '0 4px 20px rgba(255, 61, 90, 0.08)'
 
   useEffect(() => {
     let mounted = true
@@ -82,14 +82,14 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
       tabIndex={0}
       aria-expanded={expanded}
       style={{
-        boxShadow: signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(255, 255, 255, 0.3)' : undefined,
+        boxShadow: signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(0, 214, 143, 0.3)' : undefined,
       }}
       onMouseEnter={(event) => {
         ;(event.currentTarget as HTMLDivElement).style.boxShadow = cardShadow
       }}
       onMouseLeave={(event) => {
         ;(event.currentTarget as HTMLDivElement).style.boxShadow =
-          signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(255, 255, 255, 0.3)' : ''
+          signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(0, 214, 143, 0.3)' : ''
       }}
     >
       {/* Top row: ticker + direction */}
@@ -126,7 +126,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
       ) : (
         sparklineData && sparklineData.length > 1 ? (
           <div className="mb-4">
-            <Sparkline data={sparklineData} color={isCall ? '#ffffff' : '#8a8a8a'} />
+            <Sparkline data={sparklineData} color={isCall ? '#00d68f' : '#ff3d5a'} />
           </div>
         ) : null
       )}
@@ -159,7 +159,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             style={{
               width: `${signal.confidence * 100}%`,
               background: confidenceFill,
-              boxShadow: signal.confidence >= 0.7 ? '0 0 8px rgba(255, 255, 255, 0.4)' : undefined,
+              boxShadow: signal.confidence >= 0.7 ? '0 0 8px rgba(0, 214, 143, 0.4)' : undefined,
             }}
           />
           <div
@@ -216,7 +216,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
           </span>
         )}
         {signal.simulation_enhanced && (
-          <span className="inline-block px-2 py-0.5 rounded bg-white/10 text-txt-secondary border border-border text-[10px] font-sans font-medium uppercase tracking-wider" title="Verified by MiroFish simulation">
+          <span className="inline-block px-2 py-0.5 rounded bg-violet-500/20 text-violet-400 text-[10px] font-sans font-medium uppercase tracking-wider" title="Verified by MiroFish simulation">
             MiroFish
           </span>
         )}

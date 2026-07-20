@@ -121,7 +121,7 @@ export default function PerformanceAttributionPage() {
               <Tooltip />
               <Bar dataKey="total_pnl">
                 {byStrategy.map((row) => (
-                  <Cell key={row.strategy} fill={row.total_pnl >= 0 ? '#ffffff' : '#8a8a8a'} />
+                  <Cell key={row.strategy} fill={row.total_pnl >= 0 ? '#00d68f' : '#ff3d5a'} />
                 ))}
               </Bar>
             </BarChart>
@@ -183,7 +183,7 @@ export default function PerformanceAttributionPage() {
             <PieChart>
               <Pie data={byExit} dataKey="total" nameKey="reason" outerRadius={100} label>
                 {byExit.map((entry, idx) => (
-                  <Cell key={entry.reason} fill={['#ffffff', '#c4c4c4', '#9c9c9c', '#6f6f6f', '#4a4a4a'][idx % 5]} />
+                  <Cell key={entry.reason} fill={['#448aff', '#00d68f', '#ffab00', '#ff3d5a', '#a855f7'][idx % 5]} />
                 ))}
               </Pie>
               <Tooltip />
@@ -202,8 +202,8 @@ export default function PerformanceAttributionPage() {
               <XAxis dataKey="trade_index" stroke="#666" />
               <YAxis stroke="#666" domain={[0, 100]} />
               <Tooltip />
-              <ReferenceLine y={50} stroke="#c4c4c4" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="accuracy" stroke="#ffffff" strokeWidth={2} dot={false} />
+              <ReferenceLine y={50} stroke="#ffab00" strokeDasharray="4 4" />
+              <Line type="monotone" dataKey="accuracy" stroke="#00d68f" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>

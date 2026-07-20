@@ -132,12 +132,12 @@ export default function BacktestPanel() {
 
   const monthlyCellColor = (ret: number | null | undefined): string => {
     if (ret == null || Number.isNaN(ret)) return 'rgba(120,120,130,0.4)'
-    if (ret > 5) return 'rgba(255,255,255,1)'
-    if (ret > 2) return 'rgba(255,255,255,0.6)'
-    if (ret > 0) return 'rgba(255,255,255,0.3)'
-    if (ret > -2) return 'rgba(138,138,138,0.35)'
-    if (ret > -5) return 'rgba(138,138,138,0.65)'
-    return 'rgba(138,138,138,1)'
+    if (ret > 5) return 'rgba(0,214,143,1)'
+    if (ret > 2) return 'rgba(0,214,143,0.6)'
+    if (ret > 0) return 'rgba(0,214,143,0.3)'
+    if (ret > -2) return 'rgba(255,61,90,0.3)'
+    if (ret > -5) return 'rgba(255,61,90,0.6)'
+    return 'rgba(255,61,90,1)'
   }
 
   const renderEmptyState = () => (
@@ -289,8 +289,8 @@ export default function BacktestPanel() {
               <AreaChart data={equityData}>
                 <defs>
                   <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ffffff" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#ffffff" stopOpacity={0.05} />
+                    <stop offset="0%" stopColor="#00d68f" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#00d68f" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -308,7 +308,7 @@ export default function BacktestPanel() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0e0e0e',
+                    backgroundColor: '#12121a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -327,7 +327,7 @@ export default function BacktestPanel() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#ffffff"
+                  stroke="#00d68f"
                   fill="url(#equityFill)"
                   strokeWidth={2}
                   dot={false}
@@ -347,8 +347,8 @@ export default function BacktestPanel() {
               <AreaChart data={drawdownData}>
                 <defs>
                   <linearGradient id="ddFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8a8a8a" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#8a8a8a" stopOpacity={0.1} />
+                    <stop offset="0%" stopColor="#ff3d5a" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#ff3d5a" stopOpacity={0.1} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -366,7 +366,7 @@ export default function BacktestPanel() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0e0e0e',
+                    backgroundColor: '#12121a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -385,7 +385,7 @@ export default function BacktestPanel() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#8a8a8a"
+                  stroke="#ff3d5a"
                   fill="url(#ddFill)"
                   strokeWidth={2}
                   dot={false}

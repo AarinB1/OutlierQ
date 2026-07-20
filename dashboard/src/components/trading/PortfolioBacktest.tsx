@@ -166,9 +166,9 @@ export default function PortfolioBacktest() {
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
                     formatter={(v) => [formatCurrency(Number(v)), 'Portfolio']}
-                    contentStyle={{ background: '#0e0e0e', border: '1px solid rgba(255,255,255,0.12)' }}
+                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
-                  <Area type="monotone" dataKey="portfolio" stroke="#e0e0e0" fill="rgba(255,255,255,0.10)" />
+                  <Area type="monotone" dataKey="portfolio" stroke="#448aff" fill="rgba(68,138,255,0.13)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

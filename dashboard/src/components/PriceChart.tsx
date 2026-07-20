@@ -63,7 +63,7 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
   const first = prices[0].close
   const last = prices[prices.length - 1].close
   const isUp = last >= first
-  const strokeColor = isUp ? '#ffffff' : '#8a8a8a'
+  const strokeColor = isUp ? '#00d68f' : '#ff3d5a'
 
   // Map signal/event dates to closest price points for overlay dots
   const signalDots = signals
@@ -119,14 +119,14 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
           <XAxis
             dataKey="date"
             tickFormatter={d => formatDate(d, period)}
-            tick={{ fontSize: 10, fill: '#6f6f6f' }}
+            tick={{ fontSize: 10, fill: '#6b7280' }}
             axisLine={false}
             tickLine={false}
             minTickGap={40}
           />
           <YAxis
             domain={[minPrice, maxPrice]}
-            tick={{ fontSize: 10, fill: '#6f6f6f' }}
+            tick={{ fontSize: 10, fill: '#6b7280' }}
             axisLine={false}
             tickLine={false}
             tickFormatter={v => `$${v.toFixed(0)}`}
@@ -148,8 +148,8 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
               x={dot.date}
               y={dot.close}
               r={5}
-              fill={dot.signal.direction === 'call' ? '#ffffff' : '#8a8a8a'}
-              stroke="#070707"
+              fill={dot.signal.direction === 'call' ? '#00d68f' : '#ff3d5a'}
+              stroke="#0a0a0f"
               strokeWidth={2}
             />
           ))}
@@ -160,8 +160,8 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
               x={dot.date}
               y={dot.close}
               r={4}
-              fill="#e0e0e0"
-              stroke="#070707"
+              fill="#448aff"
+              stroke="#0a0a0f"
               strokeWidth={2}
             />
           ))}

@@ -157,7 +157,7 @@ export default function TradeReplay() {
                 &lt;
               </button>
               <button
-                className={`px-4 py-1 rounded text-sm font-semibold ${playing ? 'bg-accent-red text-black' : 'bg-accent-green text-black'}`}
+                className={`px-4 py-1 rounded text-sm font-semibold ${playing ? 'bg-accent-red text-white' : 'bg-accent-green text-white'}`}
                 onClick={() => setPlaying(p => !p)}
               >
                 {playing ? 'Pause' : 'Play'}

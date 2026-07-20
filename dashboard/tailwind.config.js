@@ -7,34 +7,29 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Strict monochrome scheme. Semantic accent names are kept so
-        // components don't churn: green=white (up/primary), red=mid gray
-        // (down/danger), amber/yellow=light gray (warn), blue=off-white
-        // (interactive). Direction is carried by glyphs (▲▼ ±), not hue.
         surface: {
-          primary: '#070707',
-          secondary: '#0e0e0e',
-          tertiary: '#181818',
+          primary: '#0a0a0f',
+          secondary: '#12121a',
+          tertiary: '#1a1a28',
         },
         border: {
-          DEFAULT: 'rgba(255, 255, 255, 0.08)',
-          hover: 'rgba(255, 255, 255, 0.18)',
+          DEFAULT: 'rgba(255, 255, 255, 0.06)',
+          hover: 'rgba(255, 255, 255, 0.12)',
         },
         txt: {
-          primary: '#f5f5f5',
-          secondary: '#9c9c9c',
-          tertiary: '#5f5f5f',
+          primary: '#e8e8ed',
+          secondary: '#8888a0',
+          tertiary: '#55556a',
         },
         accent: {
-          green: '#ffffff',
-          'green-muted': 'rgba(255, 255, 255, 0.10)',
-          red: '#8a8a8a',
-          'red-muted': 'rgba(255, 255, 255, 0.05)',
-          amber: '#c4c4c4',
-          'amber-muted': 'rgba(255, 255, 255, 0.08)',
-          blue: '#e0e0e0',
-          'blue-muted': 'rgba(255, 255, 255, 0.08)',
-          yellow: '#c4c4c4',
+          green: '#00d68f',
+          'green-muted': 'rgba(0, 214, 143, 0.12)',
+          red: '#ff3d5a',
+          'red-muted': 'rgba(255, 61, 90, 0.12)',
+          amber: '#ffab00',
+          'amber-muted': 'rgba(255, 171, 0, 0.12)',
+          blue: '#448aff',
+          'blue-muted': 'rgba(68, 138, 255, 0.12)',
         },
       },
       fontFamily: {
@@ -42,7 +37,7 @@ export default {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        card: '8px',
+        card: '12px',
       },
       maxWidth: {
         content: '1400px',
@@ -58,8 +53,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseBorder: {
-          '0%, 100%': { borderLeftColor: 'rgba(255, 255, 255, 0.3)' },
-          '50%': { borderLeftColor: 'rgba(255, 255, 255, 0.8)' },
+          '0%, 100%': { borderLeftColor: 'rgba(0, 214, 143, 0.3)' },
+          '50%': { borderLeftColor: 'rgba(0, 214, 143, 0.8)' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
