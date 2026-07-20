@@ -21,8 +21,8 @@ function pct(v: number): string {
 
 function platformBadge(p: string): string {
   return p === 'polymarket'
-    ? 'bg-[#6366f1]/15 text-[#818cf8]'
-    : 'bg-[#f59e0b]/15 text-[#f59e0b]'
+    ? 'bg-[#e0e0e0]/15 text-[#d4d4d4]'
+    : 'bg-[#c4c4c4]/15 text-[#c4c4c4]'
 }
 
 function outcomePill(outcome: string): string {
@@ -122,7 +122,7 @@ export default function PredictionMarkets() {
           <button
             onClick={handleScan}
             disabled={scanning}
-            className="px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent-blue text-black text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
           >
             {scanning ? 'Scanning...' : 'Scan Markets'}
           </button>
@@ -144,7 +144,7 @@ export default function PredictionMarkets() {
                 .finally(() => setArbScanning(false))
             }}
             disabled={arbScanning}
-            className="px-4 py-2 rounded-lg bg-accent-amber text-white text-sm font-medium hover:bg-accent-amber/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent-amber text-black text-sm font-medium hover:bg-accent-amber/90 disabled:opacity-50 transition-colors"
           >
             {arbScanning ? 'Scanning...' : 'Scan Arbitrage'}
           </button>
@@ -267,7 +267,7 @@ export default function PredictionMarkets() {
                         <span className="text-[10px] font-mono text-accent-blue">{p.matched_tickers}</span>
                       )}
                       {p.simulation_enhanced && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/10 text-txt-secondary">
                           MiroFish
                         </span>
                       )}

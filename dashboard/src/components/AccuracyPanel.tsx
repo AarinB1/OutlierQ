@@ -261,14 +261,14 @@ export default function AccuracyPanel() {
             <AreaChart data={cumulativePnl} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="cumPnlGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={cumulativePositive ? '#00d68f' : '#ff3d5a'} stopOpacity={0.12} />
-                  <stop offset="100%" stopColor={cumulativePositive ? '#00d68f' : '#ff3d5a'} stopOpacity={0} />
+                  <stop offset="0%" stopColor={cumulativePositive ? '#ffffff' : '#8a8a8a'} stopOpacity={0.12} />
+                  <stop offset="100%" stopColor={cumulativePositive ? '#ffffff' : '#8a8a8a'} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8888a0' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#8888a0' }} axisLine={false} tickLine={false} width={50} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9c9c9c' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9c9c9c' }} axisLine={false} tickLine={false} width={50} />
               <Tooltip
-                contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: '#e8e8ed' }}
+                contentStyle={{ background: '#0e0e0e', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: '#f5f5f5' }}
                 formatter={(value) => {
                   const numeric = Number(value ?? 0)
                   return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(2)}%`
@@ -277,7 +277,7 @@ export default function AccuracyPanel() {
               <Area
                 type="monotone"
                 dataKey="cumulative"
-                stroke={cumulativePositive ? '#00d68f' : '#ff3d5a'}
+                stroke={cumulativePositive ? '#ffffff' : '#8a8a8a'}
                 strokeWidth={1.5}
                 fill="url(#cumPnlGrad)"
                 animationDuration={700}

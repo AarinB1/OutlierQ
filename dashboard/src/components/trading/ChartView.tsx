@@ -59,7 +59,7 @@ export default function ChartView() {
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 520,
-      layout: { background: { color: '#12121a' }, textColor: '#c9c9d4' },
+      layout: { background: { color: '#0e0e0e' }, textColor: '#9c9c9c' },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
@@ -71,12 +71,12 @@ export default function ChartView() {
 
     if (chartMode === 'candlestick') {
       const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#00d68f',
-        downColor: '#ff3d5a',
-        borderUpColor: '#00d68f',
-        borderDownColor: '#ff3d5a',
-        wickUpColor: '#00d68f',
-        wickDownColor: '#ff3d5a',
+        upColor: '#ffffff',
+        downColor: '#8a8a8a',
+        borderUpColor: '#ffffff',
+        borderDownColor: '#8a8a8a',
+        wickUpColor: '#ffffff',
+        wickDownColor: '#8a8a8a',
       })
       candleSeries.setData(
         data.ohlcv.map(d => ({
@@ -105,7 +105,7 @@ export default function ChartView() {
         }
       }
     } else {
-      const lineSeries = chart.addSeries(LineSeries, { color: '#448aff', lineWidth: 2 })
+      const lineSeries = chart.addSeries(LineSeries, { color: '#e0e0e0', lineWidth: 2 })
       lineSeries.setData(
         data.ohlcv.map(d => ({
           time: d.time as never,
@@ -126,7 +126,7 @@ export default function ChartView() {
       data.ohlcv.map(d => ({
         time: d.time as never,
         value: d.volume,
-        color: d.close >= d.open ? 'rgba(0,214,143,0.3)' : 'rgba(255,61,90,0.3)',
+        color: d.close >= d.open ? 'rgba(255,255,255,0.3)' : 'rgba(138,138,138,0.35)',
       }))
     )
 

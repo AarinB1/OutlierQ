@@ -35,7 +35,7 @@ export default function Sparkline({
   data,
   width = '100%',
   height = 32,
-  color = '#00d68f',
+  color = '#ffffff',
 }: SparklineProps) {
   const svgWidth = 100
 

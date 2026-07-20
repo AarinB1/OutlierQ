@@ -146,19 +146,22 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               TRD
             </button>
           </div>
-          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map(n => (
+          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map((n, i) => (
             <button
               key={n.key}
               onClick={() => setPage(n.key)}
-              className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+              className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-sans font-medium uppercase tracking-[0.08em] transition-all duration-150
                 max-lg:justify-center max-lg:px-0 max-md:px-3
                 ${page === n.key
-                  ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
+                  ? 'bg-surface-tertiary text-txt-primary border-l-2 border-white max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                   : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                 }`}
             >
-              <span className="text-sm w-5 text-center">{n.icon}</span>
+              <span className="text-sm w-5 text-center normal-case">{n.icon}</span>
               <span className="max-lg:hidden">{n.label}</span>
+              <span className={`ml-auto font-mono text-[10px] tracking-widest max-lg:hidden max-md:hidden ${page === n.key ? 'text-txt-secondary' : 'text-txt-tertiary'}`}>
+                {String(i + 1).padStart(2, '0')}
+              </span>
             </button>
           ))}
           {section === 'trading' && (
@@ -167,14 +170,14 @@ export default function Layout({ section, setSection, page, setPage, connected, 
                 <button
                   key={n.key}
                   onClick={() => setPage(n.key)}
-                  className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+                  className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-md text-xs font-sans font-medium uppercase tracking-[0.08em] transition-all duration-150
                     max-lg:justify-center max-lg:px-0 max-md:px-3
                     ${page === n.key
-                      ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
+                      ? 'bg-surface-tertiary text-txt-primary border-l-2 border-white max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                       : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                     }`}
                 >
-                  <span className="text-sm w-5 text-center">{n.icon}</span>
+                  <span className="text-sm w-5 text-center normal-case">{n.icon}</span>
                   <span className="max-lg:hidden">{n.label}</span>
                 </button>
               ))}
@@ -215,7 +218,8 @@ export default function Layout({ section, setSection, page, setPage, connected, 
       </aside>
 
       {/* Main content */}
-      <main className="main-scroll-area flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary">
+      {/* Transparent bg lets the body's dot-grid canvas show through */}
+      <main className="main-scroll-area flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto">
         <div className="max-w-content mx-auto p-8 max-md:p-4">
           {!connected ? (
             <div className="flex items-center justify-center h-[calc(100vh-8rem)]">

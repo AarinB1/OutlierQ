@@ -156,9 +156,9 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
               : articleCount > 0
                 ? ['Articles detected']
                 : []
-            let sentimentGradient = 'linear-gradient(90deg, #ff3d5a, #ffab00)'
-            if (ev.confidence >= 0.7) sentimentGradient = 'linear-gradient(90deg, #00d68f, #00d68f)'
-            else if (ev.confidence >= 0.4) sentimentGradient = 'linear-gradient(90deg, #ffab00, #00d68f)'
+            let sentimentGradient = 'linear-gradient(90deg, #8a8a8a, #c4c4c4)'
+            if (ev.confidence >= 0.7) sentimentGradient = 'linear-gradient(90deg, #ffffff, #ffffff)'
+            else if (ev.confidence >= 0.4) sentimentGradient = 'linear-gradient(90deg, #c4c4c4, #ffffff)'
 
             return (
               <div

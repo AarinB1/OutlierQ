@@ -451,7 +451,7 @@ function TickerMiniCard({
 
       <div className="mb-3 h-8">
         {sparkline ? (
-          <Sparkline data={sparkline} color={change != null && change < 0 ? '#ff3d5a' : '#00d68f'} />
+          <Sparkline data={sparkline} color={change != null && change < 0 ? '#8a8a8a' : '#ffffff'} />
         ) : (
           <div className="skeleton h-8 w-full rounded" />
         )}

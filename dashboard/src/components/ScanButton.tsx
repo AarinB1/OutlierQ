@@ -36,8 +36,8 @@ export default function ScanButton() {
         disabled={scanning || !input.trim()}
         className={`scan-button w-full py-2 rounded-lg font-mono font-bold text-xs tracking-wider transition-all duration-150 ${
           scanning
-            ? 'bg-accent-blue/50 text-white animate-pulse'
-            : 'bg-accent-blue text-white hover:shadow-[0_0_16px_rgba(68,138,255,0.3)]'
+            ? 'bg-white/60 text-black animate-pulse'
+            : 'bg-white text-black hover:shadow-[0_0_16px_rgba(255,255,255,0.25)]'
         } disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}
       >
         {scanning ? 'SCANNING...' : <><span className="scan-icon">⚡</span> SCAN NOW</>}

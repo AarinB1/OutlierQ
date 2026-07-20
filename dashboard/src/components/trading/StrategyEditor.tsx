@@ -149,13 +149,13 @@ export default function StrategyEditor() {
                   />
                   <Tooltip
                     formatter={(v) => [formatCurrency(Number(v)), 'Equity']}
-                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
+                    contentStyle={{ background: '#0e0e0e', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#448aff"
-                    fill="rgba(68,138,255,0.13)"
+                    stroke="#e0e0e0"
+                    fill="rgba(255,255,255,0.10)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
