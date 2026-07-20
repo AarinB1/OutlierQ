@@ -225,7 +225,7 @@ export default function PortfolioBacktest() {
                       {corrTickers.map(t2 => {
                         const val = result.correlation_matrix[t1]?.[t2] ?? 0
                         const abs = Math.abs(val)
-                        const bg = abs > 0.7 ? 'bg-accent-green/20' : abs > 0.4 ? 'bg-accent-yellow/20' : 'bg-accent-red/20'
+                        const bg = abs > 0.7 ? 'bg-accent-red/20' : abs > 0.4 ? 'bg-accent-yellow/20' : 'bg-accent-green/20'
                         return (
                           <td key={t2} className={`py-1 px-2 text-center ${bg} rounded`}>
                             {val.toFixed(2)}
