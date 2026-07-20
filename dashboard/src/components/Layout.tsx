@@ -46,6 +46,70 @@ const TRADING_FOOTER_NAV: { key: TradingPage; icon: string; label: string }[] = 
   { key: 'settings', icon: '\u2699', label: 'Settings' },
 ]
 
+const ET_TIME = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hourCycle: 'h23',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+const ET_WEEKDAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+
+/* Regular-session approximation (ignores exchange holidays) */
+function isMarketOpen(now: Date): boolean {
+  const day = ET_WEEKDAY.format(now)
+  if (day === 'Sat' || day === 'Sun') return false
+  const [h, m] = ET_TIME.format(now).split(':').map(Number)
+  const mins = h * 60 + m
+  return mins >= 570 && mins < 960 // 09:30–16:00 ET
+}
+
+function MarketClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const open = isMarketOpen(now)
+  return (
+    <>
+      <span className="flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-accent-green' : 'bg-txt-tertiary'}`} />
+        <span className={open ? 'text-accent-green' : 'text-txt-tertiary'}>{open ? 'NYSE OPEN' : 'NYSE CLOSED'}</span>
+      </span>
+      <span className="tabular-nums tracking-wider text-txt-secondary">{ET_TIME.format(now)} ET</span>
+    </>
+  )
+}
+
+function Topbar({ section, page, connected }: { section: Section; page: Page; connected: boolean }) {
+  const navItems: { key: Page; label: string }[] =
+    section === 'options' ? OPTIONS_NAV : [...TRADING_NAV, ...TRADING_FOOTER_NAV]
+  const idx = navItems.findIndex(n => n.key === page)
+  const label = idx >= 0 ? navItems[idx].label : page
+  return (
+    <header className="sticky top-0 z-40 h-11 shrink-0 flex items-center gap-3 px-8 max-md:px-4 border-b border-border bg-surface-primary/60 backdrop-blur-md">
+      <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-txt-tertiary">
+        {section} <span className="mx-1 text-txt-tertiary/60">/</span>
+        <span className="text-txt-primary">{label}</span>
+      </span>
+      {idx >= 0 && idx < TRADING_NAV.length && (
+        <span className="font-mono text-[10px] leading-none text-accent-blue border border-accent-blue/30 rounded px-1.5 py-1">
+          {String(idx + 1).padStart(2, '0')}
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-4 font-mono text-[11px] max-md:hidden">
+        <MarketClock />
+        <span className="flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
+          <span className="text-txt-secondary">{connected ? 'FEED LIVE' : 'FEED DOWN'}</span>
+        </span>
+        <span className="text-txt-tertiary max-lg:hidden" title="Keyboard shortcuts">[?] KEYS</span>
+      </div>
+    </header>
+  )
+}
+
 function LayoutStatus() {
   const [status, setStatus] = useState<AutopilotStatus | null>(null)
   useEffect(() => {
@@ -90,9 +154,14 @@ export default function Layout({ section, setSection, page, setPage, connected, 
             <span className={`absolute -right-1 -top-1 w-2 h-2 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
             <span className={`absolute -right-1 -top-1 w-2 h-2 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'} ${connected ? 'animate-ping' : ''}`} style={{ animationDuration: '2s' }} />
           </div>
-          <h1 className="font-mono font-bold text-xl tracking-tight max-lg:hidden">
-            <span className="text-accent-blue">Outlier</span><span className="text-txt-primary">Q</span>
-          </h1>
+          <div className="max-lg:hidden">
+            <h1 className="font-mono font-bold text-xl tracking-tight leading-none">
+              <span className="text-accent-blue">Outlier</span><span className="text-txt-primary">Q</span>
+            </h1>
+            <p className="font-mono text-[8px] uppercase tracking-[0.35em] text-txt-tertiary mt-1 max-md:hidden">
+              Event Terminal
+            </p>
+          </div>
           <span className="font-mono font-bold text-xl text-accent-blue lg:hidden max-md:hidden">Q</span>
         </div>
 
@@ -146,19 +215,24 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               TRD
             </button>
           </div>
-          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map(n => (
+          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map((n, i) => (
             <button
               key={n.key}
               onClick={() => setPage(n.key)}
-              className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+              className={`group w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs font-sans font-medium uppercase tracking-[0.08em] transition-all duration-150
                 max-lg:justify-center max-lg:px-0 max-md:px-3
                 ${page === n.key
                   ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                   : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                 }`}
             >
-              <span className="text-sm w-5 text-center">{n.icon}</span>
+              <span className="text-sm w-5 text-center normal-case">{n.icon}</span>
               <span className="max-lg:hidden">{n.label}</span>
+              <span className={`ml-auto font-mono text-[10px] tracking-widest transition-colors max-lg:hidden max-md:hidden ${
+                page === n.key ? 'text-accent-blue' : 'text-txt-tertiary/60 group-hover:text-txt-tertiary'
+              }`}>
+                {String(i + 1).padStart(2, '0')}
+              </span>
             </button>
           ))}
           {section === 'trading' && (
@@ -167,14 +241,14 @@ export default function Layout({ section, setSection, page, setPage, connected, 
                 <button
                   key={n.key}
                   onClick={() => setPage(n.key)}
-                  className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-sans font-medium transition-all duration-150
+                  className={`w-full text-left flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs font-sans font-medium uppercase tracking-[0.08em] transition-all duration-150
                     max-lg:justify-center max-lg:px-0 max-md:px-3
                     ${page === n.key
                       ? 'bg-surface-tertiary text-txt-primary border-l-2 border-accent-blue max-lg:border-l-0 max-md:border-l-0 max-md:border-b-2'
                       : 'text-txt-secondary hover:text-txt-primary hover:bg-surface-tertiary/50 border-l-2 border-transparent max-lg:border-l-0 max-md:border-l-0'
                     }`}
                 >
-                  <span className="text-sm w-5 text-center">{n.icon}</span>
+                  <span className="text-sm w-5 text-center normal-case">{n.icon}</span>
                   <span className="max-lg:hidden">{n.label}</span>
                 </button>
               ))}
@@ -215,19 +289,29 @@ export default function Layout({ section, setSection, page, setPage, connected, 
       </aside>
 
       {/* Main content */}
-      <main className="main-scroll-area flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto bg-surface-tertiary">
+      <main className="main-scroll-area main-canvas flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto">
+        <Topbar section={section} page={page} connected={connected} />
         <div className="max-w-content mx-auto p-8 max-md:p-4">
           {!connected ? (
-            <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
-              <div className="text-center">
+            <div className="flex items-center justify-center h-[calc(100vh-11rem)]">
+              {/* Corner-bracketed terminal frame */}
+              <div className="relative bg-surface-secondary/70 border border-border px-12 py-10 max-md:px-6 text-center max-w-md">
+                <span className="absolute -top-px -left-px w-4 h-4 border-t-2 border-l-2 border-accent-blue/70" aria-hidden />
+                <span className="absolute -top-px -right-px w-4 h-4 border-t-2 border-r-2 border-accent-blue/70" aria-hidden />
+                <span className="absolute -bottom-px -left-px w-4 h-4 border-b-2 border-l-2 border-accent-blue/70" aria-hidden />
+                <span className="absolute -bottom-px -right-px w-4 h-4 border-b-2 border-r-2 border-accent-blue/70" aria-hidden />
+                <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-txt-tertiary mb-5">Sys / Offline</p>
                 <div className="text-txt-tertiary text-5xl mb-6">{'\u25C7'}</div>
                 <h2 className="text-lg font-sans font-semibold text-txt-primary mb-2">API Disconnected</h2>
-                <p className="text-txt-secondary text-sm max-w-sm">
+                <p className="text-txt-secondary text-sm">
                   Start the API server to connect the dashboard.
                 </p>
-                <code className="inline-block mt-4 px-4 py-2 rounded-lg bg-surface-secondary border border-border text-accent-blue font-mono text-sm">
+                <code className="inline-block mt-4 px-4 py-2 rounded-lg bg-surface-primary border border-border text-accent-blue font-mono text-sm">
                   python scripts/run_ingestion.py --api
                 </code>
+                <p className="font-mono text-xs text-accent-green mt-6 animate-pulse">
+                  {'\u258D'} awaiting connection
+                </p>
               </div>
             </div>
           ) : (
