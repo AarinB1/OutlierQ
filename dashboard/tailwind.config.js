@@ -30,6 +30,7 @@ export default {
           'amber-muted': 'rgba(255, 171, 0, 0.12)',
           blue: '#448aff',
           'blue-muted': 'rgba(68, 138, 255, 0.12)',
+          yellow: '#ffd60a',
         },
       },
       fontFamily: {

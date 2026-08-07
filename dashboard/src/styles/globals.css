@@ -106,17 +106,48 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
   }
+
+  ::selection {
+    background: rgba(68, 138, 255, 0.35);
+  }
 }
 
 @layer components {
+  /* Main canvas: dot-grid texture with a faint accent glow bleeding in
+     from the top. Sits on the scroll container, so it stays put while
+     content scrolls. */
+  .main-canvas {
+    background-color: #1a1a28;
+    background-image:
+      radial-gradient(ellipse 70% 45% at 50% -10%, rgba(68, 138, 255, 0.07), transparent 70%),
+      radial-gradient(circle, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 100% 100%, 26px 26px;
+  }
+
   .card {
-    @apply bg-surface-secondary border border-border rounded-card p-6;
+    @apply relative bg-surface-secondary border border-border rounded-card p-6;
     transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
   }
   .card:hover {
     border-color: rgba(255, 255, 255, 0.15);
     transform: translateY(-1px);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  /* Accent hairline that reveals along the card's top edge on hover */
+  .card::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 16px;
+    right: 16px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(68, 138, 255, 0.55), transparent);
+    opacity: 0;
+    transition: opacity 200ms ease;
+    pointer-events: none;
+  }
+  .card:hover::after {
+    opacity: 1;
   }
 
   .confidence-bar {
