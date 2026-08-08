@@ -5,6 +5,7 @@ import type { Section, Page, OptionsPage, TradingPage } from '../App'
 import { fetchStatus } from '../api'
 import ScanButton from './ScanButton'
 import { useTradingSettings } from '../context/TradingSettingsContext'
+import { BUILD_TIME, DEMO_MODE, NOTICE_DISMISS_KEY, REPO_URL } from '../demo/demoConfig'
 
 interface Props {
   section: Section
@@ -46,6 +47,89 @@ const TRADING_FOOTER_NAV: { key: TradingPage; icon: string; label: string }[] = 
   { key: 'settings', icon: '\u2699', label: 'Settings' },
 ]
 
+/**
+ * Static-demo navigation: one flat list of the six pages the fixtures fully
+ * back. Everything else is hidden rather than shipped as a broken shell, and
+ * the Options/Trading switcher is hidden with it \u2014 with Backtest promoted into
+ * this single list there is no second section left for it to point at.
+ */
+const DEMO_NAV: { key: Page; icon: string; label: string }[] = [
+  { key: 'signals', icon: '\u26a1', label: 'Signals' },
+  { key: 'events', icon: '\u25c9', label: 'Events' },
+  { key: 'accuracy', icon: '\u25ce', label: 'Accuracy' },
+  { key: 'tickers', icon: '\u2b21', label: 'Tickers' },
+  { key: 'predictions', icon: '\u25b2', label: 'Predictions' },
+  { key: 'backtest', icon: '\u25b6', label: 'Backtest Lab' },
+]
+
+function DemoBadge() {
+  return (
+    <span
+      className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] leading-none
+                 text-accent-amber border border-accent-amber/40 bg-accent-amber/10 rounded px-2 py-1"
+      title="Static demo running on baked synthetic fixtures \u2014 no live market data"
+    >
+      Demo data
+    </span>
+  )
+}
+
+/** Session-scoped (not localStorage) so every new session sees it once. */
+function DemoNotice() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(NOTICE_DISMISS_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  if (dismissed) return null
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(NOTICE_DISMISS_KEY, '1')
+    } catch {
+      // Private mode / storage disabled \u2014 the notice simply reappears.
+    }
+    setDismissed(true)
+  }
+  return (
+    <div className="card border border-accent-amber/30 bg-accent-amber/10 mb-6 p-4">
+      <div className="flex items-start gap-4">
+        <div className="flex-1 space-y-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent-amber">
+            Static demo \u2014 synthetic data
+          </p>
+          <p className="text-sm text-txt-secondary">
+            This page is a static build with no backend. Every signal, event, price series
+            and backtest below is <strong className="text-txt-primary">generated synthetic
+            data</strong> baked in at build time \u2014 nothing here is a real trade, a real
+            market quote, or a real prediction about any company. Tickers prefixed
+            NRVX / ALTQ / TQNX are invented companies.
+          </p>
+          <p className="text-sm text-txt-secondary">
+            The actual pipeline runs locally: FastAPI + SQLite, news from Finnhub, prices
+            from yfinance, FinBERT sentiment, and an isotonic confidence calibrator that
+            stays inert until it has enough evaluated outcomes.
+          </p>
+          <p className="text-xs font-mono text-txt-tertiary">
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-accent-blue hover:underline">
+              github.com/AarinB1/OutlierQ
+            </a>
+            <span className="mx-2">\u00b7</span>
+            fixtures built {BUILD_TIME.slice(0, 10)}
+          </p>
+        </div>
+        <button
+          onClick={dismiss}
+          className="shrink-0 text-txt-tertiary hover:text-txt-primary text-xs font-mono border border-border rounded px-2 py-1"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const ET_TIME = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York',
   hourCycle: 'h23',
@@ -73,7 +157,12 @@ function MarketClock() {
   const open = isMarketOpen(now)
   return (
     <>
-      <span className="flex items-center gap-1.5">
+      <span
+        className="flex items-center gap-1.5"
+        title={DEMO_MODE
+          ? 'Real exchange clock (your browser time). No market data is flowing in this demo.'
+          : 'Regular-session approximation; exchange holidays are not applied.'}
+      >
         <span className={`w-1.5 h-1.5 rounded-full ${open ? 'bg-accent-green' : 'bg-txt-tertiary'}`} />
         <span className={open ? 'text-accent-green' : 'text-txt-tertiary'}>{open ? 'NYSE OPEN' : 'NYSE CLOSED'}</span>
       </span>
@@ -83,14 +172,15 @@ function MarketClock() {
 }
 
 function Topbar({ section, page, connected }: { section: Section; page: Page; connected: boolean }) {
-  const navItems: { key: Page; label: string }[] =
-    section === 'options' ? OPTIONS_NAV : [...TRADING_NAV, ...TRADING_FOOTER_NAV]
+  const navItems: { key: Page; label: string }[] = DEMO_MODE
+    ? DEMO_NAV
+    : section === 'options' ? OPTIONS_NAV : [...TRADING_NAV, ...TRADING_FOOTER_NAV]
   const idx = navItems.findIndex(n => n.key === page)
   const label = idx >= 0 ? navItems[idx].label : page
   return (
     <header className="sticky top-0 z-40 h-11 shrink-0 flex items-center gap-3 px-8 max-md:px-4 border-b border-border bg-surface-primary/60 backdrop-blur-md">
       <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-txt-tertiary">
-        {section} <span className="mx-1 text-txt-tertiary/60">/</span>
+        {DEMO_MODE ? 'demo' : section} <span className="mx-1 text-txt-tertiary/60">/</span>
         <span className="text-txt-primary">{label}</span>
       </span>
       {idx >= 0 && idx < TRADING_NAV.length && (
@@ -98,11 +188,19 @@ function Topbar({ section, page, connected }: { section: Section; page: Page; co
           {String(idx + 1).padStart(2, '0')}
         </span>
       )}
-      <div className="ml-auto flex items-center gap-4 font-mono text-[11px] max-md:hidden">
+      {/* Persistent, non-dismissible, visible at every breakpoint. */}
+      {DEMO_MODE && (
+        <span className="ml-auto">
+          <DemoBadge />
+        </span>
+      )}
+      <div className={`${DEMO_MODE ? 'ml-4' : 'ml-auto'} flex items-center gap-4 font-mono text-[11px] max-md:hidden`}>
         <MarketClock />
         <span className="flex items-center gap-1.5">
           <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
-          <span className="text-txt-secondary">{connected ? 'FEED LIVE' : 'FEED DOWN'}</span>
+          <span className="text-txt-secondary">
+            {DEMO_MODE ? 'DEMO FEED' : connected ? 'FEED LIVE' : 'FEED DOWN'}
+          </span>
         </span>
         <span className="text-txt-tertiary max-lg:hidden" title="Keyboard shortcuts">[?] KEYS</span>
       </div>
@@ -165,7 +263,8 @@ export default function Layout({ section, setSection, page, setPage, connected, 
           <span className="font-mono font-bold text-xl text-accent-blue lg:hidden max-md:hidden">Q</span>
         </div>
 
-        {/* Section Switcher */}
+        {/* Section Switcher — not rendered in the demo: the curated set is one flat list */}
+        {!DEMO_MODE && (
         <div className="px-3 pb-2 max-md:hidden">
           <div className="flex rounded-lg bg-surface-tertiary p-0.5">
             <button
@@ -190,10 +289,11 @@ export default function Layout({ section, setSection, page, setPage, connected, 
             </button>
           </div>
         </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-2 space-y-0.5 max-md:flex max-md:items-center max-md:space-y-0 max-md:gap-1 max-md:px-2 max-md:py-0 overflow-y-auto">
-          <div className="hidden max-md:flex items-center gap-1 pr-1 shrink-0">
+          <div className={`${DEMO_MODE ? 'hidden' : 'hidden max-md:flex'} items-center gap-1 pr-1 shrink-0`}>
             <button
               onClick={() => setSection('options')}
               className={`px-2 py-1 rounded text-[10px] font-sans font-semibold transition-all duration-150 ${
@@ -215,7 +315,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               TRD
             </button>
           </div>
-          {(section === 'options' ? OPTIONS_NAV : TRADING_NAV).map((n, i) => (
+          {(DEMO_MODE ? DEMO_NAV : section === 'options' ? OPTIONS_NAV : TRADING_NAV).map((n, i) => (
             <button
               key={n.key}
               onClick={() => setPage(n.key)}
@@ -235,7 +335,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               </span>
             </button>
           ))}
-          {section === 'trading' && (
+          {!DEMO_MODE && section === 'trading' && (
             <div className="pt-2 mt-2 border-t border-border/50 space-y-0.5">
               {TRADING_FOOTER_NAV.map((n) => (
                 <button
@@ -256,7 +356,23 @@ export default function Layout({ section, setSection, page, setPage, connected, 
           )}
         </nav>
 
-        {section === 'trading' && (
+        {/* Demo sidebar: keeps the /scan action reachable without the Trading section */}
+        {DEMO_MODE && (
+          <div className="px-3 pb-3 max-md:hidden space-y-3">
+            <div className="card border border-accent-amber/20 bg-accent-amber/10 p-3">
+              <p className="text-xs text-accent-amber font-medium uppercase tracking-wider mb-1">
+                Synthetic fixtures
+              </p>
+              <p className="text-xs text-txt-secondary">
+                Research tool — not financial advice. Scanning runs against the baked
+                dataset, not a live market feed.
+              </p>
+            </div>
+            <ScanButton />
+          </div>
+        )}
+
+        {!DEMO_MODE && section === 'trading' && (
           <div className="px-3 pb-3 max-md:hidden space-y-3">
             <div className="card border border-accent-amber/20 bg-accent-amber/10 p-3">
               <p className="text-xs text-accent-amber font-medium uppercase tracking-wider mb-1">Paper Trading Only</p>
@@ -283,7 +399,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
         {/* Footer */}
         <div className="px-4 pb-4 flex items-center gap-2 text-txt-tertiary text-xs font-mono max-lg:px-2 max-lg:justify-center max-md:hidden">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500 ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
-          <span className="max-lg:hidden">{connected ? 'Live' : 'Offline'}</span>
+          <span className="max-lg:hidden">{DEMO_MODE ? 'Demo' : connected ? 'Live' : 'Offline'}</span>
           <span className="max-lg:hidden ml-auto">v1.5</span>
         </div>
       </aside>
@@ -292,6 +408,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
       <main className="main-scroll-area main-canvas flex-1 ml-60 max-lg:ml-12 max-md:ml-0 max-md:mt-14 overflow-y-auto">
         <Topbar section={section} page={page} connected={connected} />
         <div className="max-w-content mx-auto p-8 max-md:p-4">
+          {DEMO_MODE && <DemoNotice />}
           {!connected ? (
             <div className="flex items-center justify-center h-[calc(100vh-11rem)]">
               {/* Corner-bracketed terminal frame */}

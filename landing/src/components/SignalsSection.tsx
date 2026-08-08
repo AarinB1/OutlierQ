@@ -1,12 +1,22 @@
 import Section from "./Section";
 import { MockPanel, StatCell } from "./Panel";
 
-function ConfidenceBar({ value, baseline }: { value: number; baseline: number }) {
+function ConfidenceBar({
+  value,
+  baseline,
+  n,
+}: {
+  value: number;
+  baseline: number;
+  /** Sample size the calibration was fitted on. Required: a calibrated
+   *  confidence without its n attached is not a meaningful number. */
+  n: number;
+}) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-          Calibrated confidence
+          Calibrated confidence · n = {n}
         </span>
         <span className="font-mono text-sm font-medium text-headline sm:text-base">
           {value.toFixed(2)}
@@ -46,15 +56,17 @@ function SignalMockup() {
               NVDA
             </span>
             <span className="rounded-full border border-accent/40 bg-accent/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-accent">
-              Earnings surprise
+              Options-flow outlier
             </span>
             <span className="ml-auto rounded-md bg-up/10 px-3 py-1 font-mono text-sm font-semibold text-up">
               CALL
             </span>
           </div>
+          {/* Describes what the detectors saw, never an event at the company:
+              nothing here asserts a real business outcome. */}
           <p className="mt-3 text-[13px] leading-snug text-muted">
-            Q2 revenue beat consensus by 11% — news volume spiking across 42 sources, options
-            flow confirming.
+            News volume 3.2σ above its own baseline across 42 sources, with call volume running
+            ahead of open interest. Synthetic example.
           </p>
           <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
             <StatCell label="Suggested strike" value="$145 C" />
@@ -63,7 +75,7 @@ function SignalMockup() {
             <StatCell label="News z-score" value="3.2σ" valueClass="text-accent" />
           </div>
           <div className="mt-6">
-            <ConfidenceBar value={0.68} baseline={0.5} />
+            <ConfidenceBar value={0.68} baseline={0.5} n={312} />
           </div>
           <div className="mt-5 flex items-center gap-2 border-t border-edge pt-4 font-mono text-[11px] text-faint">
             <svg viewBox="0 0 12 12" className="h-3 w-3 text-up" fill="currentColor" aria-hidden="true">
@@ -77,16 +89,22 @@ function SignalMockup() {
           <div className="border-b border-edge px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-faint">
             Queue · 3 open events
           </div>
+          {/* Bearish rows use fictional tickers (verified absent from the Nasdaq
+              Trader symbol directory and SEC company_tickers.json); real tickers
+              only ever carry neutral/bullish rows with detector-level labels. */}
           {[
-            { t: "AMD", ev: "Guidance cut", dir: "PUT", dirUp: false, conf: "0.61" },
-            { t: "TSM", ev: "Supply-chain news", dir: "CALL", dirUp: true, conf: "0.57" },
-            { t: "COIN", ev: "Volume anomaly", dir: "—", dirUp: null, conf: "0.52" },
+            { t: "NRVX", fake: true, ev: "Sentiment reversal", dir: "PUT", dirUp: false, conf: "0.61" },
+            { t: "TSM", fake: false, ev: "Cross-source cluster", dir: "CALL", dirUp: true, conf: "0.57" },
+            { t: "COIN", fake: false, ev: "Volume anomaly", dir: "—", dirUp: null, conf: "0.52" },
           ].map((row) => (
             <div
               key={row.t}
               className="flex items-center gap-3 border-b border-edge px-5 py-3.5 last:border-b-0"
             >
-              <span className="w-12 font-mono text-sm font-semibold text-headline">{row.t}</span>
+              <span className="w-14 font-mono text-sm font-semibold text-headline">
+                {row.t}
+                {row.fake ? <span className="text-faint">*</span> : null}
+              </span>
               <span className="min-w-0 flex-1 truncate text-xs text-muted">{row.ev}</span>
               <span
                 className={`font-mono text-xs font-semibold ${
@@ -100,6 +118,7 @@ function SignalMockup() {
           ))}
           <div className="mt-auto px-5 py-3.5 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
             Scanning 500+ tickers · every 15 min
+            <span className="mt-1 block normal-case tracking-normal">* fictional ticker</span>
           </div>
         </div>
       </div>
@@ -111,7 +130,7 @@ export default function SignalsSection() {
   return (
     <Section
       id="signals"
-      kicker="01 · Options signals"
+      kicker="02 · Options signals"
       headline={
         <>
           From headline to strike price,

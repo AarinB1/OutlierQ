@@ -84,10 +84,20 @@ jobs:
           # Routing fallback for unknown paths.
           cp _site/index.html _site/404.html
 
-      - name: Verify demo bundle has no live-API references
+      - name: Verify demo bundle has no secrets or live-API references
         run: |
           set -euo pipefail
-          if grep -rEi 'FINNHUB|KALSHI|BEGIN RSA|localhost:8000' _site/demo/; then
+          # Match credential-shaped strings and real backend hosts only. Do NOT
+          # match bare vendor names: "Finnhub", "Kalshi" and "Polymarket" appear
+          # legitimately in demo UI copy (the synthetic-data notice names the
+          # real pipeline's data sources, and Kalshi/Polymarket are labels on the
+          # prediction-markets page).
+          if grep -rEi \
+            -e '(FINNHUB|KALSHI|POLYMARKET|OPENAI|ANTHROPIC)_[A-Z_]*(KEY|TOKEN|SECRET)' \
+            -e 'BEGIN (RSA|OPENSSH|EC|PRIVATE) KEY' \
+            -e '(localhost|127\.0\.0\.1):[0-9]+' \
+            -e 'sk-[A-Za-z0-9]{16,}' \
+            _site/demo/; then
             echo "::error::demo bundle contains a secret or live-API reference"
             exit 1
           fi
