@@ -27,9 +27,11 @@ export function subscribeDemoSignalStream(onSignal: (signal: Signal) => void): (
     const lap = Math.floor(cursor / queue.length)
     const base = queue[cursor % queue.length]
     cursor += 1
+    // Keep created_at on the build-anchored fixture calendar so chart overlays
+    // and timelines stay aligned after the queue loops.
     const signal: Signal = lap === 0
       ? base
-      : { ...base, id: `${base.id}-r${lap}`, created_at: new Date().toISOString() }
+      : { ...base, id: `${base.id}-r${lap}` }
     ingestStreamSignal(signal)
     onSignal(signal)
     timer = setTimeout(emit, STREAM_INTERVAL_MS)

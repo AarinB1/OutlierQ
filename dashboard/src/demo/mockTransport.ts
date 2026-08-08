@@ -249,7 +249,16 @@ function mlStatus(): MlStatus {
 function evaluatePending(): EvaluateResult {
   const MAX_PER_CALL = 3
   const rng = createRng(DEMO_SEED ^ (0xa11 + store.signals.length))
-  const candidates = store.signals.filter((s) => s.outcome == null).slice(-MAX_PER_CALL)
+  // Mirror FeedbackTracker.evaluate_all_pending: only signals whose
+  // suggested_expiry is on or before the build-anchor "today".
+  const candidates = store.signals
+    .filter(
+      (s) =>
+        s.outcome == null &&
+        s.suggested_expiry != null &&
+        s.suggested_expiry <= ANCHOR_TODAY_ISO,
+    )
+    .slice(-MAX_PER_CALL)
   const results: EvaluateResult['results'] = []
   for (const signal of candidates) {
     const roll = rng.next()
@@ -288,7 +297,10 @@ function runScan(tickers: string[]): ScanResult {
     const isCall = rng.chance(0.55)
     const eventType = 'options_flow'
     const eventId = `evt-scan-${store.scanCount}-${i + 1}`
-    const detectedAt = new Date().toISOString()
+    // Anchor to the fixture calendar so overlays land on existing price bars.
+    const detectedAt = new Date(
+      Date.parse(`${ANCHOR_TODAY_ISO}T00:00:00Z`) + (15 * 60 + store.scanCount * 3 + i) * 60_000,
+    ).toISOString()
     const event: EventData = {
       id: eventId,
       ticker,
