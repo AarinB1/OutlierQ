@@ -485,7 +485,9 @@ function buildSignalsAndEvents(r: Rng): BuiltDataset {
   const signals: Signal[] = []
 
   // Evaluated slots: 88 -> 27 days ago (old enough for a past expiry).
-  // Pending slots: 20 -> 2 days ago (expiry still in the future).
+  // Unevaluated slots: 20 -> 2 days ago with expiry on/before the anchor so
+  // POST /evaluate (FeedbackTracker.evaluate_all_pending rule) has candidates.
+  // Open (future-expiry) pending still arrive via scan/stream in a session.
   const evaluatedDaysAgo = Array.from({ length: EVALUATED_COUNT }, (_, i) =>
     Math.round(88 - (i * (88 - 27)) / (EVALUATED_COUNT - 1)))
   const pendingDaysAgo = [20, 17, 13, 9, 5, 2]
@@ -522,8 +524,11 @@ function buildSignalsAndEvents(r: Rng): BuiltDataset {
       r.clustered(0.38, 0.86) * 0.75 + built.event.confidence * 0.3)))
 
     const isPending = index >= EVALUATED_COUNT
+    // Unevaluated fixtures must already be past expiry relative to the build
+    // anchor; otherwise the static demo's EVALUATE PENDING action matches
+    // zero rows (time never advances past ANCHOR_TODAY_ISO).
     const expiry = isPending
-      ? addDaysIso(ANCHOR_TODAY_ISO, r.int(8, 30))
+      ? addDaysIso(dateIso, r.int(1, Math.max(1, daysAgo)))
       : addDaysIso(dateIso, r.int(14, 24))
 
     drafts.push({
