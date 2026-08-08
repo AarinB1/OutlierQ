@@ -191,7 +191,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             MACD {technicalContext.macd_signal}
           </span>
           {technicalContext.relative_volume > 2 && (
-            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-sans bg-accent-blue/20 text-accent-blue">
+            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-sans bg-accent-blue/20 text-txt-primary">
               Vol {technicalContext.relative_volume.toFixed(2)}x
             </span>
           )}
@@ -206,7 +206,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
           </span>
         )}
         {hasUoa && (
-          <span className="inline-block px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-sans font-medium uppercase tracking-wider">
+          <span className="inline-block px-2 py-0.5 rounded bg-accent-blue/20 text-txt-primary text-[10px] font-sans font-medium uppercase tracking-wider">
             UOA
           </span>
         )}

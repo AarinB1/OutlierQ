@@ -50,7 +50,7 @@ const TRADING_FOOTER_NAV: { key: TradingPage; icon: string; label: string }[] = 
 /**
  * Static-demo navigation: one flat list of the six pages the fixtures fully
  * back. Everything else is hidden rather than shipped as a broken shell, and
- * the Options/Trading switcher is hidden with it \u2014 with Backtest promoted into
+ * the Options/Trading switcher is hidden with it — with Backtest promoted into
  * this single list there is no second section left for it to point at.
  */
 const DEMO_NAV: { key: Page; icon: string; label: string }[] = [
@@ -67,7 +67,7 @@ function DemoBadge() {
     <span
       className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] leading-none
                  text-accent-amber border border-accent-amber/40 bg-accent-amber/10 rounded px-2 py-1"
-      title="Static demo running on baked synthetic fixtures \u2014 no live market data"
+      title="Static demo running on baked synthetic fixtures — no live market data"
     >
       Demo data
     </span>
@@ -88,7 +88,7 @@ function DemoNotice() {
     try {
       sessionStorage.setItem(NOTICE_DISMISS_KEY, '1')
     } catch {
-      // Private mode / storage disabled \u2014 the notice simply reappears.
+      // Private mode / storage disabled — the notice simply reappears.
     }
     setDismissed(true)
   }
@@ -97,31 +97,31 @@ function DemoNotice() {
       <div className="flex items-start gap-4">
         <div className="flex-1 space-y-2">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent-amber">
-            Static demo \u2014 synthetic data
+            Static demo — synthetic data
           </p>
-          <p className="text-sm text-txt-secondary">
+          <p className="text-sm text-txt-primary">
             This page is a static build with no backend. Every signal, event, price series
             and backtest below is <strong className="text-txt-primary">generated synthetic
-            data</strong> baked in at build time \u2014 nothing here is a real trade, a real
+            data</strong> baked in at build time — nothing here is a real trade, a real
             market quote, or a real prediction about any company. Tickers prefixed
             NRVX / ALTQ / TQNX are invented companies.
           </p>
-          <p className="text-sm text-txt-secondary">
+          <p className="text-sm text-txt-primary">
             The actual pipeline runs locally: FastAPI + SQLite, news from Finnhub, prices
             from yfinance, FinBERT sentiment, and an isotonic confidence calibrator that
             stays inert until it has enough evaluated outcomes.
           </p>
-          <p className="text-xs font-mono text-txt-tertiary">
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-accent-blue hover:underline">
+          <p className="text-xs font-mono text-txt-primary">
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="text-accent-amber underline hover:no-underline">
               github.com/AarinB1/OutlierQ
             </a>
-            <span className="mx-2">\u00b7</span>
+            <span className="mx-2">·</span>
             fixtures built {BUILD_TIME.slice(0, 10)}
           </p>
         </div>
         <button
           onClick={dismiss}
-          className="shrink-0 text-txt-tertiary hover:text-txt-primary text-xs font-mono border border-border rounded px-2 py-1"
+          className="shrink-0 text-txt-primary hover:text-accent-amber text-xs font-mono border border-border rounded px-2 py-1"
         >
           Dismiss
         </button>
@@ -180,7 +180,7 @@ function Topbar({ section, page, connected }: { section: Section; page: Page; co
   return (
     <header className="sticky top-0 z-40 h-11 shrink-0 flex items-center gap-3 px-8 max-md:px-4 border-b border-border bg-surface-primary/60 backdrop-blur-md">
       <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-txt-tertiary">
-        {DEMO_MODE ? 'demo' : section} <span className="mx-1 text-txt-tertiary/60">/</span>
+        {DEMO_MODE ? 'demo' : section} <span className="mx-1 text-txt-tertiary">/</span>
         <span className="text-txt-primary">{label}</span>
       </span>
       {idx >= 0 && idx < TRADING_NAV.length && (
@@ -329,7 +329,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
               <span className="text-sm w-5 text-center normal-case">{n.icon}</span>
               <span className="max-lg:hidden">{n.label}</span>
               <span className={`ml-auto font-mono text-[10px] tracking-widest transition-colors max-lg:hidden max-md:hidden ${
-                page === n.key ? 'text-accent-blue' : 'text-txt-tertiary/60 group-hover:text-txt-tertiary'
+                page === n.key ? 'text-accent-blue' : 'text-txt-tertiary group-hover:text-txt-tertiary'
               }`}>
                 {String(i + 1).padStart(2, '0')}
               </span>

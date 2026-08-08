@@ -19,7 +19,11 @@ export default {
         txt: {
           primary: '#e8e8ed',
           secondary: '#8888a0',
-          tertiary: '#55556a',
+          // Was #55556a, which measured 2.37:1 on surface-tertiary and 2.72:1 on
+          // surface-primary — well under the WCAG AA 4.5:1 floor for body text,
+          // and this token carries timestamps, counts and metadata. Lightened
+          // in-hue to clear 4.5:1 on all three surfaces (min 4.76:1).
+          tertiary: '#8484a4',
         },
         accent: {
           green: '#00d68f',
