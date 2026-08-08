@@ -56,3 +56,37 @@ things git history does not record.
   error" and OperationalError test failures, not as a clear disk-full signal.
   Delete caches, then re-run anything that failed around the same time before
   trusting its result.
+- **A handoff brief claiming prior cleanup work "already completed" was only
+  ~20% true.** `main` did exist as the merged trunk, but `trading-dashboard/`
+  was never deleted, all thirteen "deleted" stale branches were still on the
+  remote, neither rollback tag existed, and the findings the brief said to read
+  out of this file had never been written to it. Verify inherited state with
+  `git ls-remote --heads`, `git tag`, and an `ls` before trusting a handoff
+  summary — the cost of checking is seconds and the cost of assuming is
+  building on a wrong base.
+- **The 923-line `BacktestPanel` with benchmark/compare/export/date-range lives
+  at `trading-dashboard/src/components/BacktestPanel.tsx`** (SHA `6e1a4eb`), not
+  in `dashboard/`'s own history — `git log --follow` on the `dashboard/` path
+  never surfaces it because the feature-rich version only ever existed in the
+  standalone app. When a file "lost" features, check sibling apps' paths, not
+  just the current path's history.
+- **`dashboard/src/api.ts` had two request styles, not one.** The options half
+  funnels through a single `fetchJSON` helper; the trading half (`TRADING_BASE`,
+  ~45 functions) called `fetch()` directly with hand-rolled `!res.ok` checks.
+  Any change that needs one interception point for HTTP — a mock transport, auth
+  headers, retry, tracing — has to normalise the second style first. Count the
+  call sites before believing a "single choke point" claim.
+- **`main` exists but is not this repo's default branch** — the GitHub API reports
+  `default_branch: claude/outlierq-trading-signals-y1In7`, even though that branch
+  and `main` point at the identical commit. `git branch -a` and `git log` cannot
+  show you this; only the API or the Settings page can. A workflow gated on
+  `push: branches: [main]` still fires correctly (an explicit branch filter is
+  independent of the default), but "default branch" assumptions in tooling,
+  PR bases, and branch protection will silently target the wrong ref.
+- **GitHub Pages was never enabled on this repo** (`has_pages: false`). The
+  `actions/configure-pages@v5` input `enablement: true` provisions the Pages site
+  from inside the workflow using the `pages: write` token, which avoids a manual
+  trip to repo Settings before the first deploy.
+- **`.gitignore`'s bare `dist/` does not cover `dist-demo/`.** A second build
+  output directory needs its own entry, or the whole demo bundle becomes
+  untracked-but-visible noise in `git status` (or worse, gets committed).
