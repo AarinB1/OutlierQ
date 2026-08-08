@@ -87,6 +87,32 @@ things git history does not record.
   `actions/configure-pages@v5` input `enablement: true` provisions the Pages site
   from inside the workflow using the `pages: write` token, which avoids a manual
   trip to repo Settings before the first deploy.
+- **Lighthouse against a non-gzipping local server measures the wrong site.**
+  `http-server` does not compress, so the landing bundle transferred at 197 kB
+  instead of 61 kB and mobile LCP read 2.6 s — a budget failure that did not
+  exist. The tell was `uses-text-compression` scoring 0 with 750 ms of claimed
+  savings; no production static host does that. Re-measured behind a tiny
+  gzip-ing Node server (what Pages actually serves) LCP was 1.8 s and
+  Performance went 95 → 99. Check that audit before believing a local LCP.
+- **`\uXXXX` is only an escape inside a JS string literal.** In bare JSX text
+  (`<p>a — b</p>`) and in JSX attributes (`title="a — b"`) it renders
+  as the literal six characters. The repo's `{'◎'}` idiom is correct
+  precisely because the braces make it a JS string. A pre-existing instance in
+  `StockHeader` was worse — bare JSX text also does not interpolate `${...}`, so
+  the Tickers page shipped `Day: ${info.day_low.toFixed(2)}` verbatim on screen.
+- **Measure contrast on the composited render, not on the token table.** Both
+  palettes look fine pair-by-pair, but translucent tints stack: `bg-accent-amber/10`
+  over `surface-secondary` lands at `#312924`, where `txt-secondary` is only
+  4.15:1 — so the synthetic-data disclosure, the one element that must be
+  legible, was the worst offender. Equally, a token that passes at full strength
+  fails at `/60` opacity. Walking the DOM and compositing every background down
+  to the page ground found 15 AA failures that reading `tailwind.config.js`
+  could not.
+- **The dashboard's `txt-tertiary` was #55556a — 2.37:1 on `surface-tertiary`.**
+  It carries timestamps, counts and pagination, so it is body text, not
+  decoration. Lightened in-hue to `#8484a4` (min 4.76:1). White-on-`accent-blue`
+  buttons were 3.32:1; the landing page had already solved the same problem with
+  dark-on-accent at 6.07:1.
 - **`.gitignore`'s bare `dist/` does not cover `dist-demo/`.** A second build
   output directory needs its own entry, or the whole demo bundle becomes
   untracked-but-visible noise in `git status` (or worse, gets committed).
