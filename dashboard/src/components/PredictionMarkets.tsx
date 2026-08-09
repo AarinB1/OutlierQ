@@ -122,7 +122,7 @@ export default function PredictionMarkets() {
           <button
             onClick={handleScan}
             disabled={scanning}
-            className="px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent-blue text-surface-primary text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
           >
             {scanning ? 'Scanning...' : 'Scan Markets'}
           </button>
@@ -152,7 +152,7 @@ export default function PredictionMarkets() {
       )}
 
       {scanResult && (
-        <div className="card border border-accent-blue/20 bg-accent-blue/10 p-3 text-sm text-accent-blue">
+        <div className="card border border-accent-blue/20 bg-accent-blue/10 p-3 text-sm text-txt-primary">
           {scanResult}
         </div>
       )}

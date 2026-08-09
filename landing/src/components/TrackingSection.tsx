@@ -2,9 +2,17 @@ import { useEffect, useState } from "react";
 import Section from "./Section";
 import { MockPanel, StatCell } from "./Panel";
 
-/** True below the given viewport width; used to render a mobile-legible chart. */
+/** True below the given viewport width; used to render a mobile-legible chart.
+ *
+ *  The initial value is read synchronously in the useState initialiser, not in
+ *  an effect. Reading it in an effect meant the first paint used the desktop
+ *  viewBox (640x240) and the second used the mobile one (340x250) — a different
+ *  aspect ratio, so the chart's height changed after paint and the section below
+ *  it moved. That is a layout shift, and this chart is large. */
 function useNarrow(query = "(max-width: 640px)") {
-  const [narrow, setNarrow] = useState(false);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches
+  );
   useEffect(() => {
     const mq = window.matchMedia(query);
     const onChange = () => setNarrow(mq.matches);
@@ -52,7 +60,7 @@ function EquityChart() {
       viewBox={`0 0 ${w} ${h}`}
       className="block w-full"
       role="img"
-      aria-label="Sample equity curve: paper portfolio value growing from $10,000 to $12,310 over six months"
+      aria-label="Synthetic equity curve: paper portfolio value growing from $10,000 to $12,310 over six months. Illustrative sample data, not a real track record."
     >
       <defs>
         <linearGradient id="eq-area" x1="0" y1="0" x2="0" y2="1">
@@ -77,7 +85,7 @@ function EquityChart() {
             y={y(gv) + 3}
             textAnchor="end"
             fontSize={axisFont}
-            fill="#5c657b"
+            fill="#7a8497"
             fontFamily="'JetBrains Mono', monospace"
           >
             ${gv / 1000}k
@@ -93,7 +101,7 @@ function EquityChart() {
           y={h - 8}
           textAnchor="middle"
           fontSize={axisFont}
-          fill="#5c657b"
+          fill="#7a8497"
           fontFamily="'JetBrains Mono', monospace"
         >
           {m}
@@ -147,8 +155,9 @@ function TrackingMockup() {
           <EquityChart />
         </div>
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-edge pt-5 sm:grid-cols-4">
-          <StatCell label="Win rate" value="61.4%" valueClass="text-up" sub="vs 50% coin-flip" />
-          <StatCell label="Signals tracked" value="312" />
+          {/* A win rate without its sample size is not a number. n travels with it. */}
+          <StatCell label="Win rate" value="61.4%" valueClass="text-up" sub="n = 312 evaluated" />
+          <StatCell label="Signals tracked" value="312" sub="both outcomes present" />
           <StatCell label="Avg hold" value="4.2 days" />
           <StatCell label="Max drawdown" value="-4.9%" valueClass="text-down" />
         </div>
@@ -161,7 +170,7 @@ export default function TrackingSection() {
   return (
     <Section
       id="tracking"
-      kicker="03 · Tracking & calibration"
+      kicker="04 · Tracking & calibration"
       headline={
         <>
           Every signal gets graded.

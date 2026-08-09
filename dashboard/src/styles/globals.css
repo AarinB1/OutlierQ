@@ -155,7 +155,7 @@
   }
 
   .btn-primary {
-    @apply px-5 py-2.5 rounded-lg bg-accent-blue text-white font-mono font-bold text-sm tracking-wide;
+    @apply px-5 py-2.5 rounded-lg bg-accent-blue text-surface-primary font-mono font-bold text-sm tracking-wide;
     transition: box-shadow 150ms ease, transform 150ms ease;
   }
   .btn-primary:hover {

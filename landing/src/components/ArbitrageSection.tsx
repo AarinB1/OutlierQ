@@ -22,9 +22,11 @@ function VenueCard({
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
           {venue}
         </span>
+        {/* accent/15 behind accent text measured 4.49:1 — a hair under AA.
+            accent/10 keeps the same read at 4.83:1. */}
         <span
           className={`rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
-            accented ? "bg-accent/15 text-accent" : "bg-panel text-faint"
+            accented ? "bg-accent/10 text-accent" : "bg-panel text-faint"
           }`}
         >
           {side}
@@ -97,7 +99,7 @@ export default function ArbitrageSection() {
   return (
     <Section
       id="arbitrage"
-      kicker="02 · Prediction-market arbitrage"
+      kicker="03 · Prediction-market arbitrage"
       headline={
         <>
           The same event. Two prices.

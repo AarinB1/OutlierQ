@@ -409,6 +409,23 @@ export interface TradingSignal {
   pnl?: number
 }
 
+/** POST /api/trading/generate-signals */
+export interface GenerateSignalsResult {
+  generated: number
+  signal_ids: string[]
+  demo_mode: boolean
+  signals: {
+    ticker: string
+    direction: string
+    strategy: string
+    strategy_name: string
+    confidence: number
+    entry_price: number
+    target_price: number
+    stop_loss: number
+  }[]
+}
+
 export interface BacktestResult {
   id: string
   strategy_name: string
@@ -593,6 +610,12 @@ export interface ModelTrainResult {
 
 // ── Trading Backtest Types ───────────────────────────────────────────
 
+export interface BenchmarkCurve {
+  dates: string[]
+  values: number[]
+  ticker: string
+}
+
 export interface BacktestFullResult {
   id: string
   metrics: {
@@ -620,6 +643,23 @@ export interface BacktestFullResult {
   monthly_returns: { month: string; return_pct: number }[]
   trades: BacktestTrade[]
   config: Record<string, unknown>
+  /** Buy-and-hold overlay for `body.benchmark` (default SPY). */
+  benchmark_curve?: BenchmarkCurve
+  benchmark_return_pct?: number
+}
+
+/** One strategy's slice of POST /api/trading/backtest/compare. */
+export interface BacktestCompareStrategyResult {
+  strategy: string
+  metrics: BacktestFullResult['metrics']
+  equity_curve: { dates: string[]; values: number[] }
+  trades: BacktestTrade[]
+}
+
+export interface BacktestCompareResult {
+  ticker: string
+  results: BacktestCompareStrategyResult[]
+  benchmark_curve?: BenchmarkCurve
 }
 
 export interface BacktestTrade {

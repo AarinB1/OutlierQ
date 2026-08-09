@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
-/** Shared shell for product mockups: dark panel, header strip, "sample data" tag. */
+/** Shared shell for product mockups: dark panel, header strip, synthetic-data tag.
+ *
+ *  The header dot used to pulse (animate-ping). It was removed deliberately: a
+ *  pulsing indicator reads as "live feed", and nothing on this page is live. */
 export function MockPanel({
   label,
   children,
@@ -16,10 +19,10 @@ export function MockPanel({
     >
       <div className="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5 sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span aria-hidden="true" className="relative flex h-1.5 w-1.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-          </span>
+          <span
+            aria-hidden="true"
+            className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+          />
           <span className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-faint sm:text-[11px]">
             {label}
           </span>
@@ -34,7 +37,7 @@ export function MockPanel({
 export function SampleTag() {
   return (
     <span className="shrink-0 rounded-full border border-edge bg-panel-2 px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-faint sm:text-[10px]">
-      Sample data
+      Synthetic data
     </span>
   );
 }

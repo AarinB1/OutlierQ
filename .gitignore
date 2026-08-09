@@ -34,3 +34,7 @@ lib/mirofish/
 
 # Node (dashboard)
 node_modules/
+
+# Static demo build output and the assembled Pages site
+dist-demo/
+_site/
