@@ -27,6 +27,60 @@ function useCountUp(target: number, duration = 600): number {
   return value
 }
 
+/**
+ * Activation threshold of the isotonic confidence calibrator, mirroring
+ * `MIN_SAMPLES` in src/signals/confidence_calibrator.py. Below this the
+ * calibrator is the identity function and the pipeline stores raw confidence.
+ */
+const CALIBRATOR_MIN_SAMPLES = 40
+
+interface CalibrationGate {
+  n: number
+  wins: number
+  active: boolean
+  /** Which of the two conditions is missing, when inactive. */
+  reason: 'samples' | 'single_class' | null
+  progressPct: number
+}
+
+/**
+ * Derives the calibrator's gating state from the AccuracyStats the API returns,
+ * so this is correct against the real backend as well as the demo fixtures.
+ * The real rule is: n >= MIN_SAMPLES AND wins != 0 AND wins != n.
+ */
+function calibrationGate(stats: AccuracyStats): CalibrationGate {
+  const n = stats.total_evaluated
+  const wins = stats.wins
+  const bothClasses = wins > 0 && wins < n
+  const enoughSamples = n >= CALIBRATOR_MIN_SAMPLES
+  return {
+    n,
+    wins,
+    active: enoughSamples && bothClasses,
+    reason: !enoughSamples ? 'samples' : !bothClasses ? 'single_class' : null,
+    progressPct: Math.min(100, (n / CALIBRATOR_MIN_SAMPLES) * 100),
+  }
+}
+
+/**
+ * Wilson score interval for a binomial proportion — no continuity correction
+ * (the plain Wilson form). Chosen over the normal approximation because it
+ * stays inside [0, 1] and behaves sensibly at the small sample sizes this
+ * dashboard actually has.
+ */
+function wilsonInterval(wins: number, n: number, z = 1.96): { low: number; high: number } | null {
+  if (n <= 0) return null
+  const p = wins / n
+  const z2 = z * z
+  const denom = 1 + z2 / n
+  const center = (p + z2 / (2 * n)) / denom
+  const margin = (z / denom) * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))
+  return {
+    low: Math.max(0, center - margin),
+    high: Math.min(1, center + margin),
+  }
+}
+
 function outcomeColor(outcome: string | null): string {
   if (outcome === 'profit') return 'bg-accent-green'
   if (outcome === 'loss') return 'bg-accent-red'
@@ -82,17 +136,20 @@ export default function AccuracyPanel() {
   const totalPending = useCountUp(stats?.total_pending ?? 0)
 
   // Build stagger data and hook — always called (before any early returns)
-  const staggerData = useMemo(
+  const staggerData = useMemo<{ label: string; value: string; color: string; sub?: string }[]>(
     () => [
       {
         label: 'Win Rate',
         value: `${(winRate * 100).toFixed(1)}%`,
         color: (stats?.win_rate ?? 0) >= 0.5 ? 'text-accent-green' : 'text-accent-red',
+        // A win rate is meaningless without its denominator — always attached.
+        sub: `n = ${stats?.total_evaluated ?? 0} evaluated`,
       },
       {
         label: 'Avg P&L',
         value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(1)}%`,
         color: (stats?.avg_pnl ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red',
+        sub: 'per evaluated signal',
       },
       {
         label: 'Evaluated',
@@ -105,7 +162,7 @@ export default function AccuracyPanel() {
         color: 'text-accent-amber',
       },
     ],
-    [winRate, avgPnl, totalEval, totalPending, stats?.win_rate, stats?.avg_pnl]
+    [winRate, avgPnl, totalEval, totalPending, stats?.win_rate, stats?.avg_pnl, stats?.total_evaluated]
   )
 
   const { visibleItems: staggeredStats, getDelay, ready } = useStaggeredList(staggerData)
@@ -157,6 +214,9 @@ export default function AccuracyPanel() {
           {evaluating ? 'EVALUATING...' : 'EVALUATE PENDING'}
         </button>
       </div>
+
+      {/* Confidence calibration gate + interval estimate for the raw win rate */}
+      <CalibrationCard stats={stats} />
 
       {/* ML model status */}
       <div className="card space-y-4">
@@ -311,7 +371,7 @@ export default function AccuracyPanel() {
           <div className={`stagger-container grid grid-cols-2 lg:grid-cols-4 gap-6 ${ready ? 'is-ready' : ''}`}>
             {staggeredStats.map((stat, index) => (
               <div key={stat.label} className="stagger-item" style={{ animationDelay: getDelay(index) }}>
-                <StatCard label={stat.label} value={stat.value} color={stat.color} />
+                <StatCard label={stat.label} value={stat.value} color={stat.color} sub={stat.sub} />
               </div>
             ))}
           </div>
@@ -511,11 +571,108 @@ export default function AccuracyPanel() {
   )
 }
 
-function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
+function CalibrationCard({ stats }: { stats: AccuracyStats }) {
+  const gate = calibrationGate(stats)
+  const interval = wilsonInterval(gate.wins, gate.n)
+  const pointEstimate = gate.n > 0 ? gate.wins / gate.n : null
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="label">Confidence Calibration</h3>
+        <span
+          className={`text-xs font-mono px-2 py-1 rounded ${
+            gate.active
+              ? 'bg-accent-green-muted text-accent-green'
+              : 'bg-accent-amber-muted text-accent-amber'
+          }`}
+        >
+          {gate.active ? 'Calibrator active' : 'Calibrator inactive'}
+        </span>
+      </div>
+
+      {/* Gating state — the real activation rule, rendered as progress */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs text-txt-secondary">
+          <span>
+            {gate.active
+              ? `Fitted on ${gate.n} evaluated signals (${gate.wins} wins, ${gate.n - gate.wins} non-wins)`
+              : gate.reason === 'single_class'
+                ? `${gate.n} evaluated signals but only one outcome class present — isotonic fit needs both`
+                : `${gate.n} / ${CALIBRATOR_MIN_SAMPLES} evaluated signals, both outcome classes present`}
+          </span>
+          <span className="font-mono shrink-0">{gate.n}/{CALIBRATOR_MIN_SAMPLES}</span>
+        </div>
+        <div className="w-full h-2 rounded-full bg-surface-secondary">
+          <div
+            className={`h-full rounded-full confidence-bar ${gate.active ? 'bg-accent-green' : 'bg-accent-amber'}`}
+            style={{ width: `${gate.progressPct}%` }}
+          />
+        </div>
+        <p className="text-xs text-txt-tertiary">
+          The isotonic calibrator maps stated confidence onto realized win rate. It stays
+          inert until at least {CALIBRATOR_MIN_SAMPLES} signals have been evaluated with
+          both wins and non-wins present.{' '}
+          {gate.active
+            ? 'Stored confidence is calibrated against realized outcomes; raw_confidence is kept for audit.'
+            : 'Until then, the confidence shown on every signal is the raw model confidence — not a calibrated probability.'}
+        </p>
+      </div>
+
+      {/* Raw win rate with an explicit interval and sample size */}
+      <div className="border-t border-border pt-4 space-y-2">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <span className="text-xs text-txt-secondary">Raw win rate (95% Wilson interval)</span>
+          {pointEstimate == null || interval == null ? (
+            <span className="font-mono text-sm text-txt-tertiary">
+              no evaluated signals yet
+            </span>
+          ) : (
+            <span className="font-mono text-sm text-txt-primary">
+              {pointEstimate.toFixed(2)}{' '}
+              <span className="text-txt-secondary">
+                [{interval.low.toFixed(2)}, {interval.high.toFixed(2)}]
+              </span>{' '}
+              <span className="text-txt-tertiary">at n = {gate.n}</span>
+            </span>
+          )}
+        </div>
+        {interval != null && (
+          <>
+            {/* Interval bar: 0 -> 1 scale with the point estimate marked */}
+            <div className="relative w-full h-2 rounded-full bg-surface-secondary">
+              <div
+                className="absolute top-0 h-full rounded-full bg-accent-blue/40"
+                style={{
+                  left: `${interval.low * 100}%`,
+                  width: `${Math.max(0.5, (interval.high - interval.low) * 100)}%`,
+                }}
+              />
+              {pointEstimate != null && (
+                <div
+                  className="absolute top-1/2 h-3 w-[2px] -translate-y-1/2 bg-accent-blue"
+                  style={{ left: `${pointEstimate * 100}%` }}
+                />
+              )}
+            </div>
+            <p className="text-xs text-txt-tertiary">
+              Plain Wilson score interval (no continuity correction). At this sample size the
+              interval is wide enough that the point estimate on its own should not be read
+              as an edge.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, color, sub }: { label: string; value: string; color: string; sub?: string }) {
   return (
     <div className="card">
       <div className={`stat-number ${color} count-up`}>{value}</div>
       <div className="label mt-2">{label}</div>
+      {sub && <div className="mt-1 font-mono text-[10px] text-txt-tertiary">{sub}</div>}
     </div>
   )
 }

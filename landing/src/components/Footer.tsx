@@ -1,4 +1,4 @@
-const GITHUB_URL = "https://github.com/AarinB1/OutlierQ";
+import { DEMO_URL, GITHUB_URL } from "../lib/site";
 
 const columns = [
   {
@@ -12,6 +12,7 @@ const columns = [
   {
     heading: "Pipeline",
     links: [
+      { label: "Detection", href: "#detection" },
       { label: "Options signals", href: "#signals" },
       { label: "Prediction-market arbitrage", href: "#arbitrage" },
       { label: "Tracking & calibration", href: "#tracking" },
@@ -33,13 +34,25 @@ export default function Footer() {
               An open research platform for event-driven trading signals, built and
               maintained by Aarin Basu.
             </p>
-            <p className="mt-4 font-mono text-xs text-faint">MIT License</p>
+            <a
+              href={DEMO_URL}
+              className="mt-5 inline-flex items-center gap-2 rounded-full border border-edge bg-panel px-4 py-2 text-sm font-medium text-headline transition-colors hover:border-accent/60"
+            >
+              Open the demo
+              <span aria-hidden="true" className="text-accent">
+                →
+              </span>
+            </a>
+            <p className="mt-5 font-mono text-xs text-faint">MIT License</p>
           </div>
           {columns.map((col) => (
             <div key={col.heading}>
-              <h4 className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">
+              {/* h3, not h4: the previous heading on the page is the demo
+                  band's h2, and jumping h2 -> h4 breaks sequential heading
+                  order (Lighthouse/axe heading-order). */}
+              <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-faint">
                 {col.heading}
-              </h4>
+              </h3>
               <ul className="mt-4 space-y-3">
                 {col.links.map((l) => (
                   <li key={l.label}>
@@ -59,13 +72,21 @@ export default function Footer() {
           ))}
         </div>
         <div className="mt-12 border-t border-edge pt-8">
-          <p className="max-w-3xl text-[13px] leading-relaxed text-faint">
-            <span className="font-medium text-muted">
+          <p className="max-w-3xl text-[13px] leading-relaxed text-muted">
+            <span className="font-medium text-body">
               Paper trading / research only. Not financial advice.
             </span>{" "}
-            OutlierQ is a personal research project. All numbers shown in product mockups on this
-            page are illustrative sample data, not live results. Nothing here is a recommendation
-            to buy or sell any security, option, or prediction-market contract.
+            OutlierQ is a personal research project.{" "}
+            <span className="font-medium text-body">
+              Every figure shown on this page and in the interactive demo is synthetic.
+            </span>{" "}
+            That covers all tickers, prices, spreads, confidence scores, win rates, returns,
+            Sharpe figures, drawdowns, and sample counts, in the mockups here and in the demo
+            build — the demo is a static site over baked fixtures with no backend, no database,
+            and no market-data connection. It is not a track record, and no result on it has been
+            achieved with capital. Tickers marked with an asterisk are fictional symbols. Nothing
+            here is a recommendation to buy or sell any security, option, or prediction-market
+            contract.
           </p>
           <p className="mt-6 font-mono text-xs text-faint">
             © {new Date().getFullYear()} OutlierQ

@@ -30,6 +30,8 @@ import type {
   BacktestSummary,
   PortfolioHistoryPoint,
   ClosedTrade,
+  PortfolioState,
+  GenerateSignalsResult,
   MarketRegime,
   RegimeHistoryPoint,
   RiskSummary,
@@ -55,18 +57,36 @@ import type {
   DslBacktestResult,
   PortfolioBacktestResult,
 } from './types';
+import type { BacktestCompareResult } from './types';
+import { DEMO_MODE } from './demo/demoConfig';
 
 const BASE_URL = '/api';
 const SPARKLINE_TTL_MS = 5 * 60 * 1000;
 const sparklineCache = new Map<string, { timestamp: number; values: number[] }>();
 
-async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+/**
+ * Single HTTP entry point for the whole dashboard.
+ *
+ * In demo mode (static GitHub Pages build) this delegates to the fixture
+ * transport instead of touching the network — it and `subscribeSignalStream`
+ * below are the only two places in the app that know demo mode exists. The
+ * `DEMO_MODE` constant folds to `false` in a normal build, so Rollup drops the
+ * branch and the dynamic import with it.
+ *
+ * `errorMessage` preserves the per-endpoint error text the trading calls used
+ * to throw before they were normalised onto this function.
+ */
+async function fetchJSON<T>(url: string, init?: RequestInit, errorMessage?: string): Promise<T> {
+  if (DEMO_MODE) {
+    const { demoRequest } = await import('./demo/mockTransport');
+    return demoRequest<T>(url, init);
+  }
   const res = await fetch(`${BASE_URL}${url}`, {
     headers: { 'Content-Type': 'application/json' },
     ...init,
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    throw new Error(errorMessage ?? `API error: ${res.status} ${res.statusText}`);
   }
   return res.json();
 }
@@ -110,6 +130,21 @@ export function subscribeSignalStream(
   onSignal: (signal: Signal) => void,
   onError?: (error: Event) => void
 ): () => void {
+  if (DEMO_MODE) {
+    // Synthetic queue instead of SSE. The import is dynamic so the fixture
+    // module never enters the normal bundle's graph.
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void import('./demo/stream').then(({ subscribeDemoSignalStream }) => {
+      if (cancelled) return;
+      stop = subscribeDemoSignalStream(onSignal);
+    });
+    return () => {
+      cancelled = true;
+      if (stop) stop();
+    };
+  }
+
   const eventSource = new EventSource('/api/stream');
 
   const handleSignal = (event: MessageEvent<string>) => {
@@ -336,8 +371,10 @@ export async function updateArbitrageStatus(
 }
 
 // ── Trading API ──────────────────────────────────────────────────
-
-const TRADING_BASE = '/api/trading';
+//
+// These used to call `fetch()` directly against `/api/trading`. They are
+// normalised onto `fetchJSON` so demo mode has exactly one interception point;
+// each call keeps its original URL, method, body and error text.
 
 export async function fetchTradingSignals(params?: {
   ticker?: string
@@ -352,91 +389,70 @@ export async function fetchTradingSignals(params?: {
   if (params?.strategy) query.set('strategy', params.strategy);
   if (params?.status) query.set('status', params.status);
   if (params?.limit) query.set('limit', String(params.limit));
-  const res = await fetch(`${TRADING_BASE}/signals?${query}`);
-  if (!res.ok) throw new Error('Failed to fetch trading signals');
-  return res.json();
+  return fetchJSON(`/trading/signals?${query}`, undefined, 'Failed to fetch trading signals');
 }
 
 export async function fetchTradingSignalById(id: string): Promise<TradingSignal> {
-  const res = await fetch(`${TRADING_BASE}/signals/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch trading signal');
-  return res.json();
+  return fetchJSON(`/trading/signals/${id}`, undefined, 'Failed to fetch trading signal');
 }
 
 export async function runBacktest(config: Record<string, unknown>): Promise<BacktestFullResult> {
-  const res = await fetch(`${TRADING_BASE}/backtest`, {
+  return fetchJSON('/trading/backtest', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
-  });
-  if (!res.ok) throw new Error('Failed to run backtest');
-  return res.json();
+  }, 'Failed to run backtest');
+}
+
+/** POST /api/trading/backtest/compare — several strategies, one ticker/window. */
+export async function compareBacktests(config: Record<string, unknown>): Promise<BacktestCompareResult> {
+  return fetchJSON('/trading/backtest/compare', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }, 'Failed to run comparison');
 }
 
 export async function fetchBacktestList(): Promise<BacktestSummary[]> {
-  const res = await fetch(`${TRADING_BASE}/backtests`);
-  if (!res.ok) throw new Error('Failed to fetch backtest list');
-  return res.json();
+  return fetchJSON('/trading/backtests', undefined, 'Failed to fetch backtest list');
 }
 
 export async function fetchBacktestResult(id: string) {
-  const res = await fetch(`${TRADING_BASE}/backtest/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch backtest result');
-  return res.json();
+  return fetchJSON<unknown>(`/trading/backtest/${id}`, undefined, 'Failed to fetch backtest result');
 }
 
-export async function fetchPortfolio() {
-  const res = await fetch(`${TRADING_BASE}/portfolio`);
-  if (!res.ok) throw new Error('Failed to fetch portfolio');
-  return res.json();
+export async function fetchPortfolio(): Promise<PortfolioState> {
+  return fetchJSON('/trading/portfolio', undefined, 'Failed to fetch portfolio');
 }
 
 export async function fetchPortfolioHistory(days: number = 30): Promise<PortfolioHistoryPoint[]> {
-  const res = await fetch(`${TRADING_BASE}/portfolio/history?days=${days}`);
-  if (!res.ok) throw new Error('Failed to fetch portfolio history');
-  return res.json();
+  return fetchJSON(`/trading/portfolio/history?days=${days}`, undefined, 'Failed to fetch portfolio history');
 }
 
 export async function fetchTradingModels() {
-  const res = await fetch(`${TRADING_BASE}/models`);
-  if (!res.ok) throw new Error('Failed to fetch models');
-  return res.json();
+  return fetchJSON<unknown>('/trading/models', undefined, 'Failed to fetch models');
 }
 
 export async function fetchTradingModelsEnhanced(): Promise<ModelCheckpointEnhanced[]> {
-  const res = await fetch(`${TRADING_BASE}/models`);
-  if (!res.ok) throw new Error('Failed to fetch models');
-  return res.json();
+  return fetchJSON('/trading/models', undefined, 'Failed to fetch models');
 }
 
 export async function fetchMarketRegime(): Promise<MarketRegime> {
-  const res = await fetch(`${TRADING_BASE}/regime`);
-  if (!res.ok) throw new Error('Failed to fetch regime');
-  return res.json();
+  return fetchJSON('/trading/regime', undefined, 'Failed to fetch regime');
 }
 
 export async function fetchRegimeHistory(days: number = 30): Promise<RegimeHistoryPoint[]> {
-  const res = await fetch(`${TRADING_BASE}/regime/history?days=${days}`);
-  if (!res.ok) throw new Error('Failed to fetch regime history');
-  return res.json();
+  return fetchJSON(`/trading/regime/history?days=${days}`, undefined, 'Failed to fetch regime history');
 }
 
 export async function fetchTradingMetrics() {
-  const res = await fetch(`${TRADING_BASE}/metrics`);
-  if (!res.ok) throw new Error('Failed to fetch trading metrics');
-  return res.json();
+  return fetchJSON<unknown>('/trading/metrics', undefined, 'Failed to fetch trading metrics');
 }
 
 export async function fetchRiskSummary(): Promise<RiskSummary> {
-  const res = await fetch(`${TRADING_BASE}/risk/summary`);
-  if (!res.ok) throw new Error('Failed to fetch risk summary');
-  return res.json();
+  return fetchJSON('/trading/risk/summary', undefined, 'Failed to fetch risk summary');
 }
 
 export async function fetchRiskLimits(): Promise<RiskLimitsConfig> {
-  const res = await fetch(`${TRADING_BASE}/risk/limits`);
-  if (!res.ok) throw new Error('Failed to fetch risk limits');
-  return res.json();
+  return fetchJSON('/trading/risk/limits', undefined, 'Failed to fetch risk limits');
 }
 
 export async function generateTradingSignals(
@@ -449,45 +465,38 @@ export async function generateTradingSignals(
         period?: string
         demo?: boolean
       },
-) {
+): Promise<GenerateSignalsResult> {
   const normalized = Array.isArray(payload) ? { tickers: payload } : payload
   const demoQuery = normalized.demo ? '?demo=true' : ''
-  const res = await fetch(`${TRADING_BASE}/generate-signals${demoQuery}`, {
+  return fetchJSON(`/trading/generate-signals${demoQuery}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(normalized),
-  });
-  if (!res.ok) throw new Error('Failed to generate trading signals');
-  return res.json();
+  }, 'Failed to generate trading signals');
 }
 
 export async function fetchModelHistory(modelName: string): Promise<ModelVersionHistoryEntry[]> {
-  const res = await fetch(`${TRADING_BASE}/models/${encodeURIComponent(modelName)}/history`);
-  if (!res.ok) throw new Error('Failed to fetch model history');
-  return res.json();
+  return fetchJSON(
+    `/trading/models/${encodeURIComponent(modelName)}/history`,
+    undefined,
+    'Failed to fetch model history',
+  );
 }
 
 export async function triggerModelTrain(
   modelType: string,
   ticker: string = 'SPY',
 ): Promise<ModelTrainResult> {
-  const res = await fetch(`${TRADING_BASE}/models/train`, {
+  return fetchJSON('/trading/models/train', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model_type: modelType, ticker }),
-  });
-  if (!res.ok) throw new Error('Failed to trigger model training');
-  return res.json();
+  }, 'Failed to trigger model training');
 }
 
 export async function updateSignalStatus(id: string, status: string): Promise<TradingSignal> {
-  const res = await fetch(`${TRADING_BASE}/signals/${id}/status`, {
+  return fetchJSON(`/trading/signals/${id}/status`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
-  });
-  if (!res.ok) throw new Error('Failed to update signal status');
-  return res.json();
+  }, 'Failed to update signal status');
 }
 
 export async function fetchExecutions(params?: {
@@ -501,163 +510,118 @@ export async function fetchExecutions(params?: {
   if (params?.strategy) query.set('strategy', params.strategy);
   if (params?.limit) query.set('limit', String(params.limit));
   if (params?.offset) query.set('offset', String(params.offset));
-  const res = await fetch(`${TRADING_BASE}/executions?${query}`);
-  if (!res.ok) throw new Error('Failed to fetch executions');
-  return res.json();
+  return fetchJSON(`/trading/executions?${query}`, undefined, 'Failed to fetch executions');
 }
 
 // ── Sprint 4: Strategy Configs & Chart Data ─────────────────────
 
 export async function fetchStrategyDefaults(): Promise<StrategyDefaults> {
-  const res = await fetch(`${TRADING_BASE}/strategies/defaults`);
-  if (!res.ok) throw new Error('Failed to fetch strategy defaults');
-  return res.json();
+  return fetchJSON('/trading/strategies/defaults', undefined, 'Failed to fetch strategy defaults');
 }
 
 export async function fetchStrategyConfigs(): Promise<StrategyConfigSaved[]> {
-  const res = await fetch(`${TRADING_BASE}/strategies/configs`);
-  if (!res.ok) throw new Error('Failed to fetch strategy configs');
-  return res.json();
+  return fetchJSON('/trading/strategies/configs', undefined, 'Failed to fetch strategy configs');
 }
 
 export async function saveStrategyConfig(config: Record<string, unknown>): Promise<{ id: string; name: string; status: string }> {
-  const res = await fetch(`${TRADING_BASE}/strategies/configs`, {
+  return fetchJSON('/trading/strategies/configs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
-  });
-  if (!res.ok) throw new Error('Failed to save strategy config');
-  return res.json();
+  }, 'Failed to save strategy config');
 }
 
 export async function deleteStrategyConfig(id: string): Promise<{ deleted: string }> {
-  const res = await fetch(`${TRADING_BASE}/strategies/configs/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete strategy config');
-  return res.json();
+  return fetchJSON(`/trading/strategies/configs/${id}`, { method: 'DELETE' }, 'Failed to delete strategy config');
 }
 
 export async function fetchChartDataTrading(ticker: string, period: string = '6mo'): Promise<TradingChartData> {
-  const res = await fetch(`${TRADING_BASE}/chart-data/${encodeURIComponent(ticker)}?period=${period}`);
-  if (!res.ok) throw new Error('Failed to fetch chart data');
-  return res.json();
+  return fetchJSON(
+    `/trading/chart-data/${encodeURIComponent(ticker)}?period=${period}`,
+    undefined,
+    'Failed to fetch chart data',
+  );
 }
 
 // ── Sprint 5: Watchlists & Journal ──────────────────────────────
 
 export async function fetchDemoStatus(): Promise<DemoStatus> {
-  const res = await fetch(`${TRADING_BASE}/demo-status`);
-  if (!res.ok) throw new Error('Failed to fetch demo status');
-  return res.json();
+  return fetchJSON('/trading/demo-status', undefined, 'Failed to fetch demo status');
 }
 
 export async function toggleDemoStatus(demoMode?: boolean): Promise<DemoStatus> {
-  const res = await fetch(`${TRADING_BASE}/demo-toggle`, {
+  return fetchJSON('/trading/demo-toggle', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(typeof demoMode === 'boolean' ? { demo_mode: demoMode } : {}),
-  });
-  if (!res.ok) throw new Error('Failed to toggle demo mode');
-  return res.json();
+  }, 'Failed to toggle demo mode');
 }
 
 export async function fetchWatchlists(): Promise<WatchlistSaved[]> {
-  const res = await fetch(`${TRADING_BASE}/watchlists`);
-  if (!res.ok) throw new Error('Failed to fetch watchlists');
-  return res.json();
+  return fetchJSON('/trading/watchlists', undefined, 'Failed to fetch watchlists');
 }
 
 export async function createWatchlist(payload: { name: string; tickers: string[] }): Promise<{ id: string; name: string }> {
-  const res = await fetch(`${TRADING_BASE}/watchlists`, {
+  return fetchJSON('/trading/watchlists', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to create watchlist');
-  return res.json();
+  }, 'Failed to create watchlist');
 }
 
 export async function updateWatchlist(id: string, payload: { name?: string; tickers?: string[] }): Promise<{ id: string; name: string; tickers: string[] }> {
-  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, {
+  return fetchJSON(`/trading/watchlists/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to update watchlist');
-  return res.json();
+  }, 'Failed to update watchlist');
 }
 
 export async function deleteWatchlist(id: string): Promise<{ deleted: string }> {
-  const res = await fetch(`${TRADING_BASE}/watchlists/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete watchlist');
-  return res.json();
+  return fetchJSON(`/trading/watchlists/${id}`, { method: 'DELETE' }, 'Failed to delete watchlist');
 }
 
 export async function scanWatchlist(id: string): Promise<{ generated: number; signal_ids: string[] }> {
-  const res = await fetch(`${TRADING_BASE}/watchlists/${id}/scan`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to scan watchlist');
-  return res.json();
+  return fetchJSON(`/trading/watchlists/${id}/scan`, { method: 'POST' }, 'Failed to scan watchlist');
 }
 
 export async function fetchJournalEntries(limit: number = 50, offset: number = 0): Promise<JournalEntry[]> {
-  const res = await fetch(`${TRADING_BASE}/journal?limit=${limit}&offset=${offset}`);
-  if (!res.ok) throw new Error('Failed to fetch journal entries');
-  return res.json();
+  return fetchJSON(`/trading/journal?limit=${limit}&offset=${offset}`, undefined, 'Failed to fetch journal entries');
 }
 
 export async function createJournalEntry(payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${TRADING_BASE}/journal`, {
+  return fetchJSON('/trading/journal', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to create journal entry');
-  return res.json();
+  }, 'Failed to create journal entry');
 }
 
 export async function updateJournalEntry(id: string, payload: Record<string, unknown>): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${TRADING_BASE}/journal/${id}`, {
+  return fetchJSON(`/trading/journal/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error('Failed to update journal entry');
-  return res.json();
+  }, 'Failed to update journal entry');
 }
 
 export async function deleteJournalEntry(id: string): Promise<{ deleted: string }> {
-  const res = await fetch(`${TRADING_BASE}/journal/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete journal entry');
-  return res.json();
+  return fetchJSON(`/trading/journal/${id}`, { method: 'DELETE' }, 'Failed to delete journal entry');
 }
 
 export async function fetchJournalStats(): Promise<JournalStats> {
-  const res = await fetch(`${TRADING_BASE}/journal/stats`);
-  if (!res.ok) throw new Error('Failed to fetch journal stats');
-  return res.json();
+  return fetchJSON('/trading/journal/stats', undefined, 'Failed to fetch journal stats');
 }
 
 // ── Sprint 6: Settings & Performance ────────────────────────────
 
 export async function fetchTradingSettings(): Promise<TradingSettings> {
-  const res = await fetch(`${TRADING_BASE}/settings`);
-  if (!res.ok) throw new Error('Failed to fetch settings');
-  return res.json();
+  return fetchJSON('/trading/settings', undefined, 'Failed to fetch settings');
 }
 
 export async function updateTradingSettings(settings: Partial<TradingSettings>): Promise<{ status: string; keys: string[] }> {
-  const res = await fetch(`${TRADING_BASE}/settings`, {
+  return fetchJSON('/trading/settings', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
-  });
-  if (!res.ok) throw new Error('Failed to save settings');
-  return res.json();
+  }, 'Failed to save settings');
 }
 
 export async function fetchPerformanceAttribution(): Promise<PerformanceAttribution> {
-  const res = await fetch(`${TRADING_BASE}/performance`);
-  if (!res.ok) throw new Error('Failed to fetch performance data');
-  return res.json();
+  return fetchJSON('/trading/performance', undefined, 'Failed to fetch performance data');
 }
 
 // ── Portfolio Backtest, DSL, Replay, Greeks ──────────────────────
@@ -669,13 +633,10 @@ export async function runPortfolioBacktest(body: {
   initial_capital?: number;
   max_positions?: number;
 }): Promise<PortfolioBacktestResult> {
-  const res = await fetch(`${TRADING_BASE}/backtest/portfolio`, {
+  return fetchJSON('/trading/backtest/portfolio', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('Portfolio backtest failed');
-  return res.json();
+  }, 'Portfolio backtest failed');
 }
 
 export async function runDSLBacktest(body: {
@@ -684,13 +645,10 @@ export async function runDSLBacktest(body: {
   period?: string;
   initial_capital?: number;
 }): Promise<DslBacktestResult> {
-  const res = await fetch(`${TRADING_BASE}/backtest/dsl`, {
+  return fetchJSON('/trading/backtest/dsl', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('DSL backtest failed');
-  return res.json();
+  }, 'DSL backtest failed');
 }
 
 export async function runTradeReplay(body: {
@@ -698,13 +656,10 @@ export async function runTradeReplay(body: {
   strategy?: string;
   period?: string;
 }): Promise<Record<string, unknown>> {
-  const res = await fetch(`${TRADING_BASE}/backtest/replay`, {
+  return fetchJSON('/trading/backtest/replay', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('Trade replay failed');
-  return res.json();
+  }, 'Trade replay failed');
 }
 
 export async function computeGreeks(body: {
@@ -715,11 +670,8 @@ export async function computeGreeks(body: {
   risk_free_rate?: number;
   option_type?: string;
 }): Promise<Record<string, number>> {
-  const res = await fetch(`${TRADING_BASE}/options/greeks`, {
+  return fetchJSON('/trading/options/greeks', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('Greeks computation failed');
-  return res.json();
+  }, 'Greeks computation failed');
 }

@@ -3,17 +3,48 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { fetchBacktestList, runBacktest } from '../../api'
-import type { BacktestFullResult, BacktestSummary, BacktestTrade } from '../../types'
+import { compareBacktests, fetchBacktestList, runBacktest } from '../../api'
+import type {
+  BacktestCompareResult,
+  BacktestFullResult,
+  BacktestSummary,
+  BacktestTrade,
+} from '../../types'
 import { useToast } from '../../hooks/useToast'
 import EmptyState from './EmptyState'
 
 type SortDir = 'asc' | 'desc'
+
+const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'IWM', 'DIA'] as const
+const COMPARABLE_STRATEGIES = ['momentum', 'mean_reversion', 'breakout'] as const
+
+/** Distinct series colours for the comparison overlay. */
+const STRATEGY_COLORS: Record<string, string> = {
+  momentum: '#00d68f',
+  mean_reversion: '#448aff',
+  breakout: '#ffab00',
+}
+
+/**
+ * Rows of the comparison table. `good` marks which direction is better so the
+ * best/worst cell in each row can be highlighted.
+ */
+const COMPARE_ROWS: { key: string; label: string; good: 'high' | 'low' | null; suffix?: string }[] = [
+  { key: 'total_return_pct', label: 'Return %', good: 'high', suffix: '%' },
+  { key: 'sharpe_ratio', label: 'Sharpe', good: 'high' },
+  { key: 'sortino_ratio', label: 'Sortino', good: 'high' },
+  { key: 'max_drawdown_pct', label: 'Max DD %', good: 'low', suffix: '%' },
+  { key: 'win_rate', label: 'Win Rate %', good: 'high', suffix: '%' },
+  { key: 'profit_factor', label: 'Profit Factor', good: 'high' },
+  { key: 'total_trades', label: 'Trades', good: null },
+]
 
 const formatCurrency = (v: number | null | undefined) =>
   v == null ? '—' : v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -45,16 +76,46 @@ export default function BacktestPanel() {
   const [strategy, setStrategy] = useState('momentum')
   const [capital, setCapital] = useState(100000)
   const [ticker, setTicker] = useState('SPY')
+  const [benchmark, setBenchmark] = useState<string>('SPY')
+  const [compareMode, setCompareMode] = useState(false)
+  const [strategiesCompare, setStrategiesCompare] = useState<string[]>([...COMPARABLE_STRATEGIES])
   const [result, setResult] = useState<BacktestFullResult | null>(null)
+  const [compareResult, setCompareResult] = useState<BacktestCompareResult | null>(null)
   const [previousRuns, setPreviousRuns] = useState<BacktestSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPrevious, setShowPrevious] = useState(false)
   const [pnlSortDir, setPnlSortDir] = useState<SortDir>('desc')
 
+  const toggleCompareStrategy = (s: string) => {
+    setStrategiesCompare((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
+  }
+
   const onRun = async () => {
     setLoading(true)
     setError(null)
+    if (compareMode) {
+      addToast('info', 'Comparison started', `Running ${strategiesCompare.length} strategies on ${ticker}...`)
+      try {
+        const res = await compareBacktests({
+          strategies: strategiesCompare,
+          ticker: ticker.toUpperCase(),
+          period: '1y',
+          initial_capital: capital,
+          benchmark: benchmark || undefined,
+        })
+        setCompareResult(res)
+        setResult(null)
+        addToast('trade', 'Comparison complete', `${res.results.length} strategies compared`)
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to run comparison'
+        setError(msg)
+        addToast('error', 'Comparison failed', msg)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
     addToast('info', 'Backtest started', `Running ${strategy} on ${ticker}...`)
     try {
       const res = await runBacktest({
@@ -62,8 +123,10 @@ export default function BacktestPanel() {
         initial_capital: capital,
         ticker: ticker.toUpperCase(),
         period: '1y',
+        benchmark: benchmark || undefined,
       })
       setResult(res)
+      setCompareResult(null)
       addToast(
         'trade',
         'Backtest complete',
@@ -88,16 +151,39 @@ export default function BacktestPanel() {
       })
   }, [])
 
-  const equityData = useMemo(
-    () =>
-      result
-        ? result.equity_curve.dates.map((d, i) => ({
-            date: d,
-            value: result.equity_curve.values[i] ?? null,
-          }))
-        : [],
-    [result],
-  )
+  const equityData = useMemo(() => {
+    if (!result) return []
+    // Benchmark dates are aligned to the strategy's index server-side, but look
+    // them up by date rather than by position so a gap cannot shift the overlay.
+    const benchIndex = new Map(
+      (result.benchmark_curve?.dates ?? []).map((d, i) => [d, result.benchmark_curve!.values[i]]),
+    )
+    return result.equity_curve.dates.map((d, i) => ({
+      date: d,
+      value: result.equity_curve.values[i] ?? null,
+      benchmark: benchIndex.has(d) ? benchIndex.get(d) ?? null : null,
+    }))
+  }, [result])
+
+  const compareEquityData = useMemo(() => {
+    if (!compareResult?.results.length) return []
+    const benchIndex = new Map(
+      (compareResult.benchmark_curve?.dates ?? []).map((d, i) => [
+        d,
+        compareResult.benchmark_curve!.values[i],
+      ]),
+    )
+    const perStrategy = compareResult.results.map((r) => ({
+      strategy: r.strategy,
+      byDate: new Map(r.equity_curve.dates.map((d, i) => [d, r.equity_curve.values[i]])),
+    }))
+    return compareResult.results[0].equity_curve.dates.map((d) => {
+      const point: Record<string, string | number | null> = { date: d }
+      for (const s of perStrategy) point[s.strategy] = s.byDate.get(d) ?? null
+      point.benchmark = benchIndex.has(d) ? benchIndex.get(d) ?? null : null
+      return point
+    })
+  }, [compareResult])
 
   const drawdownData = useMemo(
     () =>
@@ -166,54 +252,104 @@ export default function BacktestPanel() {
       <h2 className="font-mono font-bold text-lg mb-4">Backtest Lab</h2>
 
       {/* Config Bar */}
-      <div className="card mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div>
-          <div className="label mb-1">Strategy</div>
-          <select
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value)}
-            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+      <div className="card mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <button
+            className={`text-sm px-3 py-1 rounded ${!compareMode ? 'bg-accent-green/20 text-accent-green' : 'bg-surface-tertiary text-txt-secondary'}`}
+            onClick={() => setCompareMode(false)}
           >
-            <option value="momentum">Momentum</option>
-            <option value="mean_reversion">Mean Reversion</option>
-            <option value="breakout">Breakout</option>
-            <option value="ensemble">Ensemble</option>
-          </select>
-        </div>
-        <div>
-          <div className="label mb-1">Ticker</div>
-          <input
-            type="text"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
-            placeholder="SPY"
-          />
-        </div>
-        <div>
-          <div className="label mb-1">Initial Capital</div>
-          <input
-            type="number"
-            value={capital}
-            onChange={(e) => setCapital(Number(e.target.value))}
-            className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
-          />
-        </div>
-        <div className="flex flex-col justify-between">
-          <div className="text-xs text-txt-tertiary mb-2">Uses 1 year of daily data</div>
-          <button className="btn-primary w-full" onClick={onRun} disabled={loading}>
-            {loading ? 'Running...' : 'Run Backtest'}
+            Single
           </button>
+          <button
+            className={`text-sm px-3 py-1 rounded ${compareMode ? 'bg-accent-green/20 text-accent-green' : 'bg-surface-tertiary text-txt-secondary'}`}
+            onClick={() => setCompareMode(true)}
+          >
+            Compare
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          {!compareMode ? (
+            <div>
+              <div className="label mb-1">Strategy</div>
+              <select
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+              >
+                <option value="momentum">Momentum</option>
+                <option value="mean_reversion">Mean Reversion</option>
+                <option value="breakout">Breakout</option>
+                <option value="ensemble">Ensemble</option>
+              </select>
+            </div>
+          ) : (
+            <div className="md:col-span-2">
+              <div className="label mb-1">Strategies to Compare</div>
+              <div className="flex flex-wrap gap-3 pt-1.5">
+                {COMPARABLE_STRATEGIES.map((s) => (
+                  <label key={s} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={strategiesCompare.includes(s)}
+                      onChange={() => toggleCompareStrategy(s)}
+                    />
+                    <span className="capitalize">{s.replace('_', ' ')}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <div className="label mb-1">Ticker</div>
+            <input
+              type="text"
+              value={ticker}
+              onChange={(e) => setTicker(e.target.value.toUpperCase())}
+              className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+              placeholder="SPY"
+            />
+          </div>
+          <div>
+            <div className="label mb-1">Benchmark</div>
+            <select
+              value={benchmark}
+              onChange={(e) => setBenchmark(e.target.value)}
+              className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+            >
+              {BENCHMARK_OPTIONS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="label mb-1">Initial Capital</div>
+            <input
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(Number(e.target.value))}
+              className="w-full bg-surface-tertiary border border-border rounded px-3 py-2"
+            />
+          </div>
+          <div className="flex flex-col justify-between">
+            <div className="text-xs text-txt-tertiary mb-2">Uses 1 year of daily data</div>
+            <button
+              className="btn-primary w-full"
+              onClick={onRun}
+              disabled={loading || (compareMode && strategiesCompare.length === 0)}
+            >
+              {loading ? 'Running...' : compareMode ? 'Compare Strategies' : 'Run Backtest'}
+            </button>
+          </div>
         </div>
       </div>
 
       {error && <div className="card mb-3 text-accent-red text-sm">{error}</div>}
 
-      {!result && !loading && renderEmptyState()}
+      {!result && !compareResult && !loading && renderEmptyState()}
 
-      {/* Metrics Grid */}
+      {/* Metrics Grid — single mode */}
       {loading && renderMetricsSkeleton()}
-      {!loading && result && (
+      {!loading && result && !compareResult && (
         <div className="card mb-4">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
             <MetricTile
@@ -251,10 +387,11 @@ export default function BacktestPanel() {
               value={String(result.metrics.total_trades)}
               className="text-txt-primary"
             />
+            {/* The API already returns cagr in percent (metrics.py multiplies by 100). */}
             <MetricTile
               label="CAGR %"
-              value={formatPct(result.metrics.cagr * 100, 1)}
-              className={metricColor(result.metrics.cagr * 100)}
+              value={formatPct(result.metrics.cagr, 1)}
+              className={metricColor(result.metrics.cagr)}
             />
             <MetricTile
               label="Calmar Ratio"
@@ -276,17 +413,103 @@ export default function BacktestPanel() {
               value={formatPct(result.metrics.best_trade_pnl, 1)}
               className={metricColor(result.metrics.best_trade_pnl)}
             />
+            {result.benchmark_return_pct != null && (
+              <MetricTile
+                label={`${result.benchmark_curve?.ticker ?? 'Benchmark'} Buy & Hold %`}
+                value={formatPct(result.benchmark_return_pct, 1)}
+                className="text-txt-secondary"
+              />
+            )}
           </div>
         </div>
       )}
 
-      {/* Equity Curve */}
-      {result && (
+      {/* Strategy Comparison — metrics table */}
+      {!loading && compareResult && (
         <div className="card mb-4">
-          <h3 className="font-mono font-semibold text-sm mb-2">Equity Curve</h3>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+            <h3 className="font-mono font-semibold text-sm">Strategy Comparison</h3>
+            <span className="text-xs text-txt-tertiary font-mono">
+              {compareResult.ticker} · 1y daily
+              {compareResult.benchmark_curve ? ` · vs ${compareResult.benchmark_curve.ticker} buy & hold` : ''}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[480px]">
+              <thead>
+                <tr className="text-left text-txt-tertiary border-b border-border">
+                  <th className="py-2 px-2">Metric</th>
+                  {compareResult.results.map((r) => (
+                    <th key={r.strategy} className="py-2 px-2 capitalize">
+                      {r.strategy.replace('_', ' ')}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE_ROWS.map(({ key, label, good, suffix }) => {
+                  const values = compareResult.results.map((r) => {
+                    const raw = (r.metrics as unknown as Record<string, number>)[key]
+                    if (raw == null || Number.isNaN(raw)) return null
+                    return key === 'win_rate' ? raw * 100 : raw
+                  })
+                  const present = values.filter((v): v is number => v != null)
+                  const bestValue = good == null || present.length === 0
+                    ? null
+                    : good === 'high' ? Math.max(...present) : Math.min(...present)
+                  const worstValue = good == null || present.length < 2
+                    ? null
+                    : good === 'high' ? Math.min(...present) : Math.max(...present)
+                  return (
+                    <tr key={key} className="border-b border-border/40">
+                      <td className="py-2 px-2 text-txt-tertiary">{label}</td>
+                      {compareResult.results.map((r, i) => {
+                        const v = values[i]
+                        const cellClass = v == null
+                          ? 'text-txt-tertiary'
+                          : bestValue != null && v === bestValue
+                            ? 'text-accent-green'
+                            : worstValue != null && v === worstValue
+                              ? 'text-accent-red'
+                              : ''
+                        return (
+                          <td key={r.strategy} className={`py-2 px-2 font-mono ${cellClass}`}>
+                            {v == null
+                              ? '—'
+                              : key === 'total_trades'
+                                ? String(v)
+                                : `${v.toFixed(2)}${suffix ?? ''}`}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-txt-tertiary mt-3">
+            Same ticker, same window, same capital for every strategy. Trade counts differ
+            because each strategy fires on its own conditions — compare risk-adjusted
+            columns, not raw return alone.
+          </p>
+        </div>
+      )}
+
+      {/* Equity Curve — single mode, with benchmark overlay */}
+      {result && !compareResult && (
+        <div className="card mb-4">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
+            <h3 className="font-mono font-semibold text-sm">Equity Curve</h3>
+            {result.benchmark_curve && (
+              <span className="text-xs text-txt-tertiary font-mono">
+                dashed = {result.benchmark_curve.ticker} buy &amp; hold
+              </span>
+            )}
+          </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={equityData}>
+              <ComposedChart data={equityData}>
                 <defs>
                   <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#00d68f" stopOpacity={0.4} />
@@ -331,15 +554,89 @@ export default function BacktestPanel() {
                   fill="url(#equityFill)"
                   strokeWidth={2}
                   dot={false}
+                  name="Strategy"
                 />
-              </AreaChart>
+                {result.benchmark_curve && (
+                  <Line
+                    type="monotone"
+                    dataKey="benchmark"
+                    stroke="#8888a0"
+                    strokeDasharray="5 5"
+                    strokeWidth={1.5}
+                    dot={false}
+                    name={`${result.benchmark_curve.ticker} Buy & Hold`}
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Equity Curve — comparison overlay */}
+      {compareResult && (
+        <div className="card mb-4">
+          <h3 className="font-mono font-semibold text-sm mb-2">Equity Curve Comparison</h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={compareEquityData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short' })}
+                  stroke="#666"
+                  minTickGap={32}
+                />
+                <YAxis
+                  tickFormatter={(v) => (typeof v === 'number' ? `$${(v / 1000).toFixed(0)}k` : '')}
+                  stroke="#666"
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#12121a',
+                    border: '1px solid #333',
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  formatter={(v) => (typeof v === 'number' ? formatCurrency(v) : String(v ?? ''))}
+                  labelFormatter={(d) =>
+                    new Date(d).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  }
+                />
+                {compareResult.results.map((r) => (
+                  <Line
+                    key={r.strategy}
+                    type="monotone"
+                    dataKey={r.strategy}
+                    stroke={STRATEGY_COLORS[r.strategy] ?? '#8888a0'}
+                    strokeWidth={2}
+                    dot={false}
+                    name={r.strategy.replace('_', ' ')}
+                  />
+                ))}
+                {compareResult.benchmark_curve && (
+                  <Line
+                    type="monotone"
+                    dataKey="benchmark"
+                    stroke="#8888a0"
+                    strokeDasharray="5 5"
+                    strokeWidth={1.5}
+                    dot={false}
+                    name={`${compareResult.benchmark_curve.ticker} Buy & Hold`}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
       {/* Drawdown Curve */}
-      {result && (
+      {result && !compareResult && (
         <div className="card mb-4">
           <h3 className="font-mono font-semibold text-sm mb-2">Drawdown</h3>
           <div className="h-[200px]">
@@ -397,7 +694,7 @@ export default function BacktestPanel() {
       )}
 
       {/* Monthly Returns Heatmap */}
-      {result && (
+      {result && !compareResult && (
         <div className="card mb-4">
           <h3 className="font-mono font-semibold text-sm mb-3">Monthly Returns</h3>
           <div className="overflow-x-auto">
@@ -434,7 +731,7 @@ export default function BacktestPanel() {
       )}
 
       {/* Trade Log */}
-      {result && (
+      {result && !compareResult && (
         <div className="card mb-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-mono font-semibold text-sm">Trade Log</h3>

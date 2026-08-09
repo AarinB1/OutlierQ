@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="OutlierQ — an open research platform for event-driven trading signals. All figures synthetic. Not financial advice.">
+  <defs>
+    <radialGradient id="glowTop" cx="50%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#448aff" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#448aff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowRight" cx="92%" cy="88%" r="55%">
+      <stop offset="0%" stop-color="#00d68f" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#00d68f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#448aff" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#448aff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- No feTurbulence grain here on purpose: per-pixel noise defeats PNG's
+       predictive filters and inflated the rasterised og.png from ~50 kB to
+       756 kB for an effect nobody sees in a share card. -->
+
+
+  <rect width="1200" height="630" fill="#05070b"/>
+  <rect width="1200" height="630" fill="url(#glowTop)"/>
+  <rect width="1200" height="630" fill="url(#glowRight)"/>
+
+  <!-- wordmark -->
+  <circle cx="80" cy="80" r="7" fill="#448aff"/>
+  <text x="100" y="88" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="27" font-weight="600" fill="#f2f4f8" letter-spacing="-0.4">OutlierQ</text>
+  <text x="1120" y="88" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="2.6">MIT · OPEN SOURCE</text>
+  <line x1="80" y1="118" x2="1120" y2="118" stroke="#1a2233" stroke-width="1"/>
+
+  <!-- eyebrow -->
+  <text x="80" y="196" font-family="'JetBrains Mono', monospace" font-size="17" fill="#8b93a7" letter-spacing="4.2">EVENT-DRIVEN TRADING-SIGNAL RESEARCH</text>
+
+  <!-- headline -->
+  <text x="80" y="292" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="82" font-weight="600" fill="#f2f4f8" letter-spacing="-2.1">Markets overreact.</text>
+  <text x="80" y="380" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="82" font-weight="600" fill="#448aff" letter-spacing="-2.1">Machines notice first.</text>
+
+  <!-- pipeline stages -->
+  <g font-family="'JetBrains Mono', monospace" font-size="15" letter-spacing="2.6">
+    <rect x="80" y="428" width="196" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
+    <text x="102" y="457" fill="#7a8497">01</text>
+    <text x="138" y="457" fill="#c3c9d6">DETECTION</text>
+
+    <rect x="288" y="428" width="176" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
+    <text x="310" y="457" fill="#7a8497">02</text>
+    <text x="346" y="457" fill="#c3c9d6">SIGNALS</text>
+
+    <rect x="476" y="428" width="200" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
+    <text x="498" y="457" fill="#7a8497">03</text>
+    <text x="534" y="457" fill="#c3c9d6">ARBITRAGE</text>
+
+    <rect x="688" y="428" width="188" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
+    <text x="710" y="457" fill="#7a8497">04</text>
+    <text x="746" y="457" fill="#c3c9d6">TRACKING</text>
+  </g>
+
+  <!-- synthetic equity sparkline, decorative -->
+  <g transform="translate(80 508)">
+    <path d="M0 62 L34 55 L68 58 L102 48 L136 52 L170 40 L204 44 L238 35 L272 47 L306 39 L340 32 L374 35 L408 24 L442 27 L476 15 L510 19 L544 8 L578 12 L612 4 L612 76 L0 76 Z" fill="url(#spark)"/>
+    <path d="M0 62 L34 55 L68 58 L102 48 L136 52 L170 40 L204 44 L238 35 L272 47 L306 39 L340 32 L374 35 L408 24 L442 27 L476 15 L510 19 L544 8 L578 12 L612 4" fill="none" stroke="#448aff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="612" cy="4" r="5" fill="#448aff" stroke="#05070b" stroke-width="2.5"/>
+  </g>
+
+  <!-- disclaimer -->
+  <text x="80" y="600" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="1.3">All figures synthetic · paper trading only · not financial advice</text>
+  <text x="1120" y="600" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="1.3">aarinb1.github.io/OutlierQ</text>
+
+</svg>

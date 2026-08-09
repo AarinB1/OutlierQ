@@ -56,3 +56,63 @@ things git history does not record.
   error" and OperationalError test failures, not as a clear disk-full signal.
   Delete caches, then re-run anything that failed around the same time before
   trusting its result.
+- **A handoff brief claiming prior cleanup work "already completed" was only
+  ~20% true.** `main` did exist as the merged trunk, but `trading-dashboard/`
+  was never deleted, all thirteen "deleted" stale branches were still on the
+  remote, neither rollback tag existed, and the findings the brief said to read
+  out of this file had never been written to it. Verify inherited state with
+  `git ls-remote --heads`, `git tag`, and an `ls` before trusting a handoff
+  summary — the cost of checking is seconds and the cost of assuming is
+  building on a wrong base.
+- **The 923-line `BacktestPanel` with benchmark/compare/export/date-range lives
+  at `trading-dashboard/src/components/BacktestPanel.tsx`** (SHA `6e1a4eb`), not
+  in `dashboard/`'s own history — `git log --follow` on the `dashboard/` path
+  never surfaces it because the feature-rich version only ever existed in the
+  standalone app. When a file "lost" features, check sibling apps' paths, not
+  just the current path's history.
+- **`dashboard/src/api.ts` had two request styles, not one.** The options half
+  funnels through a single `fetchJSON` helper; the trading half (`TRADING_BASE`,
+  ~45 functions) called `fetch()` directly with hand-rolled `!res.ok` checks.
+  Any change that needs one interception point for HTTP — a mock transport, auth
+  headers, retry, tracing — has to normalise the second style first. Count the
+  call sites before believing a "single choke point" claim.
+- **`main` exists but is not this repo's default branch** — the GitHub API reports
+  `default_branch: claude/outlierq-trading-signals-y1In7`, even though that branch
+  and `main` point at the identical commit. `git branch -a` and `git log` cannot
+  show you this; only the API or the Settings page can. A workflow gated on
+  `push: branches: [main]` still fires correctly (an explicit branch filter is
+  independent of the default), but "default branch" assumptions in tooling,
+  PR bases, and branch protection will silently target the wrong ref.
+- **GitHub Pages was never enabled on this repo** (`has_pages: false`). The
+  `actions/configure-pages@v5` input `enablement: true` provisions the Pages site
+  from inside the workflow using the `pages: write` token, which avoids a manual
+  trip to repo Settings before the first deploy.
+- **Lighthouse against a non-gzipping local server measures the wrong site.**
+  `http-server` does not compress, so the landing bundle transferred at 197 kB
+  instead of 61 kB and mobile LCP read 2.6 s — a budget failure that did not
+  exist. The tell was `uses-text-compression` scoring 0 with 750 ms of claimed
+  savings; no production static host does that. Re-measured behind a tiny
+  gzip-ing Node server (what Pages actually serves) LCP was 1.8 s and
+  Performance went 95 → 99. Check that audit before believing a local LCP.
+- **`\uXXXX` is only an escape inside a JS string literal.** In bare JSX text
+  (`<p>a — b</p>`) and in JSX attributes (`title="a — b"`) it renders
+  as the literal six characters. The repo's `{'◎'}` idiom is correct
+  precisely because the braces make it a JS string. A pre-existing instance in
+  `StockHeader` was worse — bare JSX text also does not interpolate `${...}`, so
+  the Tickers page shipped `Day: ${info.day_low.toFixed(2)}` verbatim on screen.
+- **Measure contrast on the composited render, not on the token table.** Both
+  palettes look fine pair-by-pair, but translucent tints stack: `bg-accent-amber/10`
+  over `surface-secondary` lands at `#312924`, where `txt-secondary` is only
+  4.15:1 — so the synthetic-data disclosure, the one element that must be
+  legible, was the worst offender. Equally, a token that passes at full strength
+  fails at `/60` opacity. Walking the DOM and compositing every background down
+  to the page ground found 15 AA failures that reading `tailwind.config.js`
+  could not.
+- **The dashboard's `txt-tertiary` was #55556a — 2.37:1 on `surface-tertiary`.**
+  It carries timestamps, counts and pagination, so it is body text, not
+  decoration. Lightened in-hue to `#8484a4` (min 4.76:1). White-on-`accent-blue`
+  buttons were 3.32:1; the landing page had already solved the same problem with
+  dark-on-accent at 6.07:1.
+- **`.gitignore`'s bare `dist/` does not cover `dist-demo/`.** A second build
+  output directory needs its own entry, or the whole demo bundle becomes
+  untracked-but-visible noise in `git status` (or worse, gets committed).

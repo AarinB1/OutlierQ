@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build:demo": "tsc && VITE_DEMO_MODE=true vite build",
+    "preview": "vite preview",
+    "preview:demo": "VITE_DEMO_MODE=true vite preview --outDir dist-demo"
   },
   "dependencies": {
     "lightweight-charts": "^5.1.0",
