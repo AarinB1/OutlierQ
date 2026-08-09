@@ -19,8 +19,11 @@ permissions:
   pages: write
   id-token: write
 
+# Pull-request builds share one group; all deploy triggers (push,
+# workflow_dispatch) share another so they serialize against each other.
+# A single shared "pages" group let a PR check cancel an in-flight deploy.
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && 'pr' || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
@@ -37,13 +40,15 @@ jobs:
             landing/package-lock.json
             dashboard/package-lock.json
 
+      # Requires Pages to already exist: Settings -> Pages -> Build and
+      # deployment -> Source: GitHub Actions. `enablement: true` cannot stand in
+      # for that — creating a Pages site is not something GITHUB_TOKEN can do
+      # (`pages: write` permits deploying to an existing site, not creating one),
+      # so it failed with "Resource not accessible by integration" and buried the
+      # real cause. Once Pages exists this step just reads its config.
       - name: Configure Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
-        with:
-          # Sets the Pages source to GitHub Actions on the first run so the
-          # deploy does not require a manual visit to repo Settings.
-          enablement: true
 
       - name: Install landing deps
         working-directory: landing
