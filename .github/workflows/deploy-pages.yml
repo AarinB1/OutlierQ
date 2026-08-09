@@ -19,11 +19,11 @@ permissions:
   pages: write
   id-token: write
 
-# Keyed by event so a pull_request build can never cancel an in-flight deploy.
-# A single shared "pages" group did exactly that: the PR check and the push to
-# main started three seconds apart and the PR run cancelled the deploy.
+# Pull-request builds share one group; all deploy triggers (push,
+# workflow_dispatch) share another so they serialize against each other.
+# A single shared "pages" group let a PR check cancel an in-flight deploy.
 concurrency:
-  group: pages-${{ github.event_name }}
+  group: pages-${{ github.event_name == 'pull_request' && 'pr' || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
