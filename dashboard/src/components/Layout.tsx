@@ -409,7 +409,7 @@ export default function Layout({ section, setSection, page, setPage, connected, 
         <Topbar section={section} page={page} connected={connected} />
         <div className="max-w-content mx-auto p-8 max-md:p-4">
           {DEMO_MODE && <DemoNotice />}
-          {!connected ? (
+          {!DEMO_MODE && !connected ? (
             <div className="flex items-center justify-center h-[calc(100vh-11rem)]">
               {/* Corner-bracketed terminal frame */}
               <div className="relative bg-surface-secondary/70 border border-border px-12 py-10 max-md:px-6 text-center max-w-md">
