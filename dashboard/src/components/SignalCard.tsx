@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { fetchSparkline } from '../api'
 import type { Signal } from '../types'
 import Sparkline from './Sparkline'
+import Icon from './Icon'
 
 interface Props {
   signal: Signal
@@ -9,9 +10,9 @@ interface Props {
 }
 
 function confidenceGradient(c: number): string {
-  if (c >= 0.7) return 'linear-gradient(90deg, #00d68f, #00d68f)'
-  if (c >= 0.4) return 'linear-gradient(90deg, #ffab00, #00d68f)'
-  return 'linear-gradient(90deg, #ff3d5a, #ffab00)'
+  if (c >= 0.7) return 'linear-gradient(90deg, #5ccb95, #5ccb95)'
+  if (c >= 0.4) return 'linear-gradient(90deg, #e2b25c, #5ccb95)'
+  return 'linear-gradient(90deg, #f28a8f, #e2b25c)'
 }
 
 export default function SignalCard({ signal, onTickerClick }: Props) {
@@ -31,8 +32,8 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
   const confidencePct = Math.round(signal.confidence * 100)
   const confidenceFill = useMemo(() => confidenceGradient(signal.confidence), [signal.confidence])
   const cardShadow = isCall
-    ? '0 4px 20px rgba(0, 214, 143, 0.08)'
-    : '0 4px 20px rgba(255, 61, 90, 0.08)'
+    ? '0 4px 20px rgba(92, 203, 149, 0.08)'
+    : '0 4px 20px rgba(242, 138, 143, 0.08)'
 
   useEffect(() => {
     let mounted = true
@@ -82,14 +83,14 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
       tabIndex={0}
       aria-expanded={expanded}
       style={{
-        boxShadow: signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(0, 214, 143, 0.3)' : undefined,
+        boxShadow: signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(92, 203, 149, 0.3)' : undefined,
       }}
       onMouseEnter={(event) => {
         ;(event.currentTarget as HTMLDivElement).style.boxShadow = cardShadow
       }}
       onMouseLeave={(event) => {
         ;(event.currentTarget as HTMLDivElement).style.boxShadow =
-          signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(0, 214, 143, 0.3)' : ''
+          signal.confidence >= 0.7 ? 'inset 3px 0 12px -4px rgba(92, 203, 149, 0.3)' : ''
       }}
     >
       {/* Top row: ticker + direction */}
@@ -126,7 +127,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
       ) : (
         sparklineData && sparklineData.length > 1 ? (
           <div className="mb-4">
-            <Sparkline data={sparklineData} color={isCall ? '#00d68f' : '#ff3d5a'} />
+            <Sparkline data={sparklineData} color={isCall ? '#5ccb95' : '#f28a8f'} />
           </div>
         ) : null
       )}
@@ -159,7 +160,7 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
             style={{
               width: `${signal.confidence * 100}%`,
               background: confidenceFill,
-              boxShadow: signal.confidence >= 0.7 ? '0 0 8px rgba(0, 214, 143, 0.4)' : undefined,
+              boxShadow: signal.confidence >= 0.7 ? '0 0 8px rgba(92, 203, 149, 0.4)' : undefined,
             }}
           />
           <div
@@ -278,10 +279,10 @@ export default function SignalCard({ signal, onTickerClick }: Props) {
           event.stopPropagation()
           setExpanded((prev) => !prev)
         }}
-        className="mt-3 text-xs text-txt-secondary hover:text-txt-primary transition-colors inline-flex items-center gap-1"
+        className="mt-2 -ml-1 min-h-[28px] rounded px-1 text-xs text-txt-secondary hover:text-txt-primary transition-colors inline-flex items-center gap-1"
       >
         Details
-        <span className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}>⌄</span>
+        <Icon name="chevron-down" className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
       <div

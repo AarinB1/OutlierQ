@@ -74,7 +74,9 @@ async function fontCss() {
   );
 }
 
-async function render(page, svgPath, outPath, width, height) {
+/** `bg` fills anything the SVG leaves transparent (the favicon's rounded
+ *  corners), so it should match the artwork's own edge colour. */
+async function render(page, svgPath, outPath, width, height, bg) {
   const svg = await readFile(join(pub, svgPath), "utf8");
   const css = await fontCss();
   await page.setViewportSize({ width, height });
@@ -82,7 +84,7 @@ async function render(page, svgPath, outPath, width, height) {
     `<!doctype html><meta charset="utf-8"><style>
        ${css}
        *{margin:0;padding:0}
-       html,body{width:${width}px;height:${height}px;background:#05070b;overflow:hidden}
+       html,body{width:${width}px;height:${height}px;background:${bg};overflow:hidden}
        svg{display:block;width:${width}px;height:${height}px}
      </style>${svg}`,
     { waitUntil: "load" }
@@ -98,7 +100,7 @@ async function render(page, svgPath, outPath, width, height) {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
-await render(page, "og.svg", "og.png", 1200, 630);
-await render(page, "favicon.svg", "favicon-32.png", 32, 32);
-await render(page, "favicon.svg", "apple-touch-icon.png", 180, 180);
+await render(page, "og.svg", "og.png", 1200, 630, "#f6f7f4");
+await render(page, "favicon.svg", "favicon-32.png", 32, 32, "#2347a6");
+await render(page, "favicon.svg", "apple-touch-icon.png", 180, 180, "#2347a6");
 await browser.close();

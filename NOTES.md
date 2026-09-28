@@ -116,3 +116,27 @@ things git history does not record.
 - **`.gitignore`'s bare `dist/` does not cover `dist-demo/`.** A second build
   output directory needs its own entry, or the whole demo bundle becomes
   untracked-but-visible noise in `git status` (or worse, gets committed).
+- **The landing page's pipeline claims had drifted from the code.** It showed a
+  "2.5σ threshold" (code: `volume_threshold=3.0`), an "escalation gate: 2 of 3
+  detectors must agree" (code: a strict cascade of volume, then tone, then
+  sources, with options flow as an adjustment or a separate options-only path),
+  and said arbitrage markets were "matched on resolution criteria" (code:
+  question-text similarity only). Read `src/detection/__init__.py` before
+  describing the pipeline anywhere; `landing/npm run check:lab` now fails CI if
+  the signal lab's constants stop matching the Python defaults.
+- **Build-anchored fixture dates rot on a static host.** The demo anchored every
+  date to `__BUILD_TIME__`, so seven weeks after the last deploy it still showed
+  signals as PENDING with expiries seven weeks gone. All fixture dates are
+  offsets from one anchor, so moving the anchor to the viewer's UTC day fixed
+  every page at once and kept output deterministic per day.
+- **A composited contrast ratio near 1.0 means you measured mid-animation.** The
+  Events page reported 140 AA failures with ratios down to 1.00; re-measured
+  after its staggered fade-in finished, it had none. Wait out entrance
+  animations before trusting a DOM contrast walk.
+- **SVG text shrinks with its viewBox.** A 13-unit label in the hero figure
+  rendered at ~7.6px on a phone. CSS `font-size` in px on SVG text is in user
+  units, so a phone media query raising it to 20 keeps the rendered size ≥ 11px.
+- **Hiding nav labels with `display:none` at narrow widths strips the button's
+  accessible name**, and putting `aria-label` back causes Lighthouse's
+  label-content-name-mismatch when the visible text also includes a number
+  badge. Use `sr-only` for the collapsed label and `aria-hidden` on the badge.

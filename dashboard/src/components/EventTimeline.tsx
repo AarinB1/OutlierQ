@@ -5,6 +5,7 @@ import { SkeletonEventCard } from './SkeletonCard'
 import { useStaggeredList } from '../hooks/useStaggeredList'
 import { useToast } from '../hooks/useToast'
 import { usePersistedState } from '../hooks/usePersistedState'
+import Icon from './Icon'
 
 const EVENT_BADGE: Record<string, { bg: string; text: string }> = {
   scandal:        { bg: 'bg-accent-red-muted', text: 'text-accent-red' },
@@ -93,8 +94,9 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
-          {'\u25C9'} Events
+        <h2 className="flex items-center gap-2.5 font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">
+          <Icon name="activity" className="h-5 w-5 text-accent-blue" />
+          Events
         </h2>
         <input
           type="text"
@@ -156,9 +158,9 @@ export default function EventTimeline({ onTickerClick }: Props = {}) {
               : articleCount > 0
                 ? ['Articles detected']
                 : []
-            let sentimentGradient = 'linear-gradient(90deg, #ff3d5a, #ffab00)'
-            if (ev.confidence >= 0.7) sentimentGradient = 'linear-gradient(90deg, #00d68f, #00d68f)'
-            else if (ev.confidence >= 0.4) sentimentGradient = 'linear-gradient(90deg, #ffab00, #00d68f)'
+            let sentimentGradient = 'linear-gradient(90deg, #f28a8f, #e2b25c)'
+            if (ev.confidence >= 0.7) sentimentGradient = 'linear-gradient(90deg, #5ccb95, #5ccb95)'
+            else if (ev.confidence >= 0.4) sentimentGradient = 'linear-gradient(90deg, #e2b25c, #5ccb95)'
 
             return (
               <div

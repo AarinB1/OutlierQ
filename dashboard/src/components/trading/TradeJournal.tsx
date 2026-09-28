@@ -149,7 +149,7 @@ export default function TradeJournal() {
       </div>
 
       <div className="flex justify-between items-center">
-        <h2 className="font-mono font-bold text-lg">Journal</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Journal</h2>
         <button className="btn-primary" onClick={openCreate}>
           Add Journal Entry
         </button>

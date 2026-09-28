@@ -3,6 +3,7 @@ import { fetchStats, fetchConfusion, triggerEvaluate, fetchMlReadiness, fetchMlS
 import type { AccuracyStats, ConfusionMatrix, MlReadiness, MlStatus } from '../types'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import { SkeletonStatCard } from './SkeletonCard'
+import Icon from './Icon'
 import { useStaggeredList } from '../hooks/useStaggeredList'
 
 function useCountUp(target: number, duration = 600): number {
@@ -207,8 +208,9 @@ export default function AccuracyPanel() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
-          {'\u25CE'} Accuracy
+        <h2 className="flex items-center gap-2.5 font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">
+          <Icon name="target" className="h-5 w-5 text-accent-blue" />
+          Accuracy
         </h2>
         <button onClick={handleEvaluate} disabled={evaluating} className="btn-primary">
           {evaluating ? 'EVALUATING...' : 'EVALUATE PENDING'}
@@ -321,14 +323,14 @@ export default function AccuracyPanel() {
             <AreaChart data={cumulativePnl} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="cumPnlGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={cumulativePositive ? '#00d68f' : '#ff3d5a'} stopOpacity={0.12} />
-                  <stop offset="100%" stopColor={cumulativePositive ? '#00d68f' : '#ff3d5a'} stopOpacity={0} />
+                  <stop offset="0%" stopColor={cumulativePositive ? '#5ccb95' : '#f28a8f'} stopOpacity={0.12} />
+                  <stop offset="100%" stopColor={cumulativePositive ? '#5ccb95' : '#f28a8f'} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8888a0' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#8888a0' }} axisLine={false} tickLine={false} width={50} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#aebcd4' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#aebcd4' }} axisLine={false} tickLine={false} width={50} />
               <Tooltip
-                contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: '#e8e8ed' }}
+                contentStyle={{ background: '#14213a', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: '#e4eaf6' }}
                 formatter={(value) => {
                   const numeric = Number(value ?? 0)
                   return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(2)}%`
@@ -337,7 +339,7 @@ export default function AccuracyPanel() {
               <Area
                 type="monotone"
                 dataKey="cumulative"
-                stroke={cumulativePositive ? '#00d68f' : '#ff3d5a'}
+                stroke={cumulativePositive ? '#5ccb95' : '#f28a8f'}
                 strokeWidth={1.5}
                 fill="url(#cumPnlGrad)"
                 animationDuration={700}

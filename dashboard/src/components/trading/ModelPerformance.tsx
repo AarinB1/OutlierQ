@@ -171,7 +171,7 @@ export default function ModelPerformance() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono font-bold text-lg">Model Performance</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Model Performance</h2>
         {sortedModels.length > 0 && (
           <span className="pill bg-surface-tertiary text-[11px] text-txt-secondary">
             {sortedModels.length} models

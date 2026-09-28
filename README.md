@@ -8,14 +8,21 @@ Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings
 
 ## Interactive demo
 
-- **Project page:** https://aarinb1.github.io/OutlierQ/
+- **Project page and signal lab:** https://aarinb1.github.io/OutlierQ/
 - **Dashboard demo (synthetic data):** https://aarinb1.github.io/OutlierQ/demo/
 
-The deployed dashboard is a **static demo running on baked synthetic fixtures**. GitHub
+The project page embeds a **signal lab**: a browser model of the detection cascade
+(news-volume z-score, FinBERT tone, independent sources, options flow) that runs four
+synthetic scenarios through the pipeline's real default thresholds and grades the result
+with Black-Scholes. `npm run check:lab` in `landing/` (also run in CI) fails if the lab's
+constants drift from the Python defaults.
+
+The deployed dashboard is a **static demo running on synthetic fixtures**. GitHub
 Pages serves static files only, so the FastAPI server, SQLite database, Finnhub and
 yfinance calls, and FinBERT inference are not running behind it — every number you see
-there is generated, not observed. To run the real pipeline against live data, follow
-[Quick Start](#quick-start) below.
+there is generated, not observed. Fixture dates are anchored to the viewer's current day,
+so the demo does not go stale between deploys. To run the real pipeline against live
+data, follow [Quick Start](#quick-start) below.
 
 ## How It Works
 

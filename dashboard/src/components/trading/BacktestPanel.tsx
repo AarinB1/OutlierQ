@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { compareBacktests, fetchBacktestList, runBacktest } from '../../api'
+import { DEMO_MODE } from '../../demo/demoConfig'
 import type {
   BacktestCompareResult,
   BacktestFullResult,
@@ -27,9 +28,9 @@ const COMPARABLE_STRATEGIES = ['momentum', 'mean_reversion', 'breakout'] as cons
 
 /** Distinct series colours for the comparison overlay. */
 const STRATEGY_COLORS: Record<string, string> = {
-  momentum: '#00d68f',
-  mean_reversion: '#448aff',
-  breakout: '#ffab00',
+  momentum: '#5ccb95',
+  mean_reversion: '#9ab5ff',
+  breakout: '#e2b25c',
 }
 
 /**
@@ -151,6 +152,28 @@ export default function BacktestPanel() {
       })
   }, [])
 
+  // The static demo opens on a finished run of the form's defaults, so the page
+  // shows what it produces before a visitor has to guess at the form. Silent:
+  // no toasts for a run nobody asked for.
+  useEffect(() => {
+    if (!DEMO_MODE) return
+    let cancelled = false
+    setLoading(true)
+    runBacktest({ strategy: 'momentum', initial_capital: 100000, ticker: 'SPY', period: '1y', benchmark: 'SPY' })
+      .then((res) => {
+        if (!cancelled) setResult(res)
+      })
+      .catch(() => {
+        /* leave the empty state; the form still works */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const equityData = useMemo(() => {
     if (!result) return []
     // Benchmark dates are aligned to the strategy's index server-side, but look
@@ -218,12 +241,12 @@ export default function BacktestPanel() {
 
   const monthlyCellColor = (ret: number | null | undefined): string => {
     if (ret == null || Number.isNaN(ret)) return 'rgba(120,120,130,0.4)'
-    if (ret > 5) return 'rgba(0,214,143,1)'
-    if (ret > 2) return 'rgba(0,214,143,0.6)'
-    if (ret > 0) return 'rgba(0,214,143,0.3)'
-    if (ret > -2) return 'rgba(255,61,90,0.3)'
-    if (ret > -5) return 'rgba(255,61,90,0.6)'
-    return 'rgba(255,61,90,1)'
+    if (ret > 5) return 'rgba(92,203,149,1)'
+    if (ret > 2) return 'rgba(92,203,149,0.75)'
+    if (ret > 0) return 'rgba(92,203,149,0.3)'
+    if (ret > -2) return 'rgba(242,138,143,0.3)'
+    if (ret > -5) return 'rgba(242,138,143,0.75)'
+    return 'rgba(242,138,143,1)'
   }
 
   const renderEmptyState = () => (
@@ -249,7 +272,7 @@ export default function BacktestPanel() {
 
   return (
     <div>
-      <h2 className="font-mono font-bold text-lg mb-4">Backtest Lab</h2>
+      <h2 className="font-sans font-medium text-xl tracking-[-0.02em] mb-4">Backtest Lab</h2>
 
       {/* Config Bar */}
       <div className="card mb-4">
@@ -512,8 +535,8 @@ export default function BacktestPanel() {
               <ComposedChart data={equityData}>
                 <defs>
                   <linearGradient id="equityFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00d68f" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="#00d68f" stopOpacity={0.05} />
+                    <stop offset="0%" stopColor="#5ccb95" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#5ccb95" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -531,7 +554,7 @@ export default function BacktestPanel() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#12121a',
+                    backgroundColor: '#14213a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -550,7 +573,7 @@ export default function BacktestPanel() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#00d68f"
+                  stroke="#5ccb95"
                   fill="url(#equityFill)"
                   strokeWidth={2}
                   dot={false}
@@ -560,7 +583,7 @@ export default function BacktestPanel() {
                   <Line
                     type="monotone"
                     dataKey="benchmark"
-                    stroke="#8888a0"
+                    stroke="#aebcd4"
                     strokeDasharray="5 5"
                     strokeWidth={1.5}
                     dot={false}
@@ -593,7 +616,7 @@ export default function BacktestPanel() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#12121a',
+                    backgroundColor: '#14213a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -612,7 +635,7 @@ export default function BacktestPanel() {
                     key={r.strategy}
                     type="monotone"
                     dataKey={r.strategy}
-                    stroke={STRATEGY_COLORS[r.strategy] ?? '#8888a0'}
+                    stroke={STRATEGY_COLORS[r.strategy] ?? '#aebcd4'}
                     strokeWidth={2}
                     dot={false}
                     name={r.strategy.replace('_', ' ')}
@@ -622,7 +645,7 @@ export default function BacktestPanel() {
                   <Line
                     type="monotone"
                     dataKey="benchmark"
-                    stroke="#8888a0"
+                    stroke="#aebcd4"
                     strokeDasharray="5 5"
                     strokeWidth={1.5}
                     dot={false}
@@ -644,8 +667,8 @@ export default function BacktestPanel() {
               <AreaChart data={drawdownData}>
                 <defs>
                   <linearGradient id="ddFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ff3d5a" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#ff3d5a" stopOpacity={0.1} />
+                    <stop offset="0%" stopColor="#f28a8f" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#f28a8f" stopOpacity={0.1} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -663,7 +686,7 @@ export default function BacktestPanel() {
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#12121a',
+                    backgroundColor: '#14213a',
                     border: '1px solid #333',
                     borderRadius: 8,
                     fontSize: 12,
@@ -682,7 +705,7 @@ export default function BacktestPanel() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#ff3d5a"
+                  stroke="#f28a8f"
                   fill="url(#ddFill)"
                   strokeWidth={2}
                   dot={false}
@@ -716,7 +739,11 @@ export default function BacktestPanel() {
                         <div
                           key={idx}
                           className="w-16 h-10 rounded flex items-center justify-center text-xs font-mono"
-                          style={{ backgroundColor: v == null ? 'rgba(60,60,70,0.6)' : monthlyCellColor(v) }}
+                          style={{
+                            backgroundColor: v == null ? 'rgba(60,60,70,0.6)' : monthlyCellColor(v),
+                            // Strong cells are light fills: dark text keeps 4.5:1.
+                            color: v != null && Math.abs(v) > 2 ? '#0c1526' : undefined,
+                          }}
                         >
                           {v != null ? `${v.toFixed(1)}%` : '—'}
                         </div>

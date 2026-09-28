@@ -17,9 +17,10 @@ const pagesBase = process.env.PAGES_BASE ?? '/OutlierQ/'
 
 export default defineConfig({
   plugins: [react()],
-  // Fixture dates are anchored to build time so the demo always looks recent
-  // and never drifts between page loads. Defined in both modes because
-  // demo/demoConfig.ts (imported by Layout) references it unconditionally.
+  // Shown in the demo's notice as the build date. Fixture dates no longer use
+  // it: they anchor to the viewer's current UTC day (see demo/fixtures.ts).
+  // Defined in both modes because demo/demoConfig.ts (imported by Layout)
+  // references it unconditionally.
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },

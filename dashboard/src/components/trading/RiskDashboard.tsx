@@ -48,7 +48,7 @@ const regimeColor = (regime: string) => {
   }
 }
 
-const palette = ['#448aff', '#00d68f', '#ffab00', '#ff3d5a', '#a855f7']
+const palette = ['#9ab5ff', '#5ccb95', '#e2b25c', '#f28a8f', '#a855f7']
 
 function formatSectorName(key: string): string {
   return key
@@ -204,7 +204,7 @@ export default function RiskDashboard() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono font-bold text-lg">Risk Dashboard</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Risk Dashboard</h2>
         <span className="text-xs text-txt-secondary">
           {regimeSummary
             ? `Last ${Math.round(

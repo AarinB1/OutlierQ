@@ -309,7 +309,7 @@ export default function StrategyBuilder() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-mono font-bold text-lg">Strategy Builder</h2>
+          <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Strategy Builder</h2>
         </div>
         <div className="card space-y-3">
           {Array.from({ length: 6 }).map((_, idx) => (
@@ -324,7 +324,7 @@ export default function StrategyBuilder() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="font-mono font-bold text-lg">Strategy Builder</h2>
+          <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Strategy Builder</h2>
           {configs.length === 0 && (
             <p className="text-xs text-txt-tertiary mt-1">
               No saved configurations. Adjust parameters and click Save to create your first strategy preset.

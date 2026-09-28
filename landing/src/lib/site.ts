@@ -8,12 +8,8 @@ export const BASE: string = import.meta.env.BASE_URL;
 /** Static dashboard demo, deployed alongside this page. Synthetic fixtures only. */
 export const DEMO_URL = `${BASE}demo/`;
 
-/** Human-readable form of DEMO_URL, used in the mock browser address bar. */
-export const DEMO_URL_DISPLAY = `aarinb1.github.io${DEMO_URL}`;
-
 export const GITHUB_URL = "https://github.com/AarinB1/OutlierQ";
+export const AUTHOR_URL = "https://aarinbasu.com";
 
-/** Label used everywhere the demo is referenced. Never "live" — the deployed
- *  dashboard is a static build over baked synthetic fixtures. */
-export const DEMO_LABEL = "Interactive demo";
-export const DEMO_SUBLABEL = "Synthetic data";
+/** Link to a file on the default branch, for "where does this rule live". */
+export const sourceUrl = (path: string) => `${GITHUB_URL}/blob/main/${path}`;

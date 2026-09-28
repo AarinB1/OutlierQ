@@ -1,4 +1,5 @@
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react'
+import Icon, { type IconName } from './Icon'
 
 export type ToastType = 'signal' | 'event' | 'error' | 'info' | 'trade' | 'success'
 
@@ -21,14 +22,14 @@ interface ProviderProps {
 
 const TOAST_META: Record<
   ToastType,
-  { icon: string; border: string; iconClass: string }
+  { icon: IconName; border: string; iconClass: string }
 > = {
-  signal: { icon: '⚡', border: 'border-l-accent-green', iconClass: 'text-accent-green' },
-  event: { icon: '◉', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
-  error: { icon: '⨯', border: 'border-l-accent-red', iconClass: 'text-accent-red' },
-  info: { icon: 'i', border: 'border-l-accent-amber', iconClass: 'text-accent-amber' },
-  trade: { icon: '⇄', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
-  success: { icon: '✓', border: 'border-l-accent-green', iconClass: 'text-accent-green' },
+  signal: { icon: 'zap', border: 'border-l-accent-green', iconClass: 'text-accent-green' },
+  event: { icon: 'activity', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
+  error: { icon: 'x', border: 'border-l-accent-red', iconClass: 'text-accent-red' },
+  info: { icon: 'info', border: 'border-l-accent-amber', iconClass: 'text-accent-amber' },
+  trade: { icon: 'arrows', border: 'border-l-accent-blue', iconClass: 'text-accent-blue' },
+  success: { icon: 'check', border: 'border-l-accent-green', iconClass: 'text-accent-green' },
 }
 
 export function ToastProvider({ children }: ProviderProps) {
@@ -64,8 +65,8 @@ export function ToastProvider({ children }: ProviderProps) {
               aria-live="polite"
             >
               <div className="flex items-start gap-3">
-                <span className={`mt-0.5 text-sm ${meta.iconClass}`} aria-hidden="true">
-                  {meta.icon}
+                <span className={`mt-0.5 ${meta.iconClass}`} aria-hidden="true">
+                  <Icon name={meta.icon} className="h-4 w-4" />
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-sans font-semibold text-txt-primary">{toast.title}</p>
