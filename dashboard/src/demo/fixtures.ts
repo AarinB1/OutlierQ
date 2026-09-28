@@ -2,8 +2,8 @@
  * Synthetic dataset for the static GitHub Pages demo.
  *
  * Rules this file is written to (see the workstream brief):
- *  1. Deterministic  — one fixed seed, no `Date.now()` anywhere. Identical
- *                      output for a given build timestamp.
+ *  1. Deterministic  — one fixed seed. The only clock read is the anchor day
+ *                      (rule 4), so output is identical for a given UTC day.
  *  2. Consistent     — every aggregate (accuracy stats, confusion matrix,
  *                      ticker summaries, prediction stats, backtest metrics)
  *                      is *computed* from the primitive records by the
@@ -13,9 +13,10 @@
  *                      every ticker with a signal has a price series and a
  *                      `TickerSummary`; signal markers land on dates that
  *                      exist in the series.
- *  4. Build-anchored — all dates are offsets from the injected build time, so
- *                      the demo always looks recent and never drifts between
- *                      page loads or shows a future date.
+ *  4. Day-anchored   — all dates are offsets from the viewer's current UTC
+ *                      day, so the demo stays current however long ago it was
+ *                      built, never drifts within a day, and never shows a
+ *                      future date.
  *  5. Plausible      — losses, expired-flat and pending outcomes all present;
  *                      confidence is clustered, not uniform.
  *
@@ -147,12 +148,19 @@ const THEMES_FICTIONAL: Record<string, string[]> = {
 
 // ── Calendar helpers (all UTC, all anchored to build time) ───────────────────
 
-const BUILD_DATE = new Date(BUILD_TIME)
-/** UTC midnight of the build day — the fixture's "today". */
+// The anchor is the viewer's current UTC day, not the build day. A static site
+// keeps being served long after it is built: anchored to the build, a demo last
+// deployed on Aug 9 was still showing Aug 2-8 expiries as "pending" seven weeks
+// later. Every date below is an offset from this anchor, so re-anchoring moves
+// the whole dataset together and every relationship (event before signal,
+// expiry after entry, evaluated vs awaiting evaluation) is unchanged. Output
+// is still identical for a given UTC day.
+const ANCHOR_SOURCE = new Date()
+/** UTC midnight of the viewer's day: the fixture's "today". */
 const ANCHOR_MS = Date.UTC(
-  BUILD_DATE.getUTCFullYear(),
-  BUILD_DATE.getUTCMonth(),
-  BUILD_DATE.getUTCDate(),
+  ANCHOR_SOURCE.getUTCFullYear(),
+  ANCHOR_SOURCE.getUTCMonth(),
+  ANCHOR_SOURCE.getUTCDate(),
 )
 const DAY_MS = 86_400_000
 
@@ -556,6 +564,21 @@ function buildSignalsAndEvents(r: Rng): BuiltDataset {
       },
     })
   })
+
+  // Two slots can land on the same contract by chance (same ticker, side,
+  // rounded strike and expiry). The real pipeline could emit that, but two
+  // identical cards side by side in a demo read as a rendering bug, so later
+  // duplicates move one strike step further out of the money. No RNG draw is
+  // consumed, so the rest of the dataset is unchanged.
+  const seenContracts = new Set<string>()
+  for (const { signal: s } of drafts) {
+    const step = UNIVERSE.find((u) => u.ticker === s.ticker)?.strikeStep ?? 1
+    const key = () => `${s.ticker}|${s.direction}|${s.suggested_strike}|${s.suggested_expiry}`
+    while (seenContracts.has(key())) {
+      s.suggested_strike = round2((s.suggested_strike ?? 0) + (s.direction === 'call' ? step : -step))
+    }
+    seenContracts.add(key())
+  }
 
   // ── Outcome assignment ───────────────────────────────────────────────────
   // Exact target counts (so the aggregate reductions land on 20/11/3 of 34)

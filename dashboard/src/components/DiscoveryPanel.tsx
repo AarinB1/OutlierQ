@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { fetchDiscoveries, fetchDiscoveryStats, fetchActiveTickers, triggerDiscover, triggerScan } from '../api'
 import type { DiscoveryRecord, DiscoveryStats, ActiveTickers } from '../types'
 import { useStaggeredList } from '../hooks/useStaggeredList'
+import Icon from './Icon'
 
 function methodBadges(method: string) {
   const m = method.toLowerCase()
@@ -83,8 +84,9 @@ export default function DiscoveryPanel() {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
-          {'\u25C8'} Discovery
+        <h2 className="flex items-center gap-2.5 font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">
+          <Icon name="radar" className="h-5 w-5 text-accent-blue" />
+          Discovery
         </h2>
         <button
           onClick={handleDiscover}

@@ -203,7 +203,7 @@ export default function TradingSignals() {
     <div>
       {/* Header Bar */}
       <div className="flex justify-between items-center mb-3">
-        <h2 className="font-mono font-bold text-lg">Trading Signals</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Trading Signals</h2>
         <div className="flex items-center gap-3">
           <span className="pill bg-accent-green-muted text-accent-green text-xs">
             {activeCount} active

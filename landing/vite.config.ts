@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     // The landing page must stay well under a 120 kB gzip JS budget; warn early.
-    chunkSizeWarningLimit: 200,
+    // Raw kB, not gzip: with the signal lab the bundle is ~205 kB raw / ~65 kB gzip.
+    chunkSizeWarningLimit: 230,
   },
 });

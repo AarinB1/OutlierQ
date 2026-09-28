@@ -30,7 +30,7 @@ export default function SettingsPage() {
   if (settingsLoading || !draft) {
     return (
       <div className="space-y-4">
-        <h2 className="font-mono font-bold text-lg">Settings</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Settings</h2>
         <div className="card space-y-3">
           {Array.from({ length: 5 }).map((_, idx) => (
             <div key={idx} className="skeleton h-10 w-full rounded" />
@@ -70,7 +70,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="font-mono font-bold text-lg">Settings</h2>
+      <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Settings</h2>
 
       <div className="card space-y-3">
         <h3 className="font-mono font-semibold text-sm">Notifications</h3>

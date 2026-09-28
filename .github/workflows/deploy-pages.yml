@@ -68,6 +68,13 @@ jobs:
         working-directory: dashboard
         run: npx tsc --noEmit
 
+      # The landing page's signal lab re-implements the detection cascade in
+      # TypeScript. Fail the build if its thresholds drift from the Python
+      # defaults or a scenario stops behaving as the page's copy says.
+      - name: Check signal lab against pipeline defaults
+        working-directory: landing
+        run: npm run check:lab
+
       - name: Build landing
         working-directory: landing
         run: npm run build

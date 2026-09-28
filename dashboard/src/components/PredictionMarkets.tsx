@@ -104,7 +104,7 @@ export default function PredictionMarkets() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Prediction Markets</h2>
+          <h2 className="font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">Prediction Markets</h2>
           <p className="text-sm text-txt-secondary mt-1">
             Polymarket & Kalshi markets matched to OutlierQ events
           </p>

@@ -4,28 +4,45 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#05070b",
-        panel: "#0a0e16",
-        "panel-2": "#0d1220",
-        edge: "#1a2233",
-        headline: "#f2f4f8",
-        body: "#c3c9d6",
-        muted: "#8b93a7",
-        // Was #5c657b, which measured 3.31:1 on `panel` — below the 4.5:1 WCAG AA
-        // threshold for normal text, and this token is used almost entirely on
-        // 10-13px mono labels. Lightened until every text/background pair in use
-        // clears 4.5:1 (worst pair is now faint-on-panel-2 at 4.96:1).
-        faint: "#7a8497",
-        accent: "#448aff",
-        up: "#00d68f",
-        down: "#ff3d5a",
+        // Paper: the page ground, a tinted band, and chip/icon wells.
+        paper: "#f6f7f4",
+        "paper-2": "#eceff1",
+        "paper-3": "#e1e6ec",
+        // Ink on paper. Every text token clears 4.5:1 on paper-2, the darkest
+        // light surface it sits on (measured on the composited page).
+        ink: "#131c2e",
+        body: "#3a4456",
+        muted: "#515b6d",
+        faint: "#5a6476",
+        line: "#d6dbe2",
+        "line-2": "#c5ccd6",
+        // Brand accent. Deliberately not green: green and red carry call/put
+        // and up/down meaning everywhere on this site.
+        accent: "#2347a6",
+        "accent-deep": "#1a3782",
+        "accent-soft": "#e1e8f7",
+        up: "#1c7547",
+        down: "#b3261e",
+        // Instrument panels: the dark islands (hero figure, lab, terminal).
+        // The dashboard demo uses the same values.
+        deep: "#0f1a2e",
+        "deep-2": "#14213a",
+        "deep-3": "#1a2946",
+        "deep-line": "#2b3c5e",
+        "deep-ink": "#e4eaf6",
+        "deep-muted": "#aebcd4",
+        "deep-faint": "#98a7c2",
+        ice: "#b8ccff",
+        gate: "#e2b25c",
+        "up-d": "#5ccb95",
+        "down-d": "#f28a8f",
       },
       fontFamily: {
         sans: ['"IBM Plex Sans"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       maxWidth: {
-        wrap: "72rem",
+        wrap: "80rem",
       },
     },
   },

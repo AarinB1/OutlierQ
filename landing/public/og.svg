@@ -1,68 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="OutlierQ — an open research platform for event-driven trading signals. All figures synthetic. Not financial advice.">
-  <defs>
-    <radialGradient id="glowTop" cx="50%" cy="0%" r="70%">
-      <stop offset="0%" stop-color="#448aff" stop-opacity="0.26"/>
-      <stop offset="100%" stop-color="#448aff" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="glowRight" cx="92%" cy="88%" r="55%">
-      <stop offset="0%" stop-color="#00d68f" stop-opacity="0.13"/>
-      <stop offset="100%" stop-color="#00d68f" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#448aff" stop-opacity="0.34"/>
-      <stop offset="100%" stop-color="#448aff" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <!-- No feTurbulence grain here on purpose: per-pixel noise defeats PNG's
-       predictive filters and inflated the rasterised og.png from ~50 kB to
-       756 kB for an effect nobody sees in a share card. -->
-
-
-  <rect width="1200" height="630" fill="#05070b"/>
-  <rect width="1200" height="630" fill="url(#glowTop)"/>
-  <rect width="1200" height="630" fill="url(#glowRight)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="OutlierQ: a news-volume spike crossing a 3.0 sigma threshold and becoming a graded signal. All figures synthetic. Not financial advice.">
+  <!-- Mirrors the landing hero: paper ground, ink type, one dark figure.
+       Flat fills only, so the rasterised PNG stays small. -->
+  <rect width="1200" height="630" fill="#f6f7f4"/>
 
   <!-- wordmark -->
-  <circle cx="80" cy="80" r="7" fill="#448aff"/>
-  <text x="100" y="88" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="27" font-weight="600" fill="#f2f4f8" letter-spacing="-0.4">OutlierQ</text>
-  <text x="1120" y="88" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="2.6">MIT · OPEN SOURCE</text>
-  <line x1="80" y1="118" x2="1120" y2="118" stroke="#1a2233" stroke-width="1"/>
+  <path d="M80 86h14l4.5-4.5 4.5 4.5 4.5-24 4.5 24h14" fill="none" stroke="#2347a6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="136" y="95" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="31" font-weight="600" fill="#131c2e" letter-spacing="-0.9">OutlierQ<tspan fill="#2347a6">.</tspan></text>
+  <text x="1120" y="92" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="15" fill="#5a6476" letter-spacing="2.4">OPEN SOURCE · MIT</text>
+  <line x1="80" y1="124" x2="1120" y2="124" stroke="#d6dbe2" stroke-width="1"/>
 
-  <!-- eyebrow -->
-  <text x="80" y="196" font-family="'JetBrains Mono', monospace" font-size="17" fill="#8b93a7" letter-spacing="4.2">EVENT-DRIVEN TRADING-SIGNAL RESEARCH</text>
+  <!-- copy -->
+  <text x="80" y="206" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="600" fill="#2347a6" letter-spacing="2.4">NEWS-DRIVEN OUTLIER DETECTION</text>
+  <text x="78" y="300" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="70" font-weight="500" fill="#131c2e" letter-spacing="-3.1">Markets overreact.</text>
+  <text x="78" y="380" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="70" font-weight="500" fill="#56657f" letter-spacing="-3.1">Machines notice first.</text>
+  <text x="80" y="446" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="23" fill="#515b6d">Detect the outlier. Signal it. Grade it at expiry.</text>
+  <text x="80" y="528" font-family="'JetBrains Mono', monospace" font-size="14" fill="#5a6476" letter-spacing="2">SIGNAL LAB · SYNTHETIC DATA · NOT FINANCIAL ADVICE</text>
 
-  <!-- headline -->
-  <text x="80" y="292" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="82" font-weight="600" fill="#f2f4f8" letter-spacing="-2.1">Markets overreact.</text>
-  <text x="80" y="380" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="82" font-weight="600" fill="#448aff" letter-spacing="-2.1">Machines notice first.</text>
-
-  <!-- pipeline stages -->
-  <g font-family="'JetBrains Mono', monospace" font-size="15" letter-spacing="2.6">
-    <rect x="80" y="428" width="196" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
-    <text x="102" y="457" fill="#7a8497">01</text>
-    <text x="138" y="457" fill="#c3c9d6">DETECTION</text>
-
-    <rect x="288" y="428" width="176" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
-    <text x="310" y="457" fill="#7a8497">02</text>
-    <text x="346" y="457" fill="#c3c9d6">SIGNALS</text>
-
-    <rect x="476" y="428" width="200" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
-    <text x="498" y="457" fill="#7a8497">03</text>
-    <text x="534" y="457" fill="#c3c9d6">ARBITRAGE</text>
-
-    <rect x="688" y="428" width="188" height="46" rx="10" fill="#0a0e16" stroke="#1a2233"/>
-    <text x="710" y="457" fill="#7a8497">04</text>
-    <text x="746" y="457" fill="#c3c9d6">TRACKING</text>
+  <!-- figure -->
+  <rect x="760" y="160" width="360" height="370" rx="10" fill="#0f1a2e"/>
+  <g stroke="#b8ccff" stroke-opacity="0.06">
+    <path d="M760 202h360M760 244h360M760 286h360M760 328h360M760 370h360M760 412h360M760 454h360M760 496h360"/>
+    <path d="M802 160v370M844 160v370M886 160v370M928 160v370M970 160v370M1012 160v370M1054 160v370M1096 160v370"/>
   </g>
+  <circle cx="786" cy="187" r="3" fill="#b8ccff"/>
+  <text x="796" y="192" font-family="'JetBrains Mono', monospace" font-size="12" fill="#aebcd4" letter-spacing="1.4">NEWS VOLUME · NRVX*</text>
+  <text x="1098" y="192" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="12" fill="#aebcd4" letter-spacing="1.4">FIG. 001</text>
 
-  <!-- synthetic equity sparkline, decorative -->
-  <g transform="translate(80 508)">
-    <path d="M0 62 L34 55 L68 58 L102 48 L136 52 L170 40 L204 44 L238 35 L272 47 L306 39 L340 32 L374 35 L408 24 L442 27 L476 15 L510 19 L544 8 L578 12 L612 4 L612 76 L0 76 Z" fill="url(#spark)"/>
-    <path d="M0 62 L34 55 L68 58 L102 48 L136 52 L170 40 L204 44 L238 35 L272 47 L306 39 L340 32 L374 35 L408 24 L442 27 L476 15 L510 19 L544 8 L578 12 L612 4" fill="none" stroke="#448aff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="612" cy="4" r="5" fill="#448aff" stroke="#05070b" stroke-width="2.5"/>
+  <!-- ±1σ band and mean -->
+  <rect x="780" y="410" width="330" height="29" fill="#b8ccff" opacity="0.07"/>
+  <line x1="780" x2="1110" y1="425" y2="425" stroke="#98a7c2" stroke-opacity="0.5" stroke-dasharray="2 5"/>
+  <!-- bars: 3 4 2 5 3 4 3 2 4 3 5 3 4 3, then 7 today -->
+  <g fill="#33476e">
+    <rect x="790" y="432" width="12" height="48" rx="1.5"/>
+    <rect x="811" y="416" width="12" height="64" rx="1.5"/>
+    <rect x="832" y="448" width="12" height="32" rx="1.5"/>
+    <rect x="853" y="400" width="12" height="80" rx="1.5"/>
+    <rect x="874" y="432" width="12" height="48" rx="1.5"/>
+    <rect x="895" y="416" width="12" height="64" rx="1.5"/>
+    <rect x="916" y="432" width="12" height="48" rx="1.5"/>
+    <rect x="937" y="448" width="12" height="32" rx="1.5"/>
+    <rect x="958" y="416" width="12" height="64" rx="1.5"/>
+    <rect x="979" y="432" width="12" height="48" rx="1.5"/>
+    <rect x="1000" y="400" width="12" height="80" rx="1.5"/>
+    <rect x="1021" y="432" width="12" height="48" rx="1.5"/>
+    <rect x="1042" y="416" width="12" height="64" rx="1.5"/>
+    <rect x="1063" y="432" width="12" height="48" rx="1.5"/>
   </g>
+  <rect x="1084" y="368" width="12" height="112" rx="1.5" fill="#b8ccff"/>
+  <line x1="780" x2="1110" y1="382" y2="382" stroke="#e2b25c" stroke-width="1.6" stroke-dasharray="6 5"/>
+  <text x="790" y="373" font-family="'JetBrains Mono', monospace" font-size="12" fill="#e2b25c">3.0σ threshold</text>
+  <line x1="780" x2="1110" y1="480" y2="480" stroke="#98a7c2" stroke-opacity="0.55"/>
 
-  <!-- disclaimer -->
-  <text x="80" y="600" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="1.3">All figures synthetic · paper trading only · not financial advice</text>
-  <text x="1120" y="600" text-anchor="end" font-family="'JetBrains Mono', monospace" font-size="15" fill="#7a8497" letter-spacing="1.3">aarinb1.github.io/OutlierQ</text>
+  <!-- z pill -->
+  <rect x="950" y="222" width="148" height="36" rx="18" fill="#b8ccff"/>
+  <text x="1024" y="245" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="14" fill="#0f1a2e">z = <tspan font-weight="600">3.95</tspan>  ≥ 3.0</text>
 
+  <!-- signal card -->
+  <g transform="rotate(-2 925 312)">
+    <rect x="790" y="280" width="270" height="66" rx="8" fill="#f6f7f4"/>
+    <circle cx="818" cy="313" r="13" fill="#e1e8f7"/>
+    <path d="M812 313.5l4 4 8-8" fill="none" stroke="#2347a6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="842" y="305" font-family="'JetBrains Mono', monospace" font-size="11" fill="#5a6476" letter-spacing="1.2">SIGNAL 001 · RAW 0.93</text>
+    <text x="842" y="328" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="16" font-weight="600" fill="#131c2e">NRVX* PUT $47, day 18</text>
+  </g>
 </svg>

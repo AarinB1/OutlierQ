@@ -60,7 +60,7 @@ export default function PortfolioBacktest() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Portfolio Backtest</h2>
+      <h2 className="font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">Portfolio Backtest</h2>
 
       {/* Config */}
       <div className="card p-4">
@@ -166,9 +166,9 @@ export default function PortfolioBacktest() {
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
                     formatter={(v) => [formatCurrency(Number(v)), 'Portfolio']}
-                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
+                    contentStyle={{ background: '#14213a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
-                  <Area type="monotone" dataKey="portfolio" stroke="#448aff" fill="rgba(68,138,255,0.13)" />
+                  <Area type="monotone" dataKey="portfolio" stroke="#9ab5ff" fill="rgba(154,181,255,0.13)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

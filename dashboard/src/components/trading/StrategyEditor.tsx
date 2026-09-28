@@ -77,7 +77,7 @@ export default function StrategyEditor() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Strategy Editor (DSL)</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">Strategy Editor (DSL)</h2>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -149,13 +149,13 @@ export default function StrategyEditor() {
                   />
                   <Tooltip
                     formatter={(v) => [formatCurrency(Number(v)), 'Equity']}
-                    contentStyle={{ background: '#12121a', border: '1px solid rgba(255,255,255,0.12)' }}
+                    contentStyle={{ background: '#14213a', border: '1px solid rgba(255,255,255,0.12)' }}
                   />
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#448aff"
-                    fill="rgba(68,138,255,0.13)"
+                    stroke="#9ab5ff"
+                    fill="rgba(154,181,255,0.13)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
