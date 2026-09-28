@@ -63,7 +63,7 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
   const first = prices[0].close
   const last = prices[prices.length - 1].close
   const isUp = last >= first
-  const strokeColor = isUp ? '#00d68f' : '#ff3d5a'
+  const strokeColor = isUp ? '#5ccb95' : '#f28a8f'
 
   // Map signal/event dates to closest price points for overlay dots
   const signalDots = signals
@@ -148,8 +148,8 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
               x={dot.date}
               y={dot.close}
               r={5}
-              fill={dot.signal.direction === 'call' ? '#00d68f' : '#ff3d5a'}
-              stroke="#0a0a0f"
+              fill={dot.signal.direction === 'call' ? '#5ccb95' : '#f28a8f'}
+              stroke="#0c1526"
               strokeWidth={2}
             />
           ))}
@@ -160,8 +160,8 @@ export default function PriceChart({ prices, signals, events, period, onPeriodCh
               x={dot.date}
               y={dot.close}
               r={4}
-              fill="#448aff"
-              stroke="#0a0a0f"
+              fill="#9ab5ff"
+              stroke="#0c1526"
               strokeWidth={2}
             />
           ))}

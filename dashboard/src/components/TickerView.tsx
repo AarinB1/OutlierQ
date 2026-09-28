@@ -14,6 +14,7 @@ import PriceChart from './PriceChart'
 import StatsGrid from './StatsGrid'
 import SignalHistory from './SignalHistory'
 import Sparkline from './Sparkline'
+import Icon from './Icon'
 
 interface TickerViewProps {
   initialTicker?: string | null
@@ -377,8 +378,9 @@ export default function TickerView({ initialTicker, onNavigated }: TickerViewPro
   // ── Grid view ────────────────────────────────────────────────
   return (
     <div>
-      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight mb-8">
-        {'\u2B21'} Tickers
+      <h2 className="flex items-center gap-2.5 font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary mb-8">
+        <Icon name="grid" className="h-5 w-5 text-accent-blue" />
+        Tickers
       </h2>
 
       {tickers.length === 0 ? (
@@ -451,7 +453,7 @@ function TickerMiniCard({
 
       <div className="mb-3 h-8">
         {sparkline ? (
-          <Sparkline data={sparkline} color={change != null && change < 0 ? '#ff3d5a' : '#00d68f'} />
+          <Sparkline data={sparkline} color={change != null && change < 0 ? '#f28a8f' : '#5ccb95'} />
         ) : (
           <div className="skeleton h-8 w-full rounded" />
         )}

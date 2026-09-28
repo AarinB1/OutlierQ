@@ -78,7 +78,7 @@ export default function TradeReplay() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Trade Replay</h2>
+      <h2 className="font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">Trade Replay</h2>
 
       {/* Config */}
       <div className="card p-4">

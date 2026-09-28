@@ -63,12 +63,12 @@ export default function StockHeader({ info, onBack }: Props) {
         )}
         {info.day_high != null && info.day_low != null && (
           <span className="px-2.5 py-1 rounded-md bg-surface-tertiary text-txt-tertiary">
-            Day: ${info.day_low.toFixed(2)} \u2013 ${info.day_high.toFixed(2)}
+            {`Day: $${info.day_low.toFixed(2)} \u2013 $${info.day_high.toFixed(2)}`}
           </span>
         )}
         {info.fifty_two_week_high != null && info.fifty_two_week_low != null && (
           <span className="px-2.5 py-1 rounded-md bg-surface-tertiary text-txt-tertiary">
-            52W: ${info.fifty_two_week_low.toFixed(2)} \u2013 ${info.fifty_two_week_high.toFixed(2)}
+            {`52W: $${info.fifty_two_week_low.toFixed(2)} \u2013 $${info.fifty_two_week_high.toFixed(2)}`}
           </span>
         )}
       </div>

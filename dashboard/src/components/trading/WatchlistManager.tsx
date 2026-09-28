@@ -94,7 +94,7 @@ export default function WatchlistManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono font-bold text-lg">Watchlists</h2>
+        <h2 className="font-sans font-medium text-xl tracking-[-0.02em]">Watchlists</h2>
         <button className="btn-primary" onClick={() => setShowCreate((prev) => !prev)}>
           New Watchlist
         </button>

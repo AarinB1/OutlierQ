@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { fetchSignals, subscribeSignalStream } from '../api'
 import type { Signal } from '../types'
 import SignalCard from './SignalCard'
+import Icon from './Icon'
 import { SkeletonSignalCard } from './SkeletonCard'
 import { useStaggeredList } from '../hooks/useStaggeredList'
 import { useToast } from '../hooks/useToast'
@@ -14,9 +15,9 @@ const FILTERS = [
 ] as const
 
 const SORT_OPTIONS = [
-  { key: 'time', label: '∿ Expiry' },
-  { key: 'confidence', label: '∿ Confidence' },
-  { key: 'ticker', label: 'A→Z Ticker' },
+  { key: 'time', label: 'Expiry' },
+  { key: 'confidence', label: 'Confidence' },
+  { key: 'ticker', label: 'Ticker' },
 ] as const
 
 interface Props {
@@ -125,12 +126,13 @@ export default function SignalList({ onTickerClick }: Props = {}) {
   return (
     <div>
       {/* Header + Filters */}
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">
-          {'\u26A1'} Signals
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <h2 className="flex items-center gap-2.5 font-sans font-medium text-xl text-txt-primary tracking-[-0.02em]">
+          <Icon name="zap" className="h-5 w-5 text-accent-blue" />
+          Signals
         </h2>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Direction pills */}
             <div className="flex gap-1 bg-surface-secondary rounded-lg p-1 border border-border">
               {FILTERS.map(f => (
@@ -199,7 +201,7 @@ export default function SignalList({ onTickerClick }: Props = {}) {
         </div>
       ) : signals.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="text-txt-tertiary text-4xl mb-4">{'\u25C7'}</div>
+          <Icon name="spike" className="mb-4 h-10 w-10 text-txt-tertiary" strokeWidth={1.4} />
           <p className="text-txt-secondary text-sm mb-1">No signals yet.</p>
           <p className="text-txt-tertiary text-xs">Run a scan to detect outlier events.</p>
         </div>

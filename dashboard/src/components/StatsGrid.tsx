@@ -16,7 +16,7 @@ function StatItem({ index, label, value, suffix = '%' }: { index: number; label:
     <div className="bg-surface-secondary p-5">
       <div className="flex items-baseline justify-between mb-3">
         <span className="label">{label}</span>
-        <span className="font-mono text-[10px] tracking-widest text-txt-tertiary/60">
+        <span className="font-mono text-[10px] tracking-widest text-txt-tertiary">
           {String(index).padStart(2, '0')}
         </span>
       </div>

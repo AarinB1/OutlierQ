@@ -104,7 +104,7 @@ export default function PredictionMarkets() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-mono font-bold text-lg text-txt-primary tracking-tight">Prediction Markets</h2>
+          <h2 className="font-sans font-medium text-xl tracking-[-0.02em] text-txt-primary">Prediction Markets</h2>
           <p className="text-sm text-txt-secondary mt-1">
             Polymarket & Kalshi markets matched to OutlierQ events
           </p>
@@ -122,7 +122,7 @@ export default function PredictionMarkets() {
           <button
             onClick={handleScan}
             disabled={scanning}
-            className="px-4 py-2 rounded-lg bg-accent-blue text-white text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 rounded-lg bg-accent-blue text-surface-primary text-sm font-medium hover:bg-accent-blue/90 disabled:opacity-50 transition-colors"
           >
             {scanning ? 'Scanning...' : 'Scan Markets'}
           </button>
@@ -152,7 +152,7 @@ export default function PredictionMarkets() {
       )}
 
       {scanResult && (
-        <div className="card border border-accent-blue/20 bg-accent-blue/10 p-3 text-sm text-accent-blue">
+        <div className="card border border-accent-blue/20 bg-accent-blue/10 p-3 text-sm text-txt-primary">
           {scanResult}
         </div>
       )}

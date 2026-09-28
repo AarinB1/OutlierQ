@@ -2,9 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fonts are self-hosted from public/fonts and declared in index.html so the
+   @font-face src can use %BASE_URL% (keeping the deploy path in one place) and
+   so no font request is render-blocking. Nothing font-related belongs here. */
+
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 5rem;
+  /* Sticky header (4.5rem) plus breathing room. */
+  scroll-padding-top: 5.5rem;
 }
 
 html,
@@ -13,50 +18,160 @@ body {
 }
 
 body {
-  @apply bg-ink font-sans text-body antialiased;
+  @apply bg-paper font-sans text-body antialiased;
 }
 
 ::selection {
-  background: rgba(68, 138, 255, 0.35);
-  color: #f2f4f8;
+  background: rgba(35, 71, 166, 0.18);
+  color: #131c2e;
 }
 
-/* Scroll-reveal (IntersectionObserver toggles .reveal-shown) */
-.reveal {
-  opacity: 0;
-  transform: translateY(22px);
-  transition:
-    opacity 0.7s cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+@layer components {
+  .wrap {
+    @apply mx-auto w-full max-w-wrap px-5 sm:px-8 lg:px-14;
+  }
+
+  /* Numbered mono eyebrow above each section heading. */
+  .eyebrow {
+    @apply flex items-center gap-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent;
+  }
+
+  /* Large display type: medium weight, tight tracking, two short lines. */
+  .display {
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1.04;
+  }
+  .heading {
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-3 rounded-md border border-accent bg-accent px-5 py-3.5 text-sm font-semibold text-white;
+    transition:
+      background-color 200ms ease,
+      transform 200ms ease;
+  }
+  .btn:hover {
+    @apply bg-accent-deep;
+    transform: translateY(-2px);
+  }
+  .btn-sm {
+    @apply gap-2.5 px-4 py-2.5 text-[13px];
+  }
+  .text-link {
+    @apply inline-flex items-center gap-2 text-sm font-semibold text-ink transition-colors;
+  }
+  .text-link:hover {
+    @apply text-accent;
+  }
+
+  /* Mono micro-label used inside panels. Never below 11px. */
+  .label {
+    @apply font-mono text-[11px] uppercase tracking-[0.1em];
+  }
+
+  /* Faint grid inside the dark instrument panels. */
+  .panel-grid {
+    background-image:
+      linear-gradient(rgba(184, 204, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(184, 204, 255, 0.05) 1px, transparent 1px),
+      radial-gradient(ellipse at 50% 15%, rgba(80, 110, 170, 0.32), transparent 70%);
+    background-size:
+      42px 42px,
+      42px 42px,
+      100% 100%;
+  }
+  .panel-dots {
+    background-image: radial-gradient(rgba(184, 204, 255, 0.1) 0.7px, transparent 0.7px);
+    background-size: 13px 13px;
+  }
 }
 
-.reveal-shown {
-  opacity: 1;
-  transform: none;
+/* ── Hero figure motion ─────────────────────────────────────────────────
+   A scan line sweeps the baseline bars and today's bar breathes. Both are
+   decorative and stop entirely under reduced motion. */
+@keyframes scan {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--scan-distance, 300px));
+  }
+}
+.fig-scan {
+  animation: scan 6s linear infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.fig-breathe {
+  animation: breathe 2.8s ease-in-out infinite;
+}
+/* SVG text scales with the figure. CSS px on SVG text are user units, so the
+   phone size is raised until the rendered label stays at or above 11px. */
+.fig-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+}
+@media (max-width: 639px) {
+  .fig-label {
+    font-size: 20px;
+  }
+}
+
+/* ── Signal lab motion ──────────────────────────────────────────────── */
+@keyframes flow {
+  from {
+    left: 0;
+  }
+  to {
+    left: calc(100% - 5px);
+  }
+}
+.connector-dot {
+  animation: flow 0.9s linear infinite;
+}
+@keyframes node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(184, 204, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(184, 204, 255, 0);
+  }
+}
+.node-active {
+  animation: node-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Focus visibility ───────────────────────────────────────────────── */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #5b82e0;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+    animation: none !important;
+    transition: none !important;
   }
-}
-
-/* Focus visibility on a dark page */
-a:focus-visible,
-button:focus-visible {
-  outline: 2px solid #448aff;
-  outline-offset: 3px;
-  border-radius: 2px;
 }

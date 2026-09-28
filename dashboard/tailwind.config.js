@@ -6,31 +6,38 @@ export default {
   ],
   theme: {
     extend: {
+      // Same instrument-panel palette as the landing page's dark surfaces
+      // (landing/tailwind.config.js `deep-*`, `ice`, `gate`, `up-d`, `down-d`),
+      // so the demo reads as the lab's big sibling rather than another app.
       colors: {
         surface: {
-          primary: '#0a0a0f',
-          secondary: '#12121a',
-          tertiary: '#1a1a28',
+          primary: '#0c1526',
+          secondary: '#14213a',
+          tertiary: '#1a2946',
         },
         border: {
-          DEFAULT: 'rgba(255, 255, 255, 0.06)',
-          hover: 'rgba(255, 255, 255, 0.12)',
+          DEFAULT: 'rgba(184, 204, 255, 0.11)',
+          hover: 'rgba(184, 204, 255, 0.22)',
         },
         txt: {
-          primary: '#e8e8ed',
-          secondary: '#8888a0',
-          tertiary: '#55556a',
+          primary: '#e4eaf6',
+          secondary: '#aebcd4',
+          // Carries timestamps, counts and metadata, so it is body text: it
+          // clears 4.5:1 on all three surfaces (lowest, on tertiary, ~5.9:1).
+          tertiary: '#98a7c2',
         },
         accent: {
-          green: '#00d68f',
-          'green-muted': 'rgba(0, 214, 143, 0.12)',
-          red: '#ff3d5a',
-          'red-muted': 'rgba(255, 61, 90, 0.12)',
-          amber: '#ffab00',
-          'amber-muted': 'rgba(255, 171, 0, 0.12)',
-          blue: '#448aff',
-          'blue-muted': 'rgba(68, 138, 255, 0.12)',
-          yellow: '#ffd60a',
+          green: '#5ccb95',
+          'green-muted': 'rgba(92, 203, 149, 0.12)',
+          red: '#f28a8f',
+          'red-muted': 'rgba(242, 138, 143, 0.12)',
+          amber: '#e2b25c',
+          'amber-muted': 'rgba(226, 178, 92, 0.12)',
+          blue: '#9ab5ff',
+          'blue-muted': 'rgba(154, 181, 255, 0.12)',
+          yellow: '#ecd27a',
+          // Primary action fill with dark text, as in the landing's lab.
+          ice: '#b8ccff',
         },
       },
       fontFamily: {
@@ -38,7 +45,8 @@ export default {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        card: '12px',
+        // Tighter than before (12px) to match the landing's 6-9px panels.
+        card: '8px',
       },
       maxWidth: {
         content: '1400px',
@@ -54,8 +62,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseBorder: {
-          '0%, 100%': { borderLeftColor: 'rgba(0, 214, 143, 0.3)' },
-          '50%': { borderLeftColor: 'rgba(0, 214, 143, 0.8)' },
+          '0%, 100%': { borderLeftColor: 'rgba(92, 203, 149, 0.3)' },
+          '50%': { borderLeftColor: 'rgba(92, 203, 149, 0.8)' },
         },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },

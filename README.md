@@ -6,6 +6,24 @@
 
 Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings surprises). OutlierQ monitors news and social media in real time, detects statistical outliers, classifies event types, and generates actionable options signals before the market fully prices in the move.
 
+## Interactive demo
+
+- **Project page and signal lab:** https://aarinb1.github.io/OutlierQ/
+- **Dashboard demo (synthetic data):** https://aarinb1.github.io/OutlierQ/demo/
+
+The project page embeds a **signal lab**: a browser model of the detection cascade
+(news-volume z-score, FinBERT tone, independent sources, options flow) that runs four
+synthetic scenarios through the pipeline's real default thresholds and grades the result
+with Black-Scholes. `npm run check:lab` in `landing/` (also run in CI) fails if the lab's
+constants drift from the Python defaults.
+
+The deployed dashboard is a **static demo running on synthetic fixtures**. GitHub
+Pages serves static files only, so the FastAPI server, SQLite database, Finnhub and
+yfinance calls, and FinBERT inference are not running behind it — every number you see
+there is generated, not observed. Fixture dates are anchored to the viewer's current day,
+so the demo does not go stale between deploys. To run the real pipeline against live
+data, follow [Quick Start](#quick-start) below.
+
 ## How It Works
 
 1. **Ingest** — Pulls news articles from Finnhub and market data from yfinance on a schedule
@@ -28,7 +46,7 @@ Markets overreact to extreme events (scandals, FDA approvals, lawsuits, earnings
 
 ```bash
 # Clone and enter the project
-git clone https://github.com/your-username/OutlierQ.git
+git clone https://github.com/AarinB1/OutlierQ.git
 cd OutlierQ
 
 # Create virtual environment
